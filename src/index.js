@@ -3,18 +3,18 @@ const ctx = canvas.getContext("2d")
 document.body.appendChild(canvas)
 
 const matrix = `
-|0.00 00  0 |
-|   0 0   0 |
+|0.0  00  0 |
+|     0   0 |
 |  0  0  0 0|
 |  0  0    0|
 | 0.  0 0  0|
 | 000   0   |
-|   0 0000 0|
-|0  .  .0  0|
+|   0 0  0 0|
+|0  .  .0   |
 |  000  0.0 |
-|    .  0  0|
-|.   0   0 0|
-|0 0  0  0 0|
+|    .  0   |
+|.   0   0  |
+|0 0  0     |
 |  0  0  0 0|
 `
   .trim()
@@ -29,12 +29,13 @@ const gridX = matrix[0].length
 const gridY = Math.min(matrix.length, gridX)
 const TW = GW / gridX
 const TH = GH / gridY
-let shipTile = Math.round(gridX / 2)
+let shipTile = 0
 let score = 0
-let highScore = 0
+let highScore = localStorage.getItem('highScore')
 let now = Date.now()
 let gameSpeed = 1000
 let invinsibleRows = TH
+resetShip()
 
 function render() {
   requestAnimationFrame(render)
@@ -80,7 +81,7 @@ function moveForward() {
   matrix.unshift(matrix.pop())
   invinsibleRows--
   checkPosition()
-  gameSpeed = 300 - score
+  gameSpeed = 250 - score / 5
   now = Date.now()
 }
 
@@ -88,10 +89,7 @@ function checkPosition() {
   const lastRow = matrix[gridY - 1]
   switch (lastRow[shipTile]) {
     case "0":
-      if (invinsibleRows > 0) break
-      if (score > highScore) highScore = score
-      score = 0
-      invinsibleRows = TH
+      if (invinsibleRows <= 0) resetShip()
       break
     case ".":
       score += 10
@@ -100,6 +98,16 @@ function checkPosition() {
       score += 1
       break
   }
+}
+
+function resetShip() {
+  if (score > highScore) {
+    highScore = score
+    localStorage.setItem('highScore', highScore)
+  }
+  score = 0
+  invinsibleRows = TH
+  shipTile = Math.round(gridX / 2)
 }
 
 render()
