@@ -1,4 +1,14 @@
-import * as THREE from "three"
+import { THREE } from "../../utilities/three"
+import { Path } from "./classes/Path"
+import { Segment } from "./classes/Segment"
+
+const path = new Path([
+  [new Segment(-4, 0)],
+  [new Segment(-3, -2), new Segment(-2, 2), new Segment(-1, -2)],
+  [new Segment(-1, -2)],
+  [new Segment(0, 1), new Segment(0, 0)],
+  [new Segment(3, 2)],
+])
 
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(
@@ -16,6 +26,20 @@ const geometry = new THREE.BoxGeometry()
 const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 })
 const cube = new THREE.Mesh(geometry, material)
 scene.add(cube)
+
+const sgeometry = new THREE.SphereGeometry()
+const smaterial = new THREE.MeshBasicMaterial({
+  color: 0xffff00,
+  opacity: 0.5,
+})
+
+path.forEach((s) => {
+  const mesh = new THREE.Mesh(sgeometry, smaterial)
+  mesh.scale.set(0.2, 0.2, 0.02)
+  mesh.position.x = s.x
+  mesh.position.y = s.y
+  scene.add(mesh)
+})
 
 camera.position.z = 5
 
