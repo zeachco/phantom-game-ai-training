@@ -12,11 +12,14 @@
     "nodemon": "^2.0.15",
     "parcel": "^2.4.1",
     "prettier": "^2.6.1",
+    "rimraf": "^3.0.2",
     "serve": "^13.0.2"
   },
   "scripts": {
     "start": "parcel ./src/index.html",
     "build": "parcel build --dist-dir docs ./src/index.html",
-    "release": "yarn build && git add docs/* && git commit -m 'deploy' && git push --set-upstream origin release"
+    "deploy": "yarn build && git add ./docs/* && git commit -m 'deploy' && git push origin main:release -f",
+    "clean": "rimraf docs",
+    "postdeploy": "yarn clean"
   }
 }
