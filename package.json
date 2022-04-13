@@ -17,7 +17,8 @@
   },
   "scripts": {
     "start": "parcel ./src/index.html",
-    "build": "parcel build --dist-dir docs ./src/index.html",
+    "serve": "serve docs",
+    "build": "parcel build --dist-dir docs ./src/index.html --public-url https://zeachco.github.io/phantom-game-ai-training/",
     "deploy": "yarn build && git add ./docs/* && git commit -m 'deploy' && git push origin main:release -f",
     "clean": "rimraf docs",
     "postdeploy": "yarn clean"
