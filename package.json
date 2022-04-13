@@ -16,6 +16,7 @@
   },
   "scripts": {
     "start": "parcel ./src/index.html",
-    "build": "parcel build --dist-dir docs ./src/index.html"
+    "build": "parcel build --dist-dir docs ./src/index.html",
+    "release": "yarn build && git add docs/* && git commit -m 'deploy' && git push --set-upstream origin release"
   }
 }
