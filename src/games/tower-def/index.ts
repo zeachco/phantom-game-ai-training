@@ -43,17 +43,7 @@ camera.position.z = 15
 function animate() {
   requestAnimationFrame(animate)
   renderer.render(scene, camera)
-  path.render()
-  mobs.forEach((mob) => {
-    if (!mob.target) {
-      mob.target = path.getNext(0)
-    } else {
-      if (mob.target.isInRange(mob.x, mob.y)) {
-        mob.target = path.getNext(mob.targetIndex++)
-      }
-    }
-
-    mob.update()
-  })
+  path.update()
+  mobs.forEach((mob) => mob.update())
 }
 animate()

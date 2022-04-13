@@ -2,7 +2,7 @@ import { THREE } from "../../../utilities/three"
 
 const geometry = new THREE.RingGeometry()
 const material = new THREE.MeshBasicMaterial({
-  color: 0x8800bb,
+  color: 0x0088ff,
   opacity: 0.5,
 })
 
@@ -22,7 +22,8 @@ export class Segment {
     return mesh.position.distanceTo(this.mesh.position) < range
   }
 
-  render() {
+  update() {
+    this.mesh.rotateZ(2)
     this.mesh.scale.y = 0.2 + Math.sin(this.clock.getElapsedTime() * 10) * 0.02
   }
 }

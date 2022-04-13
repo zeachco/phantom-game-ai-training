@@ -3,7 +3,7 @@ import { Segment } from "./Segment"
 import { THREE } from "../../../utilities/three"
 import { Path } from "./Path"
 
-const geometry = new THREE.SphereGeometry()
+const geometry = new THREE.BoxGeometry()
 
 const MINSPD = 0.05
 const MAXSPD = 0.1
@@ -12,15 +12,16 @@ export class Mob {
   private speed = random(MINSPD, MAXSPD, true)
   public target?: Segment
   public targetIndex = 0
-  public mesh: THREE.Mesh<THREE.BoxGeometry, THREE.MeshBasicMaterial>
+  public mesh: THREE.Mesh
   constructor(public path: Path, public x = 0, public y = 0) {
     const amountOfRed = Math.round((this.speed / MAXSPD) * 255)
     const amountOfGreen = Math.round(255 - amountOfRed / 2)
     const material = new THREE.MeshBasicMaterial({
       color: `rgba(${amountOfRed}, ${amountOfGreen}, 0)`,
+      opacity: 0.2,
     })
     this.mesh = new THREE.Mesh(geometry, material)
-    this.mesh.scale.set(0.5, 0.5, 0.5)
+    this.mesh.scale.set(0.3, 0.3, 0.3)
     this.mesh.position.set(this.x, this.y, 0)
   }
 

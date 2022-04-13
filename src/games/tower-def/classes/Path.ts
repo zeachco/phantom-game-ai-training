@@ -14,7 +14,7 @@ export class Path {
     this.segments.forEach((segments) => segments.forEach(cb))
   }
 
-  public render() {
-    this.forEach((seg) => seg.render())
+  public update() {
+    this.forEach((seg) => seg.update())
   }
 }
