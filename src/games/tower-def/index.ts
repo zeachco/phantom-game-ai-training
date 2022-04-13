@@ -59,7 +59,7 @@ export default () => {
 
     // Apply matrix like this to rotate the camera.
     const es = clock.getElapsedTime() * 0.1 * Math.PI
-    camera.position.set(Math.cos(es) * 10, Math.sin(es) * 10, 20)
+    camera.position.set(Math.cos(es) * 10, -10 + Math.sin(es) * 10, 25)
 
     // Make camera look at the box.
     camera.lookAt(0, 0, 0)
