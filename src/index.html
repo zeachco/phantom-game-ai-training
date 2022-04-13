@@ -21,8 +21,34 @@
             height: 100vh;
             background:rgba(25, 52, 94, 0.5)
         }
+
+        ul {
+            z-index: 999;
+            display: flex;
+            align-content: space-around;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+        }
+
+        li {
+            margin: auto;
+            display: inline-block
+        }
+
+        ul li a {
+            margin: auto;
+            color:rgba(25, 52, 94, 0.5);
+            text-decoration: none;
+            text-shadow: 0 0 1px #888;
+        }
+
+        ul li a:hover {
+            color:rgba(255, 52, 94, 1)
+        }
     </style>
-    <script type="module" src="games/tower-def/index.ts"></script>
+    <script type="module" src="utilities/games.ts"></script>
 </head>
 
 <body>
