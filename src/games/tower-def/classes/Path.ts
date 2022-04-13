@@ -6,6 +6,7 @@ export class Path {
 
   public getNext(index: number) {
     const nextSegments = this.segments[index]
+    if (!nextSegments) return null
     return nextSegments[random(nextSegments.length - 1)]
   }
 

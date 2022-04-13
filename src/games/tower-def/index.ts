@@ -10,6 +10,10 @@ const path = new Path([
   [new Segment(-1, -2)],
   [new Segment(0, 1), new Segment(0, 0)],
   [new Segment(3, 2)],
+  [new Segment(7, 3)],
+  [new Segment(3, 4)],
+  [new Segment(8, 5)],
+  [new Segment(3, 6)],
 ])
 
 const scene = new THREE.Scene()
@@ -26,8 +30,8 @@ document.body.appendChild(renderer.domElement)
 
 const mobs: Mob[] = []
 
-for (var i = 0; i < 30; i++) {
-  const mob = new Mob(random(-7, -5), random(-2, 2))
+for (var i = 0; i < 40; i++) {
+  const mob = new Mob(path)
   scene.add(mob.mesh)
   mobs.push(mob)
 }
@@ -40,6 +44,16 @@ function animate() {
   requestAnimationFrame(animate)
   renderer.render(scene, camera)
   path.render()
-  mobs.forEach((mob) => mob.update())
+  mobs.forEach((mob) => {
+    if (!mob.target) {
+      mob.target = path.getNext(0)
+    } else {
+      if (mob.target.isInRange(mob.x, mob.y)) {
+        mob.target = path.getNext(mob.targetIndex++)
+      }
+    }
+
+    mob.update()
+  })
 }
 animate()
