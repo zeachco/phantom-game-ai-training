@@ -1,4 +1,6 @@
+import { random } from "../../utilities/math"
 import { THREE } from "../../utilities/three"
+import { Mob } from "./classes/Mob"
 import { Path } from "./classes/Path"
 import { Segment } from "./classes/Segment"
 
@@ -22,31 +24,22 @@ const renderer = new THREE.WebGLRenderer()
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
-const geometry = new THREE.BoxGeometry()
-const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-const cube = new THREE.Mesh(geometry, material)
-scene.add(cube)
+const mobs: Mob[] = []
 
-const sgeometry = new THREE.SphereGeometry()
-const smaterial = new THREE.MeshBasicMaterial({
-  color: 0xffff00,
-  opacity: 0.5,
-})
+for (var i = 0; i < 30; i++) {
+  const mob = new Mob(random(-7, -5), random(-2, 2))
+  scene.add(mob.mesh)
+  mobs.push(mob)
+}
 
-path.forEach((s) => {
-  const mesh = new THREE.Mesh(sgeometry, smaterial)
-  mesh.scale.set(0.2, 0.2, 0.02)
-  mesh.position.x = s.x
-  mesh.position.y = s.y
-  scene.add(mesh)
-})
+path.forEach((s) => scene.add(s.mesh))
 
-camera.position.z = 5
+camera.position.z = 15
 
 function animate() {
   requestAnimationFrame(animate)
   renderer.render(scene, camera)
-  cube.rotation.x += 0.01
-  cube.rotation.y += 0.01
+  path.render()
+  mobs.forEach((mob) => mob.update())
 }
 animate()
