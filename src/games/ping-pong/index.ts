@@ -20,14 +20,14 @@ export default () => {
     const y = Math.random() * GH
     const area = Math.random() * 150
     allBoxes.push(new CollisionBox(x, y, 5 + area, 5 + (150 - area)))
-    allBalls.push(new Ball(GW / 2, GH / 2, 25))
   }
+  allBalls.push(new Ball(GW / 2, GH / 2, 25))
 
   renderGame()
 
   function renderGame() {
     requestAnimationFrame(renderGame)
-    // ctx.clearRect(0, 0, GW, GH)
+    ctx.clearRect(0, 0, GW, GH)
     ctx.fillStyle = "rgba(0, 0, 0, 0.1)"
     ctx.fillRect(0, 0, GW, GH)
 
