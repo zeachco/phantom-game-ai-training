@@ -1,60 +1,119 @@
-import { Ball } from "./Ball"
-import { CollisionBox } from "./CollisionBox"
-
-var canvas = document.createElement("canvas")
+const canvas = document.createElement("canvas")
+const ctx = canvas.getContext("2d")
 document.body.appendChild(canvas)
-var ctx = canvas.getContext("2d")
 
-var GW = (canvas.width = 800)
-var GH = (canvas.height = 600)
+const matrix = `
+|0.0  00  0 |
+|     0   0 |
+|  0  0  0 0|
+|  0  0    0|
+| 0.  0 0  0|
+| 000   0   |
+|   0 0  0 0|
+|0  .  .0   |
+|  000  0.0 |
+|    .  0   |
+|.   0   0  |
+|0 0  0     |
+|  0  0  0 0|
+`
+  .trim()
+  .split("\n")
+  .map((row) => row.split(""))
 
-const leftPlayer = new CollisionBox(50, 150, 20, 140)
-const rightPlayer = new CollisionBox(GW - 50, 150, 20, 140)
+const GW = 640
+const GH = 480
+canvas.width = GW
+canvas.height = GH
+const gridX = matrix[0].length
+const gridY = Math.min(matrix.length, gridX)
+const TW = GW / gridX
+const TH = GH / gridY
+let shipTile = 0
+let score = 0
+let highScore: number = +localStorage.getItem("highScore") || 0
+let now = Date.now()
+let gameSpeed = 1000
+let invinsibleRows = TH
+resetShip()
 
-const allBoxes: CollisionBox[] = [leftPlayer, rightPlayer]
-const allBalls: Ball[] = []
+function render() {
+  requestAnimationFrame(render)
+  const es = Date.now() - now
+  if (es > gameSpeed) moveForward()
 
-for (var i = 0; i < 5; i++) {
-  const x = (Math.random() * GW) / 2 + GW / 4
-  const y = Math.random() * GH
-  const area = Math.random() * 150
-  allBoxes.push(new CollisionBox(x, y, 5 + area, 5 + (150 - area)))
-  allBalls.push(new Ball(GW / 2, GH / 2, 25))
+  ctx.clearRect(0, 0, GW, GH)
+
+  for (var y = 0; y < gridY; y++) {
+    for (var x = 0; x < gridX; x++) {
+      switch (matrix[y][x]) {
+        case "0":
+          if (gridY - y < invinsibleRows) break
+          ctx.fillStyle = "#330000"
+          ctx.fillRect(x * TW, y * TH, TW, TH)
+          break
+        case "|":
+          ctx.fillStyle = "#000000"
+          ctx.fillRect(x * TW, y * TH, TW, TH)
+          break
+        case ".":
+          ctx.fillStyle = "#00ff0088"
+          ctx.fillRect(x * TW, y * TH, TW, TH)
+          break
+      }
+    }
+  }
+  ctx.fillStyle = "#FF0000"
+  ctx.fillRect(shipTile * TW, (gridY - 1) * TH, TW, TH)
+  ctx.strokeStyle = "yellow"
+  ctx.strokeText(`score: ${score}`, 0, TH)
+  ctx.strokeText(`score: ${Math.max(highScore, score)}`, 0, TH * 2)
 }
 
-renderGame()
-
-function renderGame() {
-  requestAnimationFrame(renderGame)
-  // ctx.clearRect(0, 0, GW, GH)
-  ctx.fillStyle = "rgba(0, 0, 0, 0.1)"
-  ctx.fillRect(0, 0, GW, GH)
-
-  // desiner les obstacles
-  allBoxes.forEach((box) => {
-    box.render(ctx)
-    // box.getCollitionNormal(ball.x, ball.y, ball.size)
-
-    // if (ballX < 0 + ballSize / 2) ballVX = Math.abs(ballVX * ballAcc) // left
-    // if (ballY < 0 + ballSize / 2) ballVY = Math.abs(ballVY * ballAcc) // top
-    // if (ballX > GW - ballSize / 2) ballVX = -Math.abs(ballVX * ballAcc) // right
-    // if (ballY > GH - ballSize / 2) ballVY = -Math.abs(ballVY * ballAcc) // bottom
-  })
-
-  allBalls.forEach((ball) => {
-    leftPlayer.y = ball.y
-    rightPlayer.y = ball.y
-
-    allBoxes.forEach((box) => box.getCollitionNormal(ball))
-
-    if (ball.x < 0 + ball.size / 2) ball.vx = Math.abs(ball.vx * ball.acc) // left: ;
-    if (ball.y < 0 + ball.size / 2) ball.vy = Math.abs(ball.vy * ball.acc) // top
-    if (ball.x > GW - ball.size / 2) ball.vx = -Math.abs(ball.vx * ball.acc) // right
-    if (ball.y > GH - ball.size / 2) ball.vy = -Math.abs(ball.vy * ball.acc) // bottom
-    ball.render(ctx)
-  })
-
-  ctx.fillStyle = "black"
-  // ctx.fillText(`${ballX}, ${ballY}`, 0, 10)
-  // ctx.fillText(`${ballVX}, ${ballVY}`, 0, 22)
+function move(verticalMove) {
+  shipTile += verticalMove
+  if (shipTile < 0) shipTile = 0
+  if (shipTile > gridX - 1) shipTile = gridX - 1
+  checkPosition()
 }
+
+function moveForward() {
+  matrix.unshift(matrix.pop())
+  invinsibleRows--
+  checkPosition()
+  gameSpeed = 250 - score / 5
+  now = Date.now()
+}
+
+function checkPosition() {
+  const lastRow = matrix[gridY - 1]
+  switch (lastRow[shipTile]) {
+    case "0":
+      if (invinsibleRows <= 0) resetShip()
+      break
+    case ".":
+      score += 10
+      break
+    case " ":
+      score += 1
+      break
+  }
+}
+
+function resetShip() {
+  if (score > highScore) {
+    highScore = score
+    localStorage.setItem("highScore", highScore + "")
+  }
+  score = 0
+  invinsibleRows = TH
+  shipTile = Math.round(gridX / 2)
+}
+
+render()
+
+document.body.addEventListener("keydown", (ev) => {
+  if (ev.key === "ArrowLeft") move(-1)
+  if (ev.key === "ArrowRight") move(1)
+  if (ev.key === "ArrowUp") moveForward()
+})
