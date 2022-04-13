@@ -9,10 +9,11 @@
   },
   "devDependencies": {
     "nodemon": "^2.0.15",
+    "parcel": "^2.4.1",
     "prettier": "^2.6.1",
     "serve": "^13.0.2"
   },
   "scripts": {
-    "start": "serve ./src"
+    "start": "parcel ./src/index.html"
   }
 }
