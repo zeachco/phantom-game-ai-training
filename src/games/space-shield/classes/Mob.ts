@@ -1,5 +1,5 @@
 import { THREE } from "../../../utilities/three"
-import { Central } from "./Central.class"
+import { Central } from "./Central"
 
 const geometry = new THREE.BoxGeometry()
 

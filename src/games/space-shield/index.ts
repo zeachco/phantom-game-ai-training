@@ -4,10 +4,10 @@ import { Mob } from "./classes/Mob"
 
 export default async () => {
   const { THREE } = await import("../../utilities/three")
-  const { Cameraman } = await import("../../utilities/three/Cameraman.class")
-  const { GameLoop } = await import("../../utilities/three/GameLoop.class")
-  const { Central } = await import("./classes/Central.class")
-  const { GamePad } = await import("../../utilities/inputs/Gamepad.class")
+  const { Cameraman } = await import("../../utilities/three/Cameraman")
+  const { GameLoop } = await import("../../utilities/three/GameLoop")
+  const { Central } = await import("./classes/Central")
+  const { GamePad } = await import("../../utilities/inputs/Gamepad")
 
   const scene = new THREE.Scene()
   const cameraman = new Cameraman(scene, 0, 10, 0)

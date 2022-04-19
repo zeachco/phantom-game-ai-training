@@ -1,4 +1,4 @@
-import { THREE } from "../three"
+import { THREE } from "."
 export class Cameraman {
   public camera: THREE.PerspectiveCamera
   public renderer: THREE.WebGLRenderer

@@ -1,4 +1,4 @@
-import { THREE } from "../three"
+import { THREE } from "."
 
 export class GameLoop {
   clock: THREE.Clock = new THREE.Clock()
