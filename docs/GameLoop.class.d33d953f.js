@@ -1,2 +1,0 @@
-var e=("undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:"undefined"!=typeof window?window:"undefined"!=typeof global?global:{}).parcelRequire4d03;e.register("2cQnx",(function(o,l){var n,t,a,i;n=o.exports,t="GameLoop",a=()=>s,Object.defineProperty(n,t,{get:a,set:i,enumerable:!0,configurable:!0});var c=e("V3qFZ");class s{clock=new c.THREE.Clock;play(e){const o=()=>{requestAnimationFrame(o);const l=this.clock.getDelta(),n=.1*this.clock.getElapsedTime()*Math.PI;e(n,l)};o()}}}));
-//# sourceMappingURL=GameLoop.class.d33d953f.js.map

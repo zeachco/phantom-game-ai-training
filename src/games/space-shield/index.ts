@@ -15,7 +15,7 @@ export default async () => {
   controls.set("KeyW", "KeyUp")
   controls.set("KeyW", "KeyUp")
   controls.set("KeyW", "KeyUp")
-  for (let n = 0; n < 9; n++) {
+  for (let n = 0; n < 10; n++) {
     controls.set(`spawn${n}`, `Digit${n}`)
   }
   const pad = new GamePad(controls)
@@ -37,7 +37,7 @@ export default async () => {
   })
 
   function checkSpawner() {
-    for (let n = 0; n < 9; n++) {
+    for (let n = 0; n < 10; n++) {
       if (pad.once(`spawn${n}`)) {
         console.log(`spawning mob #${n}`)
         const distance = 5
@@ -49,7 +49,7 @@ export default async () => {
         mob.speed = 0.0011 - 0.0001 * (n + 1)
         mobs.push(mob)
         mob.target = central
-        mob.material.color.setHSL((n * Math.PI * 2) / 10, 1, 0.5)
+        mob.material.color.setHSL((n * Math.PI * 0.2) / 10, 1, 0.5)
         scene.add(mob.mesh)
       }
     }
