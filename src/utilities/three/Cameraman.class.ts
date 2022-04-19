@@ -20,9 +20,13 @@ export class Cameraman {
     this.camera.position.y = y
     this.camera.rotation.z = z
     this.camera.lookAt(0, 0, 0)
+
+    document.addEventListener("resize", () => {
+      console.log("resize")
+    })
   }
 
-  public update() {
+  public update(es: number) {
     if (
       this.canvas.width !== this.canvas.clientWidth ||
       this.canvas.height !== this.canvas.clientHeight
