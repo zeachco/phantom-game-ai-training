@@ -4,6 +4,7 @@ const apps = {
   "tower-def": import("../games/tower-def"),
   "phatom-race": import("../games/phantom-race"),
   "ping-pong": import("../games/ping-pong"),
+  "space-shield": import("../games/space-shield"),
 }
 
 const games = Object.keys(apps)
