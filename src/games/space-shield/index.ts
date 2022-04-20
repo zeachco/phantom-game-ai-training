@@ -28,28 +28,35 @@ export default async () => {
   loop.play((es, dt) => {
     central.update(dt)
     cameraman.update(dt)
-    checkSpawner()
-    mobs.forEach((m) => {
-      m.update(es)
-      if (m.hp <= 0) {
+    checkSpawner(es, dt)
+    let i = 0
+    while (i < mobs.length) {
+      const mob = mobs[i]
+      mob.update(es)
+      if (mob.hp <= 0) {
+        scene.remove(mob.mesh)
+        mobs.splice(i, 1)
+      } else {
+        i++
       }
-    })
+    }
   })
 
-  function checkSpawner() {
+  function checkSpawner(es = 0, dt = 0) {
     for (let n = 0; n < 10; n++) {
-      if (pad.once(`spawn${n}`)) {
-        console.log(`spawning mob #${n}`)
-        const distance = 5
+      if (pad.once(`spawn${n}`) || true || !random(100)) {
+        // console.log(`spawning mob #${n}`)
+        const distance = 6
         const a = random(Math.PI * 2, 0, true)
         const x = Math.cos(a) * distance
         const z = Math.sin(a) * distance
+        const hue = (n * Math.PI * 0.2) / 10
         const mob = new Mob(x, z)
         mob.hp = 3 * n
-        mob.speed = 0.0011 - 0.0001 * (n + 1)
+        mob.speed = 0.011 - 0.001 * (n + 1)
         mobs.push(mob)
         mob.target = central
-        mob.material.color.setHSL((n * Math.PI * 0.2) / 10, 1, 0.5)
+        mob.material.color.setHSL(hue, 1, 0.5)
         scene.add(mob.mesh)
       }
     }
