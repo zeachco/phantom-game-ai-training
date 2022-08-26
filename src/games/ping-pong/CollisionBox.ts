@@ -11,7 +11,7 @@ export class CollisionBox {
     public y: number,
     public width: number,
     public height: number,
-    public hp = Math.round(Math.random() * 100)
+    public hp = 20 + Math.round(Math.random() * 10)
   ) {}
 
   render(ctx: CanvasRenderingContext2D) {
@@ -57,20 +57,19 @@ export class CollisionBox {
     this.collided[index] = collided;
 
     if (collided) {
-      const directionX = Math.sign(offsetX);
-      const directionY = Math.sign(offsetY);
+      const directionX = Math.sign(offsetX) * 1.01;
+      const directionY = Math.sign(offsetY) * 1.01;
       if (Math.abs(offsetX) >= 0.5) {
         // horizontal
         ball.vx = Math.abs(ball.vx) * directionX;
         ball.vx += this.vx / 10;
-      }
-      if (Math.abs(offsetY) >= 0.5) {
+      } else if (Math.abs(offsetY) >= 0.5) {
+        // vertical
         ball.vy = Math.abs(ball.vy) * directionY;
         ball.vy += this.vy / 10;
-        // vertical
       }
       this.hp -= 1;
     }
-    return collided;
+    return { collided, offsetY, offsetX };
   }
 }

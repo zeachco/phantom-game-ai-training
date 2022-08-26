@@ -44,7 +44,7 @@ export default async () => {
 
   function checkSpawner(es = 0, dt = 0) {
     for (let n = 0; n < 10; n++) {
-      if (pad.once(`spawn${n}`) || true || !random(100)) {
+      if (pad.once(`spawn${n}`) || !random(100)) {
         // console.log(`spawning mob #${n}`)
         const distance = 6
         const a = random(Math.PI * 2, 0, true)
