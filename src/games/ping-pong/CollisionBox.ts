@@ -25,8 +25,8 @@ export class CollisionBox {
     ).length;
     this.collidedBlur += collisions;
     this.collidedBlur *= 0.85;
-    const w = this.width + this.collidedBlur;
-    const h = this.height + this.collidedBlur;
+    const w = this.width + this.collidedBlur * 4;
+    const h = this.height + this.collidedBlur * 4;
     ctx.fillStyle = this.collided
       ? `hsla(${90 - this.hp / 20}, 50%, 50%, 90%)`
       : "#0000ff66";
