@@ -30,8 +30,8 @@ export default () => {
 
   function renderGame() {
     requestAnimationFrame(renderGame);
-    // ctx.clearRect(0, 0, GW, GH);
-    ctx.fillStyle = "rgba(128, 128, 128, 0.1)";
+    ctx.clearRect(0, 0, GW, GH);
+    ctx.fillStyle = "rgba(64, 64, 64, 0.15)";
     ctx.fillRect(0, 0, GW, GH);
 
     // desiner les obstacles
@@ -85,7 +85,7 @@ export default () => {
     });
 
     if (
-      allBalls.length <= Math.round((playerA.score + playerB.score) / 2 + 1)
+      allBalls.length <= Math.round((playerA.score + playerB.score) / 5 + 3)
     ) {
       allBalls.push(new Ball(GW / 2, GH / 2));
     }

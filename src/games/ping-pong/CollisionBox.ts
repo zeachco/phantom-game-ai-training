@@ -11,7 +11,7 @@ export class CollisionBox {
     public y: number,
     public width: number,
     public height: number,
-    public hp = 20 + Math.round(Math.random() * 10)
+    public hp = 20 + Math.round(Math.random() * 190)
   ) {}
 
   render(ctx: CanvasRenderingContext2D) {
@@ -28,7 +28,7 @@ export class CollisionBox {
     const w = this.width + this.collidedBlur * 4;
     const h = this.height + this.collidedBlur * 4;
     ctx.fillStyle = this.collided
-      ? `hsla(${90 - this.hp / 20}, 50%, 50%, 90%)`
+      ? `hsla(${this.hp / 3}, 50%, 50%, 90%)`
       : "#0000ff66";
     ctx.fillRect(this.x - w / 2, this.y - h / 2, w, h);
     ctx.fillStyle = "white";
