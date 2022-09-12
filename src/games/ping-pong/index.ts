@@ -1,10 +1,10 @@
 import { Ball } from "./Ball";
 import { CollisionBox } from "./CollisionBox";
 import { Player } from "./Player";
+import {createCanvas} from '../../utilities/dom'
 
 export default () => {
-  const canvas = document.createElement("canvas");
-  document.body.appendChild(canvas);
+  const canvas = createCanvas();
   const ctx = canvas.getContext("2d")!;
   if (!ctx) throw new Error("no 2d context");
 
@@ -46,7 +46,7 @@ export default () => {
           y,
           5 + area,
           5 + (150 - area),
-          Math.round(Math.random() * allBalls.length)
+          Math.round(Math.min(360, Math.random() * allBalls.length * 10))
         );
         allBoxes.splice(index, 1, box);
       }

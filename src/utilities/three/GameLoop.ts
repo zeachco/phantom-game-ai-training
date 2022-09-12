@@ -1,15 +1,15 @@
-import { THREE } from "."
+import { THREE } from "./index";
 
 export class GameLoop {
-  clock: THREE.Clock = new THREE.Clock()
+  clock: THREE.Clock = new THREE.Clock();
 
   play(loop: (es: number, delta: number) => void) {
     const run = () => {
-      requestAnimationFrame(run)
-      const dt = this.clock.getDelta()
-      const es = this.clock.getElapsedTime()
-      loop(es, dt)
-    }
-    run()
+      requestAnimationFrame(run);
+      const dt = this.clock.getDelta();
+      const es = this.clock.getElapsedTime();
+      loop(es, dt);
+    };
+    run();
   }
 }

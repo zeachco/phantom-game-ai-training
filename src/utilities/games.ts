@@ -1,22 +1,44 @@
-const queryString = window.location.search
-const urlParams = new URLSearchParams(queryString)
-const apps = {
-  "tower-def": import("../games/tower-def"),
-  "phatom-race": import("../games/phantom-race"),
-  "ping-pong": import("../games/ping-pong"),
-  "space-shield": import("../games/space-shield"),
-}
+const queryString = window.location.search;
+const urlParams = new URLSearchParams(queryString);
 
-const games = Object.keys(apps)
+const apps = new Map<string, Function>([
+  ["highway", () => import(`../games/highway/index.js`)],
+  ["phatom-race", () => import(`../games/phantom-race/index.js`)],
+  ["ping-pong", () => import(`../games/ping-pong/index.js`)],
+  ["space-shield", () => import(`../games/space-shield/index.js`)],
+  ["tower-def", () => import(`../games/tower-def/index.js`)],
+]);
 
-const ul = document.createElement("ul")
-ul.innerHTML = games
-  .map((g) => `<li><a href="?game=${g}">${g}</a></li>`)
-  .join("")
-document.body.appendChild(ul)
+// ["highway", "phatom-race", "ping-pong", "space-shield", "tower-def"].forEach(
+//   (key) => {
+//     apps.set(key, () => import(`../games/${key}/index.js`));
+//   }
+// );
 
-const game = urlParams.get("game")
+// const apps = {
+//   highway: () => import("../games/" + "highway" + "/index.js"),
+//   "phatom-race": () => import("../games/phantom-race/index.js"),
+//   "ping-pong": () => import("../games/ping-pong/index.js"),
+//   "space-shield": () => import("../games/space-shield/index.js"),
+//   "tower-def": () => import("../games/tower-def/index.js"),
+// };
 
-if (~games.indexOf(game)) {
-  apps[game].then((app) => app.default())
+const ul = document.createElement("ul");
+
+apps.forEach((game, key) => {
+  const li = document.createElement("li");
+  li.innerHTML = `<a href="?game=${key}">${key}</a>`;
+  ul.appendChild(li);
+});
+
+document.body.appendChild(ul);
+
+const game = urlParams.get("game") || "";
+const app = apps.get(game);
+
+if (app) {
+  const state = ((window as any).state = {});
+  app().then((mod) => mod.default(state));
+} else {
+  console.log(apps);
 }

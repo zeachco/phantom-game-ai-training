@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "module": "ESNext",
+    "moduleResolution": "NodeNext",
+    "target": "ESNext",
+    "noImplicitAny": false,
+    "typeRoots": ["types"]
+  },
+  "include": ["src", "types.d.ts"]
+}
