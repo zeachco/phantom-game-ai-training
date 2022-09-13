@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "deploy": "./deploy.sh",
     "preview": "vite preview",
     "test": "echo 'nothing to test...'"
   }
