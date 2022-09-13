@@ -27,7 +27,7 @@ export default async (state: typeof defaultState) => {
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
 
-  const N = 200;
+  const N = 100;
 
   const loop = new GameLoop();
 
@@ -49,7 +49,6 @@ export default async (state: typeof defaultState) => {
         }
       }
     } else {
-      console.clear();
       console.log("Fresh model start");
     }
 

@@ -3,31 +3,22 @@ import { lerp } from "../utilities/math";
 export class NeuralNetwork {
   generation = 0;
   levels: Level[];
-  constructor(inputNb, outputNb, intermediateLayers = 6) {
+  constructor(inputNb, outputNb, intermediateLayers = Math.ceil(inputNb / 4)) {
     const levelStructure = [];
 
     if (inputNb < outputNb) {
       throw new Error("requires more inputs than outputs");
     }
 
-    const step = Math.ceil(inputNb / (intermediateLayers + 1));
-
     this.levels = [];
-    this.levels.push(new Level(inputNb, outputNb));
-    // this.levels.push(new Level(out, outputNb));
 
-    // for (let l = inputNb; l > outputNb; l -= step) {
-    //   const outCount = Math.max(outputNb, l);
-    //   this.levels.push(new Level(l, outCount));
-    // }
-
-    // 16, .. 4
-
-    // const levels = [inputNb, ...[], outputNb];
-
-    // for (let i = 0; i < levels.length - 1; i++) {
-    //   this.levels.push(new Level(levels[i], levels[i + 1]));
-    // }
+    for (let i = 0; i < intermediateLayers; i++) {
+      const from = Math.floor(lerp(inputNb, outputNb, i / intermediateLayers));
+      const to = Math.floor(
+        lerp(inputNb, outputNb, (i + 1) / intermediateLayers)
+      );
+      this.levels.push(new Level(from, to));
+    }
   }
 
   static feedForward(givenInputs: any[], network: NeuralNetwork) {
