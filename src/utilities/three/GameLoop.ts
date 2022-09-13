@@ -1,7 +1,7 @@
-import { THREE } from "./index";
+import { Clock } from "three";
 
 export class GameLoop {
-  clock: THREE.Clock = new THREE.Clock();
+  clock: Clock = new Clock();
 
   play(loop: (es: number, delta: number) => void) {
     const run = () => {
