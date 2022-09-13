@@ -1,5 +1,6 @@
 import type { Car } from "./Car";
 import { getIntersection, lerp, Vector } from "../../utilities/math";
+import { config } from "./Config";
 
 export class Sensor {
   car: Car;
@@ -10,9 +11,9 @@ export class Sensor {
   readings: { x: number; y: number; offset: number }[];
   constructor(car: Car) {
     this.car = car;
-    this.rayCount = 9;
+    this.rayCount = config.SENSORS;
     this.rayLength = 250;
-    this.raySpread = (Math.PI / 2) * 3.6;
+    this.raySpread = config.SENSOR_ANGLE;
 
     this.rays = [];
     this.readings = [];
@@ -34,7 +35,7 @@ export class Sensor {
         ray[0],
         ray[1],
         roadBorders[i][0],
-        roadBorders[i][1]
+        roadBorders[i][1],
       );
       if (touch) {
         touches.push(touch);
@@ -48,7 +49,7 @@ export class Sensor {
           ray[0],
           ray[1],
           poly[j],
-          poly[(j + 1) % poly.length]
+          poly[(j + 1) % poly.length],
         );
         if (value) {
           touches.push(value);
@@ -72,7 +73,7 @@ export class Sensor {
         lerp(
           this.raySpread / 2,
           -this.raySpread / 2,
-          this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1)
+          this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
         ) + this.car.angle;
 
       const start = { x: this.car.x, y: this.car.y };

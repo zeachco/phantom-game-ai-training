@@ -28,7 +28,7 @@ export class Road {
     ];
   }
 
-  getLaneCenter(laneIndex: number) {
+  getLane(laneIndex: number) {
     const laneWidth = this.width / this.laneCount;
     return (
       this.left +

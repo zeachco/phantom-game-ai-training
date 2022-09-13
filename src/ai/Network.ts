@@ -35,12 +35,12 @@ export class NeuralNetwork {
       return;
     }
     this.generation = network.generation + 1;
-    for (let l = 0; l < network.levels.length; l++) {
+    for (let l = 0; l < this.levels.length; l++) {
       for (let b = 0; b < this.levels[l].biases.length; b++) {
         this.levels[l].biases[b] = lerp(
           network.levels[l].biases[b],
           rand(),
-          amount
+          amount,
         );
       }
       for (let i = 0; i < this.levels[l].weights.length; i++) {
@@ -48,7 +48,7 @@ export class NeuralNetwork {
           this.levels[l].weights[i][j] = lerp(
             network.levels[l].weights[i][j],
             rand(),
-            amount
+            amount,
           );
         }
       }

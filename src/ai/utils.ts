@@ -3,21 +3,20 @@ import type { NeuralNetwork } from "./Network";
 export function fileUtilities(gameName = "") {
   return {
     loadModel: () => loadModel(gameName),
-    saveModel: (model) => saveModel(model, gameName),
+    saveModel: (model: NeuralNetwork) => saveModel(model, gameName),
     discardModel: () => discardModel(gameName),
+    saveScore: (score: number) => saveScore(gameName, score),
+    loadScore: () => loadScore(gameName),
   };
 }
 
-export function loadModel(game: string): NeuralNetwork | null {
+export function loadModel(game: string) {
   try {
     const data = localStorage.getItem(`${game}_model`);
-    const model = JSON.parse(data) as NeuralNetwork;
-    if (!model) return;
-    console.log(`loaded generation #${model.generation}`);
-    return model;
+    return JSON.parse(data) as NeuralNetwork;
   } catch (err) {
     console.log(err);
-    return null;
+    return;
   }
 }
 
@@ -32,7 +31,7 @@ export function isSameModel(modelA: NeuralNetwork, modelB: NeuralNetwork) {
 
 export function saveModel(network: NeuralNetwork, game: string) {
   const namespace = `${game}_model`;
-  const model = loadModel(namespace);
+  const model = loadModel(game);
   if (isSameModel(network, model)) {
     console.error("model is identical");
   } else {
@@ -44,4 +43,12 @@ export function saveModel(network: NeuralNetwork, game: string) {
 
 export function discardModel(game: string) {
   localStorage.removeItem(`${game}_model`);
+}
+
+export function saveScore(game: string, score = 0) {
+  localStorage.setItem(`${game}_score`, score.toString());
+}
+
+export function loadScore(game: string) {
+  return parseFloat(localStorage.getItem(`${game}_score`) || "0");
 }
