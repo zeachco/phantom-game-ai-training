@@ -14,7 +14,9 @@ const defaultState = {
 
 export default async (state: typeof defaultState) => {
   const carCanvas = createCanvas();
+  carCanvas.style.cssText = "max-width: 50%";
   const networkCanvas = createCanvas();
+  networkCanvas.style.cssText = "max-width: 50%";
 
   const carCtx = carCanvas.getContext("2d");
   const networkCtx = networkCanvas.getContext("2d");
