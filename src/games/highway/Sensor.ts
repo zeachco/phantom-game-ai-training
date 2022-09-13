@@ -1,6 +1,5 @@
 import type { Car } from "./Car";
-import { Vector } from "./types";
-import { getIntersection, lerp } from "../../utilities/math";
+import { getIntersection, lerp, Vector } from "../../utilities/math";
 
 export class Sensor {
   car: Car;

@@ -5,6 +5,7 @@
     "moduleResolution": "NodeNext",
     "target": "ESNext",
     "noImplicitAny": false,
+    "noEmit": true,
     "typeRoots": ["types"]
   },
   "include": ["src", "types.d.ts"]

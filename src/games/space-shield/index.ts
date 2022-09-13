@@ -3,11 +3,11 @@ import { random } from "../../utilities/math"
 import { Mob } from "./classes/Mob"
 
 export default async () => {
-  const { THREE } = await import("../../utilities/three")
-  const { Cameraman } = await import("../../utilities/three/Cameraman")
-  const { GameLoop } = await import("../../utilities/three/GameLoop")
-  const { Central } = await import("./classes/Central")
-  const { GamePad } = await import("../../utilities/inputs/Gamepad")
+  const { THREE } = await import("../../utilities/three/index.js");
+  const { Cameraman } = await import("../../utilities/three/Cameraman.js");
+  const { GameLoop } = await import("../../utilities/three/GameLoop.js");
+  const { Central } = await import("./classes/Central.js");
+  const { GamePad } = await import("../../utilities/inputs/Gamepad.js");
 
   const scene = new THREE.Scene()
   const cameraman = new Cameraman(scene, 0, 10, 0)
