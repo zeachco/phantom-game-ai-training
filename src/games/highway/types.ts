@@ -1,5 +1,5 @@
 export enum ControlType {
-  "KEYS",
-  "DUMMY",
-  "AI",
+  'KEYS',
+  'DUMMY',
+  'AI',
 }

@@ -23,8 +23,6 @@ export class Car {
   img: HTMLImageElement;
   mask: HTMLCanvasElement;
   polygon: Vector[] = [];
-  public distance = 0;
-  public score = 0;
 
   constructor(
     public x = 0,
@@ -34,7 +32,7 @@ export class Car {
     controlType = ControlType.DUMMY,
     public maxSpeed = 2.8,
     public label = `${carCount++}`,
-    color = getRandomColor(),
+    public color = getRandomColor(),
   ) {
     this.x = x;
     this.y = y;
@@ -64,17 +62,17 @@ export class Car {
     this.img = new Image();
     this.img.src = carImg;
 
-    this.mask = document.createElement("canvas");
+    this.mask = document.createElement('canvas');
     this.mask.width = width;
     this.mask.height = height;
 
-    const maskCtx = this.mask.getContext("2d")!;
+    const maskCtx = this.mask.getContext('2d')!;
     this.img.onload = () => {
       maskCtx.fillStyle = color;
       maskCtx.rect(0, 0, this.width, this.height);
       maskCtx.fill();
 
-      maskCtx.globalCompositeOperation = "destination-atop";
+      maskCtx.globalCompositeOperation = 'destination-atop';
       maskCtx.drawImage(this.img, 0, 0, this.width, this.height);
     };
   }
@@ -82,7 +80,7 @@ export class Car {
   update(roadBorders: Vector[][], traffic: Car[]) {
     if (this.damaged) return;
     this.#move();
-    this.#updateScore();
+    if (this.neural) this.#updateScore();
 
     this.polygon = this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
@@ -104,13 +102,13 @@ export class Car {
 
   #updateScore() {
     // vertical distance
-    this.score += Math.cos(this.angle) * this.speed;
+    this.neural.score += Math.cos(this.angle) * this.speed;
     // travel distance
-    this.score += this.speed;
+    this.neural.score += this.speed;
     // no dual input
-    this.score += this.controls.left && this.controls.right ? -1 : 0;
+    // this.neural.score += this.controls.left && this.controls.right ? -1 : 0;
     // no reverse
-    this.score += this.controls.reverse ? -1 : 0;
+    // this.neural.score += this.controls.reverse ? -1 : 0;
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {
@@ -165,7 +163,6 @@ export class Car {
       if (this.controls.right) this.angle -= 0.03 * flip;
     }
 
-    this.distance += this.speed;
     this.x -= Math.sin(this.angle) * this.speed;
     this.y -= Math.cos(this.angle) * this.speed;
   }
@@ -186,7 +183,7 @@ export class Car {
         this.width,
         this.height,
       );
-      ctx.globalCompositeOperation = "multiply";
+      ctx.globalCompositeOperation = 'multiply';
     }
     ctx.drawImage(
       this.img,
@@ -195,10 +192,10 @@ export class Car {
       this.width,
       this.height,
     );
-    ctx.textAlign = "center";
-    ctx.font = "bold 11px serif";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(0,0,0, 1)";
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 11px serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0, 1)';
     ctx.fillText(`${this.label}`, 0, this.height - 22);
     ctx.restore();
   }

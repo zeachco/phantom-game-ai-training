@@ -1,56 +1,101 @@
-import type { NeuralNetwork } from "./Network";
+import { config } from '../games/highway/Config';
+import { isSameObject } from '../utilities/object';
+import type { NeuralNetwork } from './Network';
 
-export function fileUtilities(gameName = "") {
+/**
+ * index is the layer amount
+ * value is a list of sorted NeuralNetwork by score
+ */
+export type ModelsByLayerCount = Omit<NeuralNetwork, 'mutate'>[];
+
+export function fileUtilities(game = '') {
+  const name = (layer: number) => `${game}_${layer}`;
+
   return {
-    loadModel: () => loadModel(gameName),
-    saveModel: (model: NeuralNetwork) => saveModel(model, gameName),
-    discardModel: () => discardModel(gameName),
-    saveScore: (score: number) => saveScore(gameName, score),
-    loadScore: () => loadScore(gameName),
+    saveBestModels,
+    loadAllModelLayers,
   };
-}
-
-export function loadModel(game: string) {
-  try {
-    const data = localStorage.getItem(`${game}_model`);
-    return JSON.parse(data) as NeuralNetwork;
-  } catch (err) {
-    console.log(err);
-    return;
+  function saveModels(
+    layers: number,
+    models: NeuralNetwork[],
+    namespace = name(layers),
+    allowLower = false,
+  ) {
+    const olds = loadModels(layers);
+    const exclude: (keyof NeuralNetwork)[] = [
+      'id',
+      'version',
+      'mutationIndex',
+      'mutationFactor',
+      'score',
+    ];
+    if (olds[0] && olds[0].score > models[0].score) {
+      console.debug(
+        `skipping save based on score ${olds[0].score} > ${models[0].score}`,
+      );
+    } else if (isSameObject(models, olds, exclude)) {
+      // console.error('models are identical');
+    } else {
+      const data = JSON.stringify(models);
+      console.log(
+        `saving ${models.length} gen-${models[0]?.version} ${game} models (${layers} layers).`,
+      );
+      localStorage.setItem(namespace, data);
+      return 1;
+    }
+    return 0;
   }
-}
 
-export function isSameModel(modelA: NeuralNetwork, modelB: NeuralNetwork) {
-  if (!modelA || !modelB) return false;
-  const noGeneration = (key, value) => (key === "generation" ? 0 : value);
-  return (
-    JSON.stringify(modelA, noGeneration) ===
-    JSON.stringify(modelB, noGeneration)
-  );
-}
+  function loadModels(layers: number, namespace = name(layers)) {
+    let models: ModelsByLayerCount = [];
+    try {
+      const data = localStorage.getItem(namespace);
+      if (!data) throw new Error(`not found`);
+      models = JSON.parse(data);
+      console.log(
+        `Retreived ${models.length} gen-${models[0].version} for layer ${layers}`,
+      );
+    } catch {
+      console.log(`Nothing for layer ${layers}`);
+    }
+    return models;
+  }
 
-export function saveModel(network: NeuralNetwork, game: string) {
-  const namespace = `${game}_model`;
-  const model = loadModel(game);
-  if (isSameModel(network, model)) {
-    console.error("model is identical");
-  } else {
-    const data = JSON.stringify(network);
-    console.log(
-      `saving ${`${game}_model`} (generation #${network.generation})`,
+  /**
+   * Receives all neural networks with a score and determine how to same them
+   * stored by compatibility (neural networks are easier to mutate from similar neural network complexity AKA same amount of levels)
+   */
+  function saveBestModels(models: NeuralNetwork[], amountPerComplexity = 1) {
+    console.groupCollapsed(
+      `Saving ${config.MAX_NETWORK_LAYERS} models configs`,
     );
-    localStorage.setItem(namespace, data);
+    const save: NeuralNetwork[][] = new Array(config.MAX_NETWORK_LAYERS);
+    models.forEach((model) => {
+      const space = model.levels.length;
+      const previous = save[space] || [];
+      if (previous.length >= amountPerComplexity) return;
+      save[space] = [...previous, model].sort((a, b) => b.score - a.score);
+    });
+
+    let count = 0;
+    save.forEach((models, layersNb) => (count += saveModels(layersNb, models)));
+    console.log(`Written ${count}/${config.MAX_NETWORK_LAYERS} models`);
+    console.groupEnd();
   }
-}
 
-export function discardModel(game: string) {
-  localStorage.removeItem(`${game}_model`);
-}
-
-export function saveScore(game: string, score = 0) {
-  localStorage.setItem(`${game}_score`, score.toString());
-}
-
-export function loadScore(game: string) {
-  return parseFloat(localStorage.getItem(`${game}_score`) || "0");
+  function loadAllModelLayers(maxLayer = config.MAX_NETWORK_LAYERS) {
+    console.groupCollapsed(`Loading ${maxLayer} models configs...`);
+    const load: ModelsByLayerCount[] = new Array(config.MAX_NETWORK_LAYERS);
+    try {
+      for (let i = 1; i <= maxLayer; i++) {
+        const model = loadModels(i);
+        if (!model) continue;
+        load[i] = model.map((m) => ({ ...m, score: 0 }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    console.groupEnd();
+    return load;
+  }
 }

@@ -1,12 +1,12 @@
 import { NeuralNetwork } from "../../ai/Network";
-import { fileUtilities, loadScore } from "../../ai/utils";
-import { Visualizer } from "../../ai/Visualizer";
-import { createCanvas } from "../../utilities/dom";
-import { GameLoop } from "../../utilities/three/GameLoop";
-import { Car } from "./Car";
-import { config } from "./Config";
-import { Road } from "./Road";
-import { ControlType } from "./types";
+import { fileUtilities, ModelsByLayerCount } from '../../ai/utils';
+import { Visualizer } from '../../ai/Visualizer';
+import { createCanvas } from '../../utilities/dom';
+import { GameLoop } from '../../utilities/three/GameLoop';
+import { Car } from './Car';
+import { config } from './Config';
+import { Road } from './Road';
+import { ControlType } from './types';
 
 const defaultState = {
   cars: [] as Car[],
@@ -15,22 +15,18 @@ const defaultState = {
   traffic: [] as Car[],
   player: new Car(),
   to: 0,
-  lastScore: 0,
-  model: undefined as NeuralNetwork,
-  ...fileUtilities("highway"),
+  sortedModels: [] as ModelsByLayerCount[],
+  ...fileUtilities('highway'),
 };
 
 export default async (state: typeof defaultState) => {
   const carCanvas = createCanvas();
-  carCanvas.style.cssText = "max-width: 50%";
   const networkCanvas = createCanvas();
-  networkCanvas.style.cssText = "max-width: 50%";
 
-  const carCtx = carCanvas.getContext("2d");
-  const networkCtx = networkCanvas.getContext("2d");
+  const carCtx = carCanvas.getContext('2d');
+  const networkCtx = networkCanvas.getContext('2d');
 
   carCanvas.width = 200;
-  networkCanvas.width = 400;
 
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
@@ -41,12 +37,8 @@ export default async (state: typeof defaultState) => {
     Object.assign(state, defaultState);
     state.traffic = [];
 
-    state.lastScore = Math.max(1, loadScore("highway") || 0);
-    const scoreRatio = Math.min(Math.max(0.5, 1000 / state.lastScore), 0.001);
-    config.MUTATION_LVL = scoreRatio;
-
-    state.model = state.loadModel();
-    state.cars = generateCars(config.CAR_NB);
+    state.sortedModels = state.loadAllModelLayers();
+    state.cars = generateCars();
     state.player = new Car(
       road.getLane(1),
       0,
@@ -54,22 +46,9 @@ export default async (state: typeof defaultState) => {
       50,
       ControlType.KEYS,
       3.5,
-      "You",
+      'You',
     );
     state.cars.push(state.player);
-
-    if (state.model) {
-      console.log(`Branching generation ${state.model.generation}`);
-      for (let i = 0; i < state.cars.length; i++) {
-        const car: Car = state.cars[i];
-        car.neural.mutate(
-          state.model,
-          (i / state.cars.length) * config.MUTATION_LVL,
-        );
-      }
-    } else {
-      console.log("Fresh model start");
-    }
 
     state.traffic.push(
       ...config.trafficConfig.map(
@@ -81,37 +60,53 @@ export default async (state: typeof defaultState) => {
             50,
             ControlType.DUMMY,
             speed,
-            name || index + "",
+            name || index + '',
           ),
       ),
     );
   }
 
   function endExperiment() {
-    const [bestAI] = state.sortedCars.filter((c) => c.useAI);
-    const lastScore = state.loadScore();
-    if (bestAI.score > lastScore) {
-      state.saveScore(bestAI.score);
-      state.saveModel(bestAI.neural);
-    }
+    const finalSort = state.sortedCars.filter((c) => c.useAI);
+    state.saveBestModels(
+      finalSort.map((c) => c.neural),
+      config.TOP_AI_NB,
+    );
     initialize();
   }
 
-  function generateCars(N = 1) {
+  function generateCars() {
     const cars: Car[] = [];
-    for (let i = 0; i <= N; i++) {
-      const modelVersion = state.model?.generation || 0;
-      cars.push(
-        new Car(
+    for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
+      let best: ModelsByLayerCount[number] | undefined;
+      if (state.sortedModels[l].length) {
+        best = state.sortedModels[l][0];
+      }
+
+      for (let i = 0; i <= config.CAR_PER_LEVELS; i++) {
+        config.NETWORK_LAYERS = l;
+        const car = new Car(
           road.getLane(1),
           100,
           30,
           50,
           ControlType.AI,
           3,
-          i === 0 ? `${modelVersion}` : `${modelVersion}-${i}`,
-        ),
-      );
+          `#${i}`,
+        );
+        if (best && car.neural) {
+          car.neural.mutationFactor = i / config.CAR_PER_LEVELS;
+          /*
+          Math.max(
+            Math.min(0.5, best.score),
+            0.0001,
+          );*/
+          car.neural.mutationIndex = i;
+          car.neural.mutate(best);
+          car.label = car.neural.id;
+        }
+        cars.push(car);
+      }
     }
     return cars;
   }
@@ -120,7 +115,7 @@ export default async (state: typeof defaultState) => {
   state.to = setTimeout(() => {
     console.warn(`timeout experiment, saving model...`);
     endExperiment();
-  }, 1000 * 60 * 30);
+  }, 1000 * 60 * 5);
   initialize();
 
   loop.play((_es, dt) => {
@@ -130,14 +125,17 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       state.cars[i].update(road.borders, state.traffic);
     }
-    state.sortedCars = state.cars.sort((a, b) => b.score - a.score);
+    state.sortedCars = state.cars.sort(
+      (a, b) => b.neural.score - a.neural.score,
+    );
     state.livingCars = state.cars.filter((a) => !a.damaged);
 
     carCanvas.height = window.innerHeight;
     networkCanvas.height = window.innerHeight;
+    networkCanvas.width = window.innerWidth - carCanvas.width;
 
     carCtx.save();
-    if (state.player.score > 0 && !state.player.damaged) {
+    if (state.player.neural.score > 0 && !state.player.damaged) {
       carCtx.translate(0, -state.player.y + carCanvas.height * 0.7);
     } else {
       carCtx.translate(0, -state.sortedCars[0].y + carCanvas.height * 0.7);
@@ -169,38 +167,54 @@ export default async (state: typeof defaultState) => {
 const FH = 18;
 const TL = FH;
 
-const fakeCar = new Car();
-fakeCar.damaged = true;
-
 function drawScores(state: typeof defaultState, ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = "black";
-  ctx.font = "bold 14px serif";
-  ctx.fillText(`Generation ${state.model?.generation}`, TL, FH);
-
-  ctx.fillText(`Mutation factor: ${config.MUTATION_LVL}`, TL, FH * 2);
-
+  ctx.fillStyle = 'black';
+  ctx.font = 'bold 14px serif';
   ctx.fillText(
     `${state.livingCars.length}/${state.sortedCars.length} cars`,
     TL,
     FH * 3,
   );
 
-  fakeCar.score = state.lastScore;
-  fakeCar.label = `${state.model?.generation - 1}-X`;
+  // const ghostScores:Car[] = []
+  // for(let l=1;l<=config.MAX_NETWORK_LAYERS;l++) {
+  //   const car = new Car(0, 0, 0, 0, ControlType.AI, 0, '', 'darkgray');
+  //   // car.damaged = true;
+  //   ghostScores.push(car)
+  // }
+  // const ghostScores = state.sortedModels.filter(Boolean).map(([n]) => {
+  //   const car = new Car(0, 0, 0, 0, ControlType.AI, 0, '', 'darkgray');
+  //   // car.damaged = true;
 
-  const displayedScoreCars = [
-    fakeCar,
+  const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
+    ...state.sortedModels.map((m) => m[0]).filter(Boolean),
     ...state.sortedCars.filter(
-      (c, i) => i < 7 || c === state.player || c.label === "original",
+      (c, i) =>
+        i < config.TOP_AI_NB || c === state.player || c.label === 'original',
     ),
-  ].sort((a, b) => b.score - a.score);
+  ].sort((a, b) => {
+    const scoreA = a instanceof Car ? a.neural.score : a.score;
+    const scoreB = b instanceof Car ? b.neural.score : b.score;
+    return scoreB - scoreA;
+  });
 
-  displayedScoreCars.forEach((car, index) => {
-    ctx.fillStyle = car.damaged ? "#def" : "orange";
-    ctx.fillText(
-      `${car.label} ${Math.round(car.score)} `,
-      TL,
-      FH * 5 + index * FH,
-    );
+  displayedScoreCars.forEach((ref, index) => {
+    if (ref instanceof Car) {
+      ctx.fillStyle = ref.damaged ? '#def' : ref.color;
+      ctx.fillText(
+        `${ref.label} ${Math.round(ref.neural.score)} `,
+        TL,
+        FH * 5 + index * FH,
+      );
+    } else {
+      ctx.fillStyle = 'white';
+      ctx.fillText(
+        `${ref.levels.length}-${ref.version}-${ref.mutationIndex} ${Math.round(
+          ref.score,
+        )}`,
+        TL,
+        FH * 5 + index * FH,
+      );
+    }
   });
 }

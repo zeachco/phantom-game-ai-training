@@ -1,11 +1,19 @@
 import { lerp, rand } from "../utilities/math";
+import { ModelsByLayerCount } from './utils';
 
 export class NeuralNetwork {
-  generation = 0;
+  version = 0;
   levels: Level[];
+  /** fatasy points given to train the model */
+  public score: number = 0;
+  /** 0-1 amount kept when merging to another model */
+  public mutationFactor: number = 0.5;
+  /** iteration number of the same initial network */
+  public mutationIndex: number = 0.5;
+
   constructor(inputNb, outputNb, intermediateLayers = Math.ceil(inputNb / 4)) {
     if (inputNb < outputNb) {
-      throw new Error("requires more inputs than outputs");
+      throw new Error('requires more inputs than outputs');
     }
 
     this.levels = [];
@@ -13,7 +21,7 @@ export class NeuralNetwork {
     for (let i = 0; i < intermediateLayers; i++) {
       const from = Math.floor(lerp(inputNb, outputNb, i / intermediateLayers));
       const to = Math.floor(
-        lerp(inputNb, outputNb, (i + 1) / intermediateLayers)
+        lerp(inputNb, outputNb, (i + 1) / intermediateLayers),
       );
       this.levels.push(new Level(from, to));
     }
@@ -27,20 +35,24 @@ export class NeuralNetwork {
     return outputs;
   }
 
-  mutate(network: NeuralNetwork, amount = 0.01) {
+  get id() {
+    return [this.levels.length, this.version, this.mutationIndex].join('-');
+  }
+
+  mutate(network: ModelsByLayerCount[number]) {
     if (this.levels.length !== network.levels.length) {
       console.warn(
-        `Neural mismatch ${this.levels.length}>${network.levels.length}`
+        `Neural mismatch ${this.levels.length}>${network.levels.length}`,
       );
       return;
     }
-    this.generation = network.generation + 1;
+    this.version = network.version + 1;
     for (let l = 0; l < this.levels.length; l++) {
       for (let b = 0; b < this.levels[l].biases.length; b++) {
         this.levels[l].biases[b] = lerp(
           network.levels[l].biases[b],
           rand(),
-          amount,
+          this.mutationFactor,
         );
       }
       for (let i = 0; i < this.levels[l].weights.length; i++) {
@@ -48,7 +60,7 @@ export class NeuralNetwork {
           this.levels[l].weights[i][j] = lerp(
             network.levels[l].weights[i][j],
             rand(),
-            amount,
+            this.mutationFactor,
           );
         }
       }

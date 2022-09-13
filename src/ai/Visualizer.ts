@@ -1,6 +1,7 @@
-import { getRGBA } from "../utilities/colors";
-import { lerp } from "../utilities/math";
-import { Level, NeuralNetwork } from "./Network";
+import { roundRect } from '../utilities/canvas';
+import { getRGBA } from '../utilities/colors';
+import { lerp } from '../utilities/math';
+import { Level, NeuralNetwork } from './Network';
 
 const RADIUS = 12;
 const MARGIN = Math.max(RADIUS, 10);
@@ -20,7 +21,7 @@ export class Visualizer {
         lerp(
           height - levelHeight,
           0,
-          network.levels.length == 1 ? 0.5 : i / (network.levels.length - 1)
+          network.levels.length == 1 ? 0.5 : i / (network.levels.length - 1),
         );
 
       ctx.setLineDash([7, 3]);
@@ -31,9 +32,32 @@ export class Visualizer {
         levelTop,
         width,
         levelHeight,
-        i == network.levels.length - 1 ? ["↑", "←", "→", "↓"] : []
+        i == network.levels.length - 1 ? ['↑', '←', '→', '↓'] : [],
       );
     }
+    // draw infos
+    const pWidth = 150;
+    const marg = 8;
+    const fh = 18;
+    const tWidth = pWidth - marg;
+    ctx.save();
+    ctx.translate(
+      ctx.canvas.width * 0.5 + MARGIN,
+      ctx.canvas.height * 0.5 - fh * 2,
+    );
+    ctx.strokeStyle = 'orange';
+    ctx.fillStyle = 'rgba(32, 32, 32, .76)';
+    roundRect(ctx, pWidth * -0.5, 0, pWidth, fh * 3 + marg * 2, marg, true);
+    ctx.fillStyle = 'orange';
+    ctx.textBaseline = 'hanging';
+    ctx.textAlign = 'center';
+    ctx.translate(0, marg);
+    ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
+    ctx.translate(0, fh);
+    ctx.fillText(`Mutation ${network.mutationFactor * 100}%`, 0, 0, tWidth);
+    ctx.translate(0, fh);
+    ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
+    ctx.restore();
   }
 
   static drawLevel(
@@ -43,7 +67,7 @@ export class Visualizer {
     top: number,
     width: number,
     height: number,
-    outputLabels: string[]
+    outputLabels: string[],
   ) {
     const right = left + width;
     const bottom = top + height;
@@ -65,7 +89,7 @@ export class Visualizer {
       const x = Visualizer.#getNodeX(inputs, i, left, right);
       ctx.beginPath();
       ctx.arc(x, bottom, RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = "black";
+      ctx.fillStyle = 'black';
       ctx.fill();
       ctx.beginPath();
       ctx.arc(x, bottom, RADIUS * 0.8, 0, Math.PI * 2);
@@ -77,7 +101,7 @@ export class Visualizer {
       const x = Visualizer.#getNodeX(outputs, i, left, right);
       ctx.beginPath();
       ctx.arc(x, top, RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = "black";
+      ctx.fillStyle = 'black';
       ctx.fill();
       ctx.beginPath();
       ctx.arc(x, top, RADIUS * 0.6, 0, Math.PI * 2);
@@ -94,11 +118,11 @@ export class Visualizer {
 
       if (outputLabels[i]) {
         ctx.beginPath();
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "black";
-        ctx.strokeStyle = "white";
-        ctx.font = RADIUS * 1.5 + "px Arial";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'black';
+        ctx.strokeStyle = 'white';
+        ctx.font = RADIUS * 1.5 + 'px Arial';
         ctx.fillText(outputLabels[i], x, top + RADIUS * 0.1);
         ctx.lineWidth = 0.5;
         ctx.strokeText(outputLabels[i], x, top + RADIUS * 0.1);
@@ -110,7 +134,7 @@ export class Visualizer {
     return lerp(
       left,
       right,
-      nodes.length == 1 ? 0.5 : index / (nodes.length - 1)
+      nodes.length == 1 ? 0.5 : index / (nodes.length - 1),
     );
   }
 }
