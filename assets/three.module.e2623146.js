@@ -1,4 +1,4 @@
-function uc(s,t=0){return t+Math.random()*(s-t)}function Cg(s,t=0){return Math.round(uc(s,t))}function wo(s,t,e){return s+(t-s)*e}function dc(s,t,e,n){const i=(n.x-e.x)*(s.y-e.y)-(n.y-e.y)*(s.x-e.x),r=(e.y-s.y)*(s.x-t.x)-(e.x-s.x)*(s.y-t.y),o=(n.y-e.y)*(t.x-s.x)-(n.x-e.x)*(t.y-s.y);if(o!=0){const a=i/o,l=r/o;if(a>=0&&a<=1&&l>=0&&l<=1)return{x:wo(s.x,t.x,a),y:wo(s.y,t.y,a),offset:a}}return null}function Lg(s,t){for(let e=0;e<s.length;e++)for(let n=0;n<t.length;n++)if(dc(s[e],s[(e+1)%s.length],t[n],t[(n+1)%t.length]))return!0;return!1}/**
+function uc(s=-1,t=1){return s+Math.random()*(t-s)}function Cg(s=-1,t=1){return Math.round(uc(t,s))}function wo(s,t,e){return s+(t-s)*e}function dc(s,t,e,n){const i=(n.x-e.x)*(s.y-e.y)-(n.y-e.y)*(s.x-e.x),r=(e.y-s.y)*(s.x-t.x)-(e.x-s.x)*(s.y-t.y),o=(n.y-e.y)*(t.x-s.x)-(n.x-e.x)*(t.y-s.y);if(o!=0){const a=i/o,l=r/o;if(a>=0&&a<=1&&l>=0&&l<=1)return{x:wo(s.x,t.x,a),y:wo(s.y,t.y,a),offset:a}}return null}function Lg(s,t){for(let e=0;e<s.length;e++)for(let n=0;n<t.length;n++)if(dc(s[e],s[(e+1)%s.length],t[n],t[(n+1)%t.length]))return!0;return!1}/**
  * @license
  * Copyright 2010-2022 Three.js Authors
  * SPDX-License-Identifier: MIT

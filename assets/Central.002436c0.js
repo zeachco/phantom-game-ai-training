@@ -1,1 +1,0 @@
-import{c as a,d as e,a as s}from"./three.module.9013c9a7.js";const o=new a(1,8),r=new e({color:"rgba(255, 255, 255, .3)",opacity:.8});class i{constructor(){this.mesh=new s(o,r),this.mesh.rotation.set(Math.PI*1.5,Math.PI*0,Math.PI*0)}update(t){this.mesh.rotation.z+=Math.PI*.5*t}}export{i as Central};
