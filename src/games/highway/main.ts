@@ -1,5 +1,5 @@
 import { NeuralNetwork } from "../../ai/Network";
-import { fileUtilities } from "../../ai/utils";
+import { fileUtilities, loadScore } from "../../ai/utils";
 import { Visualizer } from "../../ai/Visualizer";
 import { createCanvas } from "../../utilities/dom";
 import { GameLoop } from "../../utilities/three/GameLoop";
@@ -15,6 +15,7 @@ const defaultState = {
   traffic: [] as Car[],
   player: new Car(),
   to: 0,
+  lastScore: 0,
   model: undefined as NeuralNetwork,
   ...fileUtilities("highway"),
 };
@@ -40,6 +41,10 @@ export default async (state: typeof defaultState) => {
     Object.assign(state, defaultState);
     state.traffic = [];
 
+    state.lastScore = Math.max(1, loadScore("highway") || 0);
+    const scoreRatio = Math.min(Math.max(0.5, 1000 / state.lastScore), 0.001);
+    config.MUTATION_LVL = scoreRatio;
+
     state.model = state.loadModel();
     state.cars = generateCars(config.CAR_NB);
     state.player = new Car(
@@ -51,10 +56,10 @@ export default async (state: typeof defaultState) => {
       3.5,
       "You",
     );
-    // state.cars.push(state.player);
+    state.cars.push(state.player);
 
     if (state.model) {
-      console.log("Branch of generation " + state.model.generation);
+      console.log(`Branching generation ${state.model.generation}`);
       for (let i = 0; i < state.cars.length; i++) {
         const car: Car = state.cars[i];
         car.neural.mutate(
@@ -152,35 +157,50 @@ export default async (state: typeof defaultState) => {
 
     networkCtx.lineDashOffset = -dt / 50;
     Visualizer.drawNetwork(networkCtx, state.sortedCars[0].neural!);
-    const FH = 18;
-    const TL = FH * 1;
-    const displayedScoreCars = state.sortedCars.filter(
-      (c, i) => i < 7 || c === state.player || c.label === "original",
-    );
 
-    carCtx.fillStyle = "black";
-    carCtx.font = "bold 14px serif";
-    carCtx.fillText(`Generation ${state.model?.generation}`, TL, FH);
-
-    carCtx.fillText(`Mutation factor: ${config.MUTATION_LVL}`, TL, FH * 2);
-
-    carCtx.fillText(
-      `${state.livingCars.length}/${state.sortedCars.length} cars`,
-      TL,
-      FH * 3,
-    );
-
-    displayedScoreCars.forEach((car, index) => {
-      carCtx.fillStyle = car.damaged ? "#def" : "orange";
-      carCtx.fillText(
-        `${car.label} ${Math.round(car.score)} `,
-        TL,
-        FH * 4 + index * FH,
-      );
-    });
+    drawScores(state, carCtx);
 
     const [first] = state.livingCars;
 
     if (!first) endExperiment();
   });
 };
+
+const FH = 18;
+const TL = FH;
+
+const fakeCar = new Car();
+fakeCar.damaged = true;
+
+function drawScores(state: typeof defaultState, ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = "black";
+  ctx.font = "bold 14px serif";
+  ctx.fillText(`Generation ${state.model?.generation}`, TL, FH);
+
+  ctx.fillText(`Mutation factor: ${config.MUTATION_LVL}`, TL, FH * 2);
+
+  ctx.fillText(
+    `${state.livingCars.length}/${state.sortedCars.length} cars`,
+    TL,
+    FH * 3,
+  );
+
+  fakeCar.score = state.lastScore;
+  fakeCar.label = `${state.model?.generation - 1}-X`;
+
+  const displayedScoreCars = [
+    fakeCar,
+    ...state.sortedCars.filter(
+      (c, i) => i < 7 || c === state.player || c.label === "original",
+    ),
+  ].sort((a, b) => b.score - a.score);
+
+  displayedScoreCars.forEach((car, index) => {
+    ctx.fillStyle = car.damaged ? "#def" : "orange";
+    ctx.fillText(
+      `${car.label} ${Math.round(car.score)} `,
+      TL,
+      FH * 5 + index * FH,
+    );
+  });
+}

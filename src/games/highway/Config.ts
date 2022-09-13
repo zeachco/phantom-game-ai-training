@@ -1,8 +1,6 @@
-import { loadScore } from "../../ai/utils";
-
 class Config {
   public CAR_NB = 250;
-  public MUTATION_LVL = Math.min(0.5, 1000 / loadScore("highway") || 1000);
+  public MUTATION_LVL = 0.3;
   public NETWORK_LAYERS = 3;
   public SENSORS = 11;
   public SENSOR_ANGLE = (Math.PI / 2) * 3.7;
