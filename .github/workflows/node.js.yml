@@ -15,14 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Setup
     - uses: actions/checkout@v3
     - uses: actions/setup-node@v3
       with:
         node-version: 18
-    - name: Dependencies
     - run: npm install
-    - name: Building
     - run: npm run ci
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
