@@ -82,6 +82,16 @@ export default async (state: typeof defaultState) => {
     );
   }
 
+  function endExperiment() {
+    const [bestAI] = state.sortedCars.filter((c) => c.useAI);
+    const lastScore = state.loadScore();
+    if (bestAI.score > lastScore) {
+      state.saveScore(bestAI.score);
+      state.saveModel(bestAI.neural);
+    }
+    initialize();
+  }
+
   function generateCars(N = 1) {
     const cars: Car[] = [];
     for (let i = 0; i <= N; i++) {
@@ -104,17 +114,11 @@ export default async (state: typeof defaultState) => {
   // timeout the experiment after 30 minutes
   state.to = setTimeout(() => {
     console.warn(`timeout experiment, saving model...`);
-    const [bestAI] = state.sortedCars.filter((c) => c.useAI);
-    const lastScore = state.loadScore();
-    if (lastScore < bestAI.score) {
-      state.saveModel(bestAI.neural);
-      state.saveScore(bestAI.score);
-    }
-    initialize();
+    endExperiment();
   }, 1000 * 60 * 30);
   initialize();
 
-  loop.play((es, dt) => {
+  loop.play((_es, dt) => {
     for (let i = 0; i < state.traffic.length; i++) {
       state.traffic[i].update(road.borders, []);
     }
@@ -177,10 +181,6 @@ export default async (state: typeof defaultState) => {
 
     const [first] = state.livingCars;
 
-    if (!first) {
-      const [bestAI] = state.sortedCars.filter((c) => c.useAI);
-      state.saveModel(bestAI.neural);
-      initialize();
-    }
+    if (!first) endExperiment();
   });
 };

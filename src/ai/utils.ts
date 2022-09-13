@@ -36,7 +36,9 @@ export function saveModel(network: NeuralNetwork, game: string) {
     console.error("model is identical");
   } else {
     const data = JSON.stringify(network);
-    console.log(`saving ${namespace} (generation #${network.generation})`);
+    console.log(
+      `saving ${`${game}_model`} (generation #${network.generation})`,
+    );
     localStorage.setItem(namespace, data);
   }
 }
