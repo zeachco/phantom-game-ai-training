@@ -1,4 +1,4 @@
-import { discardModel, loadModel, saveModel } from "../../ai/utils";
+import { fileUtilities } from "../../ai/utils";
 import { Visualizer } from "../../ai/Visualizer";
 import { createCanvas } from "../../utilities/dom";
 import { GameLoop } from "../../utilities/three/GameLoop";
@@ -10,6 +10,7 @@ const defaultState = {
   cars: [] as Car[],
   traffic: [] as Car[],
   bestCar: undefined as Car,
+  ...fileUtilities("highway"),
 };
 
 export default async (state: typeof defaultState) => {
@@ -37,8 +38,7 @@ export default async (state: typeof defaultState) => {
     state.traffic = [];
 
     state.bestCar = state.cars[0];
-    const model = loadModel("highway");
-    (window as any).bestBrain = loadModel("highway");
+    const model = state.loadModel();
 
     if (model) {
       console.log("Branch of generation " + model.generation);
@@ -80,9 +80,6 @@ export default async (state: typeof defaultState) => {
     // traffic.push(
     //   new Car(road.getLaneCenter(lanes), 250, 30, 50, ControlType.KEYS, 3.5)
     // );
-
-    //   state.save = () => saveModel(state.bestCar.brain, "highway");
-    //   state.discard = discardModel;
   }
 
   function generateCars(N = 1) {
@@ -108,7 +105,7 @@ export default async (state: typeof defaultState) => {
 
     if (!sortedCars.filter((a) => !a.damaged).length) {
       if (bestCar.y < state.traffic[6].y) {
-        (window as any).save();
+        state.saveModel(bestCar);
       }
       initialize();
     }

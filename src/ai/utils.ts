@@ -1,9 +1,20 @@
 import type { NeuralNetwork } from "./Network";
 
+export function fileUtilities(gameName = "") {
+  return {
+    loadModel: () => loadModel(gameName),
+    saveModel: (model) => saveModel(model, gameName),
+    discardModel: () => discardModel(gameName),
+  };
+}
+
 export function loadModel(game: string): NeuralNetwork | null {
   try {
-    const model = localStorage.getItem(`${game}_model`);
-    return JSON.parse(model);
+    const data = localStorage.getItem(`${game}_model`);
+    const model = JSON.parse(data) as NeuralNetwork;
+    if (!model) return;
+    console.log(`loaded generation #${model.generation}`);
+    return model;
   } catch (err) {
     console.log(err);
     return null;
