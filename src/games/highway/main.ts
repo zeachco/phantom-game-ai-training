@@ -20,7 +20,7 @@ export default async (state: typeof defaultState) => {
   const networkCtx = networkCanvas.getContext("2d");
 
   carCanvas.width = 200;
-  networkCanvas.width = 600;
+  networkCanvas.width = 400;
 
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
