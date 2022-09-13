@@ -1,11 +1,9 @@
-import { lerp } from "../utilities/math";
+import { lerp, rand } from "../utilities/math";
 
 export class NeuralNetwork {
   generation = 0;
   levels: Level[];
   constructor(inputNb, outputNb, intermediateLayers = Math.ceil(inputNb / 4)) {
-    const levelStructure = [];
-
     if (inputNb < outputNb) {
       throw new Error("requires more inputs than outputs");
     }
@@ -29,13 +27,19 @@ export class NeuralNetwork {
     return outputs;
   }
 
-  fork(network: NeuralNetwork, amount = 0.9) {
+  mutate(network: NeuralNetwork, amount = 0.01) {
+    if (this.levels.length !== network.levels.length) {
+      console.warn(
+        `Neural mismatch ${this.levels.length}>${network.levels.length}`
+      );
+      return;
+    }
     this.generation = network.generation + 1;
     for (let l = 0; l < network.levels.length; l++) {
       for (let b = 0; b < this.levels[l].biases.length; b++) {
-        this.levels[l].biases = lerp(
+        this.levels[l].biases[b] = lerp(
           network.levels[l].biases[b],
-          Math.random() * 2 - 1,
+          rand(),
           amount
         );
       }
@@ -43,7 +47,7 @@ export class NeuralNetwork {
         for (let j = 0; j < this.levels[l].weights[i].length; j++) {
           this.levels[l].weights[i][j] = lerp(
             network.levels[l].weights[i][j],
-            Math.random() * 2 - 1,
+            rand(),
             amount
           );
         }
@@ -73,12 +77,12 @@ export class Level {
   static #randomize(level: Level) {
     for (let i = 0; i < level.inputs.length; i++) {
       for (let j = 0; j < level.outputs.length; j++) {
-        level.weights[i][j] = Math.random() * 2 - 1;
+        level.weights[i][j] = rand();
       }
     }
 
     for (let i = 0; i < level.biases.length; i++) {
-      level.biases[i] = Math.random() * 2 - 1;
+      level.biases[i] = rand();
     }
   }
 

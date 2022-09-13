@@ -30,13 +30,15 @@ export function isSameModel(modelA: NeuralNetwork, modelB: NeuralNetwork) {
   );
 }
 
-export function saveModel(brain: NeuralNetwork, game: string) {
-  const model = loadModel(`${game}_model`);
-  if (isSameModel(brain, model)) {
+export function saveModel(network: NeuralNetwork, game: string) {
+  const namespace = `${game}_model`;
+  const model = loadModel(namespace);
+  if (isSameModel(network, model)) {
     console.error("model is identical");
   } else {
-    const data = JSON.stringify(brain);
-    localStorage.setItem(`${game}_model`, data);
+    const data = JSON.stringify(network);
+    console.log(`saving ${namespace} (generation #${network.generation})`);
+    localStorage.setItem(namespace, data);
   }
 }
 

@@ -3,7 +3,7 @@ import { NeuralNetwork } from "../../ai/Network";
 import { Sensor } from "./Sensor";
 import { ControlType } from "./types";
 import carImg from "./assets/car.png";
-import { polysIntersect, Vector } from "../../utilities/math";
+import { polysIntersect, randInt, Vector } from "../../utilities/math";
 import { getRandomColor } from "../../utilities/colors";
 
 export class Car {
@@ -12,9 +12,9 @@ export class Car {
   friction: number;
   angle: number;
   damaged: boolean;
-  useBrain: boolean;
+  useAI: boolean;
   sensor?: Sensor;
-  brain?: NeuralNetwork;
+  neural?: NeuralNetwork;
   controls: Controls;
   img: HTMLImageElement;
   mask: HTMLCanvasElement;
@@ -42,15 +42,19 @@ export class Car {
     this.angle = 0;
     this.damaged = false;
 
-    this.useBrain = controlType == ControlType.AI;
+    this.useAI = controlType == ControlType.AI;
 
-    const levels: number[] = [];
+    this.controls = new Controls(controlType);
 
     if (controlType != ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      this.brain = new NeuralNetwork(this.sensor.rayCount, 4);
+      this.neural = new NeuralNetwork(
+        this.sensor.rayCount,
+        Object.keys(this.controls).length,
+        2
+        // randInt(1, 6)
+      );
     }
-    this.controls = new Controls(controlType);
 
     this.img = new Image();
     this.img.src = carImg;
@@ -72,19 +76,17 @@ export class Car {
 
   update(roadBorders: Vector[][], traffic: Car[]) {
     if (this.damaged) return;
-    // if (!this.damaged) {
     this.#move();
     this.polygon = this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
-    // }
     if (this.sensor) {
       this.sensor.update(roadBorders, traffic);
       const offsets = this.sensor.readings.map((s) =>
         s == null ? 0 : 1 - s.offset
       );
-      const outputs = NeuralNetwork.feedForward(offsets, this.brain!);
+      const outputs = NeuralNetwork.feedForward(offsets, this.neural!);
 
-      if (this.useBrain) {
+      if (this.useAI) {
         this.controls.forward = outputs[0];
         this.controls.left = outputs[1];
         this.controls.right = outputs[2];
@@ -131,38 +133,18 @@ export class Car {
   }
 
   #move() {
-    if (this.controls.forward) {
-      this.speed += this.acceleration;
-    }
-    if (this.controls.reverse) {
-      this.speed -= this.acceleration;
-    }
-
-    if (this.speed > this.maxSpeed) {
-      this.speed = this.maxSpeed;
-    }
-    if (this.speed < -this.maxSpeed / 2) {
-      this.speed = -this.maxSpeed / 2;
-    }
-
-    if (this.speed > 0) {
-      this.speed -= this.friction;
-    }
-    if (this.speed < 0) {
-      this.speed += this.friction;
-    }
-    if (Math.abs(this.speed) < this.friction) {
-      this.speed = 0;
-    }
+    if (this.controls.forward) this.speed += this.acceleration;
+    if (this.controls.reverse) this.speed -= this.acceleration;
+    if (this.speed > this.maxSpeed) this.speed = this.maxSpeed;
+    if (this.speed < -this.maxSpeed / 2) this.speed = -this.maxSpeed / 2;
+    if (this.speed > 0) this.speed -= this.friction;
+    if (this.speed < 0) this.speed += this.friction;
+    if (Math.abs(this.speed) < this.friction) this.speed = 0;
 
     if (this.speed != 0) {
       const flip = this.speed > 0 ? 1 : -1;
-      if (this.controls.left) {
-        this.angle += 0.03 * flip;
-      }
-      if (this.controls.right) {
-        this.angle -= 0.03 * flip;
-      }
+      if (this.controls.left) this.angle += 0.03 * flip;
+      if (this.controls.right) this.angle -= 0.03 * flip;
     }
 
     this.distance += this.speed;

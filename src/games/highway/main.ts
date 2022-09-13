@@ -28,7 +28,7 @@ export default async (state: typeof defaultState) => {
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
 
-  const N = 100;
+  const N = 200;
 
   const loop = new GameLoop();
 
@@ -44,9 +44,7 @@ export default async (state: typeof defaultState) => {
       console.log("Branch of generation " + model.generation);
       for (let i = 0; i < state.cars.length; i++) {
         const car: Car = state.cars[i];
-        if (i != 0 && car.brain) {
-          car.brain.fork(model);
-        }
+        car.neural.mutate(model, (i / state.cars.length) * 0.5);
       }
     } else {
       console.log("Fresh model start");
@@ -65,6 +63,9 @@ export default async (state: typeof defaultState) => {
       new Car(road.getLaneCenter(1), -500, 30, 50, ControlType.DUMMY, 2),
       new Car(road.getLaneCenter(1), -900, 30, 50, ControlType.DUMMY, 2),
       new Car(road.getLaneCenter(2), -700, 30, 50, ControlType.DUMMY, 2),
+      new Car(road.getLaneCenter(2), -900, 30, 50, ControlType.DUMMY, 2.1),
+      new Car(road.getLaneCenter(1), -900, 30, 50, ControlType.DUMMY, 2.3),
+      new Car(road.getLaneCenter(0), -900, 30, 50, ControlType.DUMMY, 2.2),
       // fail wall
       new Car(road.getLaneCenter(0), 400, 30, 50, ControlType.DUMMY, 2.6),
       new Car(road.getLaneCenter(1), 375, 30, 50, ControlType.DUMMY, 2.6),
@@ -93,6 +94,12 @@ export default async (state: typeof defaultState) => {
   }
 
   initialize();
+
+  const sortWeights = new Map([
+    ["y", 2],
+    ["distance", -1],
+  ]);
+
   loop.play((es, dt) => {
     for (let i = 0; i < state.traffic.length; i++) {
       state.traffic[i].update(road.borders, []);
@@ -100,12 +107,18 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       state.cars[i].update(road.borders, state.traffic);
     }
-    const sortedCars = state.cars.sort((a, b) => a.y - b.y);
-    const bestCar = sortedCars[0];
+    const sortedCars = state.cars.sort((a, b) => {
+      let score = 0;
+      sortWeights.forEach((val, key) => {
+        score += a[key] * val - b[key] * val;
+      });
+      return score;
+    });
+    state.bestCar = sortedCars[0];
 
     if (!sortedCars.filter((a) => !a.damaged).length) {
-      if (bestCar.y < state.traffic[6].y) {
-        state.saveModel(bestCar);
+      if (state.bestCar.y < state.traffic[6].y) {
+        state.saveModel(state.bestCar.neural);
       }
       initialize();
     }
@@ -114,14 +127,14 @@ export default async (state: typeof defaultState) => {
     networkCanvas.height = window.innerHeight;
 
     carCtx.save();
-    carCtx.translate(0, -bestCar.y + carCanvas.height * 0.7);
+    carCtx.translate(0, -state.bestCar.y + carCanvas.height * 0.7);
 
     road.draw(carCtx);
     for (let i = 0; i < state.traffic.length; i++) {
       state.traffic[i].draw(carCtx);
     }
     for (let i = 0; i < state.cars.length; i++) {
-      const isBest = state.cars[i] === bestCar;
+      const isBest = state.cars[i] === state.bestCar;
       carCtx.globalAlpha = isBest ? 1 : 0.2;
       state.cars[i].draw(carCtx, isBest, i);
     }
@@ -129,6 +142,6 @@ export default async (state: typeof defaultState) => {
     carCtx.restore();
 
     networkCtx.lineDashOffset = -dt / 50;
-    Visualizer.drawNetwork(networkCtx, bestCar.brain!);
+    Visualizer.drawNetwork(networkCtx, state.bestCar.neural!);
   });
 };

@@ -1,7 +1,7 @@
-import { random } from "../../../utilities/math"
 import { Segment } from "./Segment";
 import { Path } from "./Path"
 import { BoxGeometry, Mesh, MeshBasicMaterial } from "three";
+import { rand } from "../../../utilities/math";
 
 const geometry = new BoxGeometry();
 
@@ -9,7 +9,7 @@ const MINSPD = 0.05
 const MAXSPD = 0.1
 
 export class Mob {
-  private speed = random(MINSPD, MAXSPD, true);
+  private speed = rand(MINSPD, MAXSPD);
   public target?: Segment;
   public targetIndex = 0;
   public mesh: Mesh;

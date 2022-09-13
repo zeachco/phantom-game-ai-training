@@ -3,9 +3,12 @@ export interface Vector {
   y: number;
 }
 
-export function random(max, min = 0, float = false) {
-  const value = min + Math.random() * (max - min);
-  return float ? value : Math.round(value);
+export function rand(min = -1, max = 1) {
+  return min + Math.random() * (max - min);
+}
+
+export function randInt(min = -1, max = 1) {
+  return Math.round(rand(max, min));
 }
 
 export function lerp(A: number, B: number, t: number) {

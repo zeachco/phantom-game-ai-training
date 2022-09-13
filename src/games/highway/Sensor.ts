@@ -10,7 +10,7 @@ export class Sensor {
   readings: { x: number; y: number; offset: number }[];
   constructor(car: Car) {
     this.car = car;
-    this.rayCount = 15;
+    this.rayCount = 9;
     this.rayLength = 250;
     this.raySpread = (Math.PI / 2) * 3.6;
 
@@ -85,7 +85,7 @@ export class Sensor {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    for (let i = 0; i < this.rayCount; i++) {
+    for (let i = 0; i < this.rays.length; i++) {
       let end: any = this.rays[i][1];
       if (this.readings[i]) {
         end = this.readings[i];
