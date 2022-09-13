@@ -20,8 +20,9 @@ ul {
     top: 0;
     left: 0;
     right: 0;
-    transform: translateY(-1em);
-    transition: transform 0.1s;
+    transform: translateY(-.5em);
+        transition: all 0.1s;
+        opacity: .5;
     padding-bottom: 2em;
 }
 
@@ -43,6 +44,7 @@ ul li a {
 }
 
 ul li a:hover {
+    opacity: 1;
     transform: translateY(0);
     color: rgba(255, 52, 94, 1);
     background: rgba(25, 52, 94, 0.8);
@@ -50,5 +52,6 @@ ul li a:hover {
 }
 
 ul:hover {
+    opacity: 1;
     transform: translateY(0);
 }

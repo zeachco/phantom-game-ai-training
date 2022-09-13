@@ -10,14 +10,13 @@ const apps = new Map<string, Function>([
 ]);
 
 const ul = document.createElement("ul");
+document.body.appendChild(ul);
 
-apps.forEach((game, key) => {
+apps.forEach((_game, key) => {
   const li = document.createElement("li");
   li.innerHTML = `<a href="?game=${key}">${key}</a>`;
   ul.appendChild(li);
 });
-
-document.body.appendChild(ul);
 
 const game = urlParams.get("game") || "";
 const app = apps.get(game);
