@@ -1,12 +1,11 @@
-import { Controls } from "./Controls";
-import { NeuralNetwork } from "../../ai/Network";
-import { Sensor } from "./Sensor";
-import { ControlType } from "./types";
-import carImg from "./assets/car.png";
-import { polysIntersect, randInt, Vector } from "../../utilities/math";
-import { getRandomColor } from "../../utilities/colors";
-import { Road } from "./Road";
-import { config } from "./Config";
+import { Controls } from './Controls';
+import { NeuralNetwork } from '../../../ai/Network';
+import { Sensor } from './Sensor';
+import { ControlType } from '../types';
+import carImg from '../assets/car.png';
+import { polysIntersect, randInt, Vector } from '../../../utilities/math';
+import { getRandomColor } from '../../../utilities/colors';
+import { config } from '../Config';
 
 let carCount = 0;
 

@@ -54,7 +54,12 @@ export class Visualizer {
     ctx.translate(0, marg);
     ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
     ctx.translate(0, fh);
-    ctx.fillText(`Mutation ${network.mutationFactor * 100}%`, 0, 0, tWidth);
+    ctx.fillText(
+      `Mutation ${Math.round(network.mutationFactor * 100)}%`,
+      0,
+      0,
+      tWidth,
+    );
     ctx.translate(0, fh);
     ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
     ctx.restore();

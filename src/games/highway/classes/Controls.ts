@@ -1,4 +1,4 @@
-import { ControlType } from "./types";
+import { ControlType } from '../types';
 
 export class Controls {
   public forward: boolean;
@@ -24,32 +24,32 @@ export class Controls {
   #addKeyboardListeners() {
     document.onkeydown = (event) => {
       switch (event.key) {
-        case "ArrowLeft":
+        case 'ArrowLeft':
           this.left = true;
           break;
-        case "ArrowRight":
+        case 'ArrowRight':
           this.right = true;
           break;
-        case "ArrowUp":
+        case 'ArrowUp':
           this.forward = true;
           break;
-        case "ArrowDown":
+        case 'ArrowDown':
           this.reverse = true;
           break;
       }
     };
     document.onkeyup = (event) => {
       switch (event.key) {
-        case "ArrowLeft":
+        case 'ArrowLeft':
           this.left = false;
           break;
-        case "ArrowRight":
+        case 'ArrowRight':
           this.right = false;
           break;
-        case "ArrowUp":
+        case 'ArrowUp':
           this.forward = false;
           break;
-        case "ArrowDown":
+        case 'ArrowDown':
           this.reverse = false;
           break;
       }

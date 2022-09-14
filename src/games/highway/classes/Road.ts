@@ -1,4 +1,4 @@
-import { lerp, Vector } from "../../utilities/math";
+import { lerp, Vector } from '../../../utilities/math';
 
 export class Road {
   public left: number;
@@ -39,7 +39,7 @@ export class Road {
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.lineWidth = 5;
-    ctx.strokeStyle = "white";
+    ctx.strokeStyle = 'white';
 
     for (let i = 1; i <= this.laneCount - 1; i++) {
       const x = lerp(this.left, this.right, i / this.laneCount);

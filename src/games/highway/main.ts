@@ -1,11 +1,10 @@
-import { NeuralNetwork } from "../../ai/Network";
 import { fileUtilities, ModelsByLayerCount } from '../../ai/utils';
 import { Visualizer } from '../../ai/Visualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GameLoop } from '../../utilities/three/GameLoop';
-import { Car } from './Car';
+import { Car } from './classes/Car';
 import { config } from './Config';
-import { Road } from './Road';
+import { Road } from './classes/Road';
 import { ControlType } from './types';
 
 const defaultState = {
@@ -95,7 +94,8 @@ export default async (state: typeof defaultState) => {
           `#${i}`,
         );
         if (best && car.neural) {
-          car.neural.mutationFactor = i / config.CAR_PER_LEVELS;
+          car.neural.mutationFactor =
+            (i / config.CAR_PER_LEVELS) * config.MUTATION_LVL;
           /*
           Math.max(
             Math.min(0.5, best.score),
