@@ -37,7 +37,7 @@ export function fileUtilities(game = '') {
       // console.error('models are identical');
     } else {
       const data = JSON.stringify(models);
-      console.log(
+      console.debug(
         `saving ${models.length} gen-${models[0]?.version} ${game} models (${layers} layers).`,
       );
       localStorage.setItem(namespace, data);
@@ -52,11 +52,11 @@ export function fileUtilities(game = '') {
       const data = localStorage.getItem(namespace);
       if (!data) throw new Error(`not found`);
       models = JSON.parse(data);
-      console.log(
+      console.debug(
         `Retreived ${models.length} gen-${models[0].version} for layer ${layers}`,
       );
     } catch {
-      console.log(`Nothing for layer ${layers}`);
+      console.debug(`Nothing for layer ${layers}`);
     }
     return models;
   }
@@ -66,9 +66,6 @@ export function fileUtilities(game = '') {
    * stored by compatibility (neural networks are easier to mutate from similar neural network complexity AKA same amount of levels)
    */
   function saveBestModels(models: NeuralNetwork[], amountPerComplexity = 1) {
-    console.groupCollapsed(
-      `Saving ${config.MAX_NETWORK_LAYERS} models configs`,
-    );
     const save: NeuralNetwork[][] = new Array(config.MAX_NETWORK_LAYERS);
     models.forEach((model) => {
       const space = model.levels.length;
@@ -79,23 +76,19 @@ export function fileUtilities(game = '') {
 
     let count = 0;
     save.forEach((models, layersNb) => (count += saveModels(layersNb, models)));
-    console.log(`Written ${count}/${config.MAX_NETWORK_LAYERS} models`);
-    console.groupEnd();
+    console.debug(`Written ${count}/${config.MAX_NETWORK_LAYERS} models`);
   }
 
   function loadAllModelLayers(maxLayer = config.MAX_NETWORK_LAYERS) {
-    console.groupCollapsed(`Loading ${maxLayer} models configs...`);
     const load: ModelsByLayerCount[] = new Array(config.MAX_NETWORK_LAYERS);
     try {
       for (let i = 1; i <= maxLayer; i++) {
         const model = loadModels(i);
-        if (!model) continue;
-        load[i] = model.map((m) => ({ ...m, score: 0 }));
+        if (model) load[i] = model;
       }
     } catch (err) {
       console.error(err);
     }
-    console.groupEnd();
     return load;
   }
 }

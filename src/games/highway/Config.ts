@@ -1,11 +1,15 @@
 class Config {
   public MAX_NETWORK_LAYERS = 9;
-  public CAR_PER_LEVELS = 250 / this.MAX_NETWORK_LAYERS;
+  public CAR_PER_LEVELS = 200 / this.MAX_NETWORK_LAYERS;
   public MUTATION_LVL = 0.3;
   public NETWORK_LAYERS = 3;
   public SENSORS = 11;
   public SENSOR_ANGLE = (Math.PI / 2) * 3.7;
   public TOP_AI_NB = this.MAX_NETWORK_LAYERS * 2;
+  public DEATH_SPEED = 0.005;
+  public CAR_ACCELERATION = 0.03;
+  public CAR_FRICTION = 0.005;
+  public CAR_MAX_SPEED = 5;
   // lane, y, speed, name
   public trafficConfig = [
     // trial of evasion
@@ -22,10 +26,6 @@ class Config {
     [1, -900, 2.3],
     [2, -900, 2.1],
     [2, -950, 2.4, 'S'],
-    // fail wall
-    [0, 400, 2.4],
-    [1, 400, 2.5],
-    [2, 400, 2.4],
   ] as const;
 }
 

@@ -29,7 +29,7 @@ export class Car {
     public width = 50,
     public height = 50,
     controlType = ControlType.DUMMY,
-    public maxSpeed = 2.8,
+    public maxSpeed = config.CAR_MAX_SPEED,
     public label = `${carCount++}`,
     public color = getRandomColor(),
   ) {
@@ -39,9 +39,9 @@ export class Car {
     this.height = height;
 
     this.speed = 0;
-    this.acceleration = 0.3;
+    this.acceleration = config.CAR_ACCELERATION;
     this.maxSpeed = maxSpeed;
-    this.friction = 0.05;
+    this.friction = config.CAR_FRICTION;
     this.angle = 0;
     this.damaged = false;
 
@@ -49,12 +49,12 @@ export class Car {
 
     this.controls = new Controls(controlType);
 
-    if (controlType != ControlType.DUMMY) {
+    if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
       this.neural = new NeuralNetwork(
         this.sensor.rayCount,
-        Object.keys(this.controls).length,
-        config.NETWORK_LAYERS,
+        Object.keys(this.controls).length + 1,
+        controlType == ControlType.KEYS ? 1 : config.NETWORK_LAYERS,
       );
     }
 
@@ -88,7 +88,8 @@ export class Car {
       const offsets = this.sensor.readings.map((s) =>
         s == null ? 0 : 1 - s.offset,
       );
-      const outputs = NeuralNetwork.feedForward(offsets, this.neural!);
+      offsets.push(this.speed / this.maxSpeed);
+      const outputs = NeuralNetwork.feedForward(offsets, this.neural);
 
       if (this.useAI) {
         this.controls.forward = outputs[0];

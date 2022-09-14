@@ -1,4 +1,5 @@
-import { lerp, rand } from "../utilities/math";
+import { config } from '../games/highway/Config';
+import { lerp, rand } from '../utilities/math';
 import { ModelsByLayerCount } from './utils';
 
 export class NeuralNetwork {
@@ -40,6 +41,9 @@ export class NeuralNetwork {
   }
 
   mutate(network: ModelsByLayerCount[number]) {
+    this.mutationFactor =
+      (this.mutationIndex / Math.max(1, this.score)) * config.MUTATION_LVL;
+
     if (this.levels.length !== network.levels.length) {
       console.warn(
         `Neural mismatch ${this.levels.length}>${network.levels.length}`,
