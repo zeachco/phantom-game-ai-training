@@ -7,6 +7,36 @@ const RADIUS = 12;
 const MARGIN = Math.max(RADIUS, 10);
 
 export class Visualizer {
+  static drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+    const pWidth = 150;
+    const marg = 8;
+    const fh = 18;
+    const tWidth = pWidth - marg;
+    ctx.save();
+    ctx.translate(
+      ctx.canvas.width * 0.5 + MARGIN,
+      ctx.canvas.height * 0.5 - fh * 2,
+    );
+    ctx.font = fh + 'px Arial';
+    ctx.strokeStyle = 'orange';
+    ctx.fillStyle = 'rgba(32, 32, 32, .76)';
+    roundRect(ctx, pWidth * -0.5, 0, pWidth, fh * 3 + marg * 2, marg, true);
+    ctx.fillStyle = 'orange';
+    ctx.textBaseline = 'hanging';
+    ctx.textAlign = 'center';
+    ctx.translate(0, marg);
+    ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
+    ctx.translate(0, fh);
+    ctx.fillText(
+      `Mutation ${Math.round(network.mutationFactor * 100)}%`,
+      0,
+      0,
+      tWidth,
+    );
+    ctx.translate(0, fh);
+    ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
+    ctx.restore();
+  }
   static drawNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     const left = MARGIN;
     const top = MARGIN;
@@ -35,34 +65,6 @@ export class Visualizer {
         i == network.levels.length - 1 ? ['↑', '←', '→', '↓'] : [],
       );
     }
-    // draw infos
-    const pWidth = 150;
-    const marg = 8;
-    const fh = 18;
-    const tWidth = pWidth - marg;
-    ctx.save();
-    ctx.translate(
-      ctx.canvas.width * 0.5 + MARGIN,
-      ctx.canvas.height * 0.5 - fh * 2,
-    );
-    ctx.strokeStyle = 'orange';
-    ctx.fillStyle = 'rgba(32, 32, 32, .76)';
-    roundRect(ctx, pWidth * -0.5, 0, pWidth, fh * 3 + marg * 2, marg, true);
-    ctx.fillStyle = 'orange';
-    ctx.textBaseline = 'hanging';
-    ctx.textAlign = 'center';
-    ctx.translate(0, marg);
-    ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
-    ctx.translate(0, fh);
-    ctx.fillText(
-      `Mutation ${Math.round(network.mutationFactor * 100)}%`,
-      0,
-      0,
-      tWidth,
-    );
-    ctx.translate(0, fh);
-    ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
-    ctx.restore();
   }
 
   static drawLevel(

@@ -1,4 +1,3 @@
-import { config } from '../games/highway/Config';
 import { isSameObject } from '../utilities/object';
 import type { NeuralNetwork } from './Network';
 
@@ -14,6 +13,7 @@ export function fileUtilities(game = '') {
   return {
     saveBestModels,
     loadAllModelLayers,
+    discardModels,
   };
   function saveModels(
     layers: number,
@@ -66,7 +66,7 @@ export function fileUtilities(game = '') {
    * stored by compatibility (neural networks are easier to mutate from similar neural network complexity AKA same amount of levels)
    */
   function saveBestModels(models: NeuralNetwork[], amountPerComplexity = 1) {
-    const save: NeuralNetwork[][] = new Array(config.MAX_NETWORK_LAYERS);
+    const save: NeuralNetwork[][] = new Array();
     models.forEach((model) => {
       const space = model.levels.length;
       const previous = save[space] || [];
@@ -76,11 +76,11 @@ export function fileUtilities(game = '') {
 
     let count = 0;
     save.forEach((models, layersNb) => (count += saveModels(layersNb, models)));
-    console.debug(`Written ${count}/${config.MAX_NETWORK_LAYERS} models`);
+    console.debug(`Written ${count} models`);
   }
 
-  function loadAllModelLayers(maxLayer = config.MAX_NETWORK_LAYERS) {
-    const load: ModelsByLayerCount[] = new Array(config.MAX_NETWORK_LAYERS);
+  function loadAllModelLayers(maxLayer = 1) {
+    const load: ModelsByLayerCount[] = new Array();
     try {
       for (let i = 1; i <= maxLayer; i++) {
         const model = loadModels(i);
@@ -90,5 +90,9 @@ export function fileUtilities(game = '') {
       console.error(err);
     }
     return load;
+  }
+
+  function discardModels() {
+    localStorage.clear();
   }
 }
