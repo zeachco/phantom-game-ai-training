@@ -32,8 +32,8 @@ export function drawScores(
       (c, i) => i < config.SCORES_NB || c === state.player,
     ),
   ].sort((a, b) => {
-    const scoreA = a instanceof Car ? a.neural.score : a.score;
-    const scoreB = b instanceof Car ? b.neural.score : b.score;
+    const scoreA = a instanceof Car ? a.brain.score : a.score;
+    const scoreB = b instanceof Car ? b.brain.score : b.score;
     return scoreB - scoreA;
   });
 
@@ -42,7 +42,7 @@ export function drawScores(
       const emoji = ref.damaged ? '💀' : '❤️';
       ctx.fillStyle = ref.damaged ? '#def' : ref.color;
       ctx.fillText(
-        `${emoji} ${ref.label} ${Math.round(ref.neural.score)}`,
+        `${emoji} ${ref.label} ${Math.round(ref.brain.score)}`,
         TL,
         FH * 5 + index * FH,
       );

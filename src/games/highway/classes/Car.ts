@@ -7,36 +7,33 @@ import { polysIntersect, randInt, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
 import { config } from '../Config';
 
-let carCount = 0;
-
 export class Car {
-  speed: number;
-  acceleration: number;
-  friction: number;
-  angle: number;
-  damaged: boolean;
-  useAI: boolean;
-  sensor?: Sensor;
-  neural?: NeuralNetwork;
-  controls: Controls;
-  img: HTMLImageElement;
-  mask: HTMLCanvasElement;
-  polygon: Vector[] = [];
+  public speed: number;
+  public acceleration: number;
+  public friction: number;
+  public angle: number;
+  public damaged: boolean;
+  public useAI: boolean;
+  public sensor?: Sensor;
+  public brain: NeuralNetwork;
+  public controls: Controls;
+  private img: HTMLImageElement;
+  private mask: HTMLCanvasElement;
+  public polygon: Vector[] = [];
+  public width = 30;
+  public height = 50;
 
   constructor(
     public x = 0,
     public y = 0,
-    public width = 50,
-    public height = 50,
     controlType = ControlType.DUMMY,
     public maxSpeed = config.CAR_MAX_SPEED,
-    public label = `${carCount++}`,
+    public label = '',
     public color = getRandomColor(),
+    public brainLayers = 1,
   ) {
     this.x = x;
     this.y = y;
-    this.width = width;
-    this.height = height;
 
     this.speed = 0;
     this.acceleration = config.CAR_ACCELERATION;
@@ -51,10 +48,10 @@ export class Car {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      this.neural = new NeuralNetwork(
+      this.brain = new NeuralNetwork(
         this.sensor.rayCount,
         Object.keys(this.controls).length + 1,
-        controlType == ControlType.KEYS ? 1 : config.NETWORK_LAYERS,
+        brainLayers,
       );
     }
 
@@ -62,8 +59,8 @@ export class Car {
     this.img.src = carImg;
 
     this.mask = document.createElement('canvas');
-    this.mask.width = width;
-    this.mask.height = height;
+    this.mask.width = this.width;
+    this.mask.height = this.height;
 
     const maskCtx = this.mask.getContext('2d')!;
     this.img.onload = () => {
@@ -79,7 +76,7 @@ export class Car {
   update(roadBorders: Vector[][], traffic: Car[]) {
     if (this.damaged) return;
     this.#move();
-    if (this.neural) this.#updateScore();
+    if (this.brain) this.#updateScore();
 
     this.polygon = this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
@@ -89,7 +86,7 @@ export class Car {
         s == null ? 0 : 1 - s.offset,
       );
       offsets.push(this.speed / this.maxSpeed);
-      const outputs = NeuralNetwork.feedForward(offsets, this.neural);
+      const outputs = NeuralNetwork.feedForward(offsets, this.brain);
 
       if (this.useAI) {
         this.controls.forward = outputs[0];
@@ -102,9 +99,9 @@ export class Car {
 
   #updateScore() {
     // vertical distance
-    this.neural.score += Math.cos(this.angle) * this.speed;
+    this.brain.score += Math.cos(this.angle) * this.speed;
     // travel distance
-    this.neural.score += this.speed;
+    this.brain.score += this.speed;
     // no dual input
     // this.neural.score += this.controls.left && this.controls.right ? -1 : 0;
     // no reverse

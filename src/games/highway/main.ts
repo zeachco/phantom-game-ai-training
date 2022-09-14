@@ -8,6 +8,7 @@ import { Road } from './classes/Road';
 import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
+import { getColorScale } from '../../utilities/colors';
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -27,27 +28,26 @@ export default async (state: typeof defaultState) => {
   const loop = new GameLoop();
   let ray: DeathRay;
 
-  function generateCars() {
+  function setupAIs() {
     const cars: Car[] = [];
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
       for (let i = 1; i <= config.CAR_PER_LEVELS; i++) {
-        config.NETWORK_LAYERS = l;
         const car = new Car(
           road.getLane(1),
           100,
-          30,
-          50,
           ControlType.AI,
           3,
           `#${i}`,
+          getColorScale(l / config.MAX_NETWORK_LAYERS),
+          l,
         );
-        if (savedModel && car.neural) {
-          car.neural.mutationIndex = i;
-          car.neural.mutate(savedModel);
-          car.label = car.neural.id;
+        if (savedModel && car.brain) {
+          car.brain.mutationIndex = i;
+          car.brain.mutate(savedModel);
+          car.label = car.brain.id;
         }
         cars.push(car);
       }
@@ -71,9 +71,7 @@ export default async (state: typeof defaultState) => {
       state.cars[i].update(road.borders, state.traffic);
       if (state.cars[i].y > ray.y) state.cars[i].damaged = true;
     }
-    state.sortedCars = state.cars.sort(
-      (a, b) => b.neural.score - a.neural.score,
-    );
+    state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
     state.livingCars = state.cars.filter((a) => !a.damaged);
 
     carCanvas.height = window.innerHeight;
@@ -81,7 +79,7 @@ export default async (state: typeof defaultState) => {
     networkCanvas.width = window.innerWidth - carCanvas.width;
 
     carCtx.save();
-    if (state.player.neural.score > 0 && !state.player.damaged) {
+    if (state.player.brain.score > 0 && !state.player.damaged) {
       carCtx.translate(0, -state.player.y + carCanvas.height * 0.7);
     } else {
       carCtx.translate(0, -state.sortedCars[0].y + carCanvas.height * 0.7);
@@ -102,8 +100,8 @@ export default async (state: typeof defaultState) => {
     drawScores(state, carCtx);
 
     networkCtx.lineDashOffset = -dt / 50;
-    Visualizer.drawNetwork(networkCtx, state.sortedCars[0].neural!);
-    Visualizer.drawStats(networkCtx, state.sortedCars[0].neural!);
+    Visualizer.drawNetwork(networkCtx, state.sortedCars[0].brain!);
+    Visualizer.drawStats(networkCtx, state.sortedCars[0].brain!);
     const [first] = state.livingCars;
     if (!first) endExperiment();
   });
@@ -120,8 +118,6 @@ export default async (state: typeof defaultState) => {
         new Car(
           road.getLane(lane),
           y,
-          30,
-          50,
           ControlType.DUMMY,
           speed,
           name || index + '',
@@ -129,14 +125,12 @@ export default async (state: typeof defaultState) => {
     );
 
     // Experiments
-    state.cars = generateCars();
+    state.cars = setupAIs();
 
     // local player
     state.player = new Car(
       road.getLane(1),
       0,
-      30,
-      50,
       ControlType.KEYS,
       3.5,
       'You',
@@ -147,7 +141,7 @@ export default async (state: typeof defaultState) => {
   function endExperiment() {
     const finalSort = state.sortedCars.filter((c) => c.useAI);
     io.saveBestModels(
-      finalSort.map((c) => c.neural),
+      finalSort.map((c) => c.brain),
       config.SCORES_NB,
     );
     initialize();

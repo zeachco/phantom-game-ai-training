@@ -41,6 +41,7 @@ export class NeuralNetwork {
   }
 
   mutate(network: ModelsByLayerCount[number]) {
+    this.version = network.version + 1;
     this.mutationFactor =
       (this.mutationIndex / Math.max(1, this.score)) * config.MUTATION_LVL;
 
@@ -50,7 +51,6 @@ export class NeuralNetwork {
       );
       return;
     }
-    this.version = network.version + 1;
     for (let l = 0; l < this.levels.length; l++) {
       for (let b = 0; b < this.levels[l].biases.length; b++) {
         this.levels[l].biases[b] = lerp(

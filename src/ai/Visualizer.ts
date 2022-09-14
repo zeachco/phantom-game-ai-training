@@ -1,5 +1,6 @@
+import { config } from '../games/highway/Config';
 import { roundRect } from '../utilities/canvas';
-import { getRGBA } from '../utilities/colors';
+import { getColorScale, getRGBA } from '../utilities/colors';
 import { lerp } from '../utilities/math';
 import { Level, NeuralNetwork } from './Network';
 
@@ -12,16 +13,19 @@ export class Visualizer {
     const marg = 8;
     const fh = 18;
     const tWidth = pWidth - marg;
+    const levelColor = getColorScale(
+      network.levels.length / config.MAX_NETWORK_LAYERS,
+    );
     ctx.save();
     ctx.translate(
       ctx.canvas.width * 0.5 + MARGIN,
       ctx.canvas.height * 0.5 - fh * 2,
     );
     ctx.font = fh + 'px Arial';
-    ctx.strokeStyle = 'orange';
+    ctx.strokeStyle = levelColor;
     ctx.fillStyle = 'rgba(32, 32, 32, .76)';
     roundRect(ctx, pWidth * -0.5, 0, pWidth, fh * 3 + marg * 2, marg, true);
-    ctx.fillStyle = 'orange';
+    ctx.fillStyle = levelColor;
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
     ctx.translate(0, marg);
