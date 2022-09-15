@@ -17,11 +17,12 @@ export class Car {
   public sensor?: Sensor;
   public brain: NeuralNetwork;
   public controls: Controls;
-  private img: HTMLImageElement;
-  private mask: HTMLCanvasElement;
   public polygon: Vector[] = [];
   public width = 30;
   public height = 50;
+  private img: HTMLImageElement;
+  private mask: HTMLCanvasElement;
+  private va = 0;
 
   constructor(
     public x = 0,
@@ -101,11 +102,7 @@ export class Car {
     // vertical distance
     this.brain.score += Math.cos(this.angle) * this.speed;
     // travel distance
-    this.brain.score += this.speed;
-    // no dual input
-    // this.neural.score += this.controls.left && this.controls.right ? -1 : 0;
-    // no reverse
-    // this.neural.score += this.controls.reverse ? -1 : 0;
+    this.brain.score += this.speed / 2;
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {
@@ -154,11 +151,11 @@ export class Car {
     if (this.speed < 0) this.speed += this.friction;
     if (Math.abs(this.speed) < this.friction) this.speed = 0;
 
-    if (this.speed != 0) {
-      const flip = this.speed > 0 ? 1 : -1;
-      if (this.controls.left) this.angle += 0.03 * flip;
-      if (this.controls.right) this.angle -= 0.03 * flip;
-    }
+    if (this.controls.left) this.va += this.speed / 100;
+    if (this.controls.right) this.va -= this.speed / 100;
+
+    this.va *= 0.6;
+    this.angle += this.va;
 
     this.x -= Math.sin(this.angle) * this.speed;
     this.y -= Math.cos(this.angle) * this.speed;
