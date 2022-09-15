@@ -1,4 +1,4 @@
-import { config } from '../games/highway/Config';
+import { config } from '../games/highway/classes/Config';
 import { roundRect } from '../utilities/canvas';
 import { getColorScale, getRGBA } from '../utilities/colors';
 import { lerp } from '../utilities/math';

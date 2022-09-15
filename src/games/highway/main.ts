@@ -3,7 +3,7 @@ import { Visualizer } from '../../ai/Visualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
-import { config } from './Config';
+import { config } from './classes/Config';
 import { Road } from './classes/Road';
 import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';

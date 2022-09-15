@@ -5,7 +5,7 @@ import { ControlType } from '../types';
 import carImg from '../assets/car.png';
 import { polysIntersect, randInt, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
-import { config } from '../Config';
+import { config } from './Config';
 
 export class Car {
   public speed: number;

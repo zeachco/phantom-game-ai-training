@@ -1,4 +1,4 @@
-import { config } from '../Config';
+import { config } from './Config';
 
 export class DeathRay {
   private speed = 0;

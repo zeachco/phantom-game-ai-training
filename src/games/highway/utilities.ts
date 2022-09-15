@@ -1,6 +1,6 @@
 import { ModelsByLayerCount } from '../../ai/utils';
 import { Car } from './classes/Car';
-import { config } from './Config';
+import { config } from './classes/Config';
 
 export const defaultState = {
   cars: [] as Car[],
