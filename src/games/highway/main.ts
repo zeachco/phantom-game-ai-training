@@ -1,4 +1,4 @@
-import { fileUtilities, ModelsByLayerCount } from '../../ai/utils';
+import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/Visualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GameLoop } from '../../utilities/three/GameLoop';
@@ -9,7 +9,6 @@ import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
-import { lerp } from '../../utilities/math';
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -41,7 +40,7 @@ export default async (state: typeof defaultState) => {
           100,
           ControlType.AI,
           3,
-          `#${i}`,
+          `${l}-0 👶`,
           getColorScale(l / config.MAX_NETWORK_LAYERS),
           l,
         );
@@ -49,7 +48,7 @@ export default async (state: typeof defaultState) => {
           car.brain.mutationIndex = i;
           const mutationTarget = Math.min(
             config.MUTATION_LVL,
-            (5000 / savedModel.score) * config.MUTATION_LVL,
+            (10000 / savedModel.score) * config.MUTATION_LVL,
           );
           car.brain.mutationFactor =
             (i / config.CAR_PER_LEVELS) * mutationTarget;
@@ -136,7 +135,7 @@ export default async (state: typeof defaultState) => {
     state.cars = setupAIs();
 
     // local player
-    state.player = new Car(road.getLane(1), 200, ControlType.KEYS, 3.5, 'You');
+    state.player = new Car(road.getLane(1), -200, ControlType.KEYS, 3.5, 'You');
     state.cars.push(state.player);
   }
 
@@ -144,9 +143,8 @@ export default async (state: typeof defaultState) => {
     const finalSort = state.sortedCars.filter((c) => c.useAI);
     io.saveBestModels(
       finalSort.map((c) => c.brain),
-      config.SCORES_NB,
+      7,
     );
     initialize();
   }
 };
-

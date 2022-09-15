@@ -51,7 +51,7 @@ export function drawScores(
         emoji = ref.damaged ? '📈' : '🏆';
         add = ` +${diff.toFixed(2)}`;
       } else {
-        emoji = ref.damaged ? '💀' : '❤️';
+        emoji = ref.damaged ? '💀' : '💗';
       }
 
       ctx.fillStyle = ref.damaged ? '#def' : ref.color;
