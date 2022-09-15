@@ -107,7 +107,7 @@ export default async (state: typeof defaultState) => {
   });
   function initialize() {
     Object.assign(state, defaultState);
-    state.sortedModels = io.loadAllModelLayers();
+    state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
 
     // Game ender
     ray = new DeathRay();

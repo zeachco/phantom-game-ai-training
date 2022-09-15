@@ -1,7 +1,7 @@
 class Config {
-  public CAR_NB = 300;
+  public CAR_NB = 100;
   public MAX_NETWORK_LAYERS = 9;
-  public MUTATION_LVL = 0.03;
+  public MUTATION_LVL = 0.0003;
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
@@ -9,7 +9,7 @@ class Config {
   // env
   public SENSORS = 11;
   public SENSOR_ANGLE = (Math.PI / 2) * 3.7;
-  public DEATH_SPEED = 0.005;
+  public DEATH_SPEED = 0.0025;
 
   // car
   public CAR_ACCELERATION = 0.03;

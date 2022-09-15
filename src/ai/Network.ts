@@ -42,8 +42,8 @@ export class NeuralNetwork {
 
   mutate(network: ModelsByLayerCount[number]) {
     this.version = network.version + 1;
-    this.mutationFactor =
-      (this.mutationIndex / Math.max(1, this.score)) * config.MUTATION_LVL;
+    this.mutationFactor = config.MUTATION_LVL
+      // (this.mutationIndex / Math.max(1, this.score)) * config.MUTATION_LVL;
 
     if (this.levels.length !== network.levels.length) {
       console.warn(
