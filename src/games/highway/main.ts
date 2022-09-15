@@ -128,13 +128,7 @@ export default async (state: typeof defaultState) => {
     state.cars = setupAIs();
 
     // local player
-    state.player = new Car(
-      road.getLane(1),
-      0,
-      ControlType.KEYS,
-      3.5,
-      'You',
-    );
+    state.player = new Car(road.getLane(1), 200, ControlType.KEYS, 3.5, 'You');
     state.cars.push(state.player);
   }
 
