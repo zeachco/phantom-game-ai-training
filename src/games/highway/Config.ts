@@ -1,7 +1,7 @@
 class Config {
   public CAR_NB = 100;
   public MAX_NETWORK_LAYERS = 9;
-  public MUTATION_LVL = 0.0003;
+  public MUTATION_LVL = 0.005;
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;

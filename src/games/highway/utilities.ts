@@ -11,7 +11,7 @@ export const defaultState = {
   sortedModels: [] as ModelsByLayerCount[],
 };
 
-const FH = 16;
+const FH = 12;
 const TL = 0;
 
 export function drawScores(
@@ -19,7 +19,7 @@ export function drawScores(
   ctx: CanvasRenderingContext2D,
 ) {
   ctx.fillStyle = 'black';
-  ctx.font = 'bold 14px serif';
+  ctx.font = `bold ${FH}px serif`;
   ctx.fillText(
     `${state.livingCars.length}/${state.sortedCars.length} cars`,
     TL,
