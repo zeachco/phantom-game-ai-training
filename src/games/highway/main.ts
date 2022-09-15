@@ -34,7 +34,7 @@ export default async (state: typeof defaultState) => {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
-      for (let i = 1; i <= config.CAR_PER_LEVELS; i++) {
+      for (let i = 0; i <= config.CAR_PER_LEVELS; i++) {
         const car = new Car(
           road.getLane(1),
           100,
@@ -46,6 +46,9 @@ export default async (state: typeof defaultState) => {
         );
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
+          car.brain.mutationFactor =
+            (i / config.CAR_PER_LEVELS) * config.MUTATION_LVL;
+
           car.brain.mutate(savedModel);
           car.label = car.brain.id;
         }

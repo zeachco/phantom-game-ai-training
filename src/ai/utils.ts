@@ -5,7 +5,11 @@ import type { NeuralNetwork } from './Network';
  * index is the layer amount
  * value is a list of sorted NeuralNetwork by score
  */
-export type ModelsByLayerCount = Omit<NeuralNetwork, 'mutate'>[];
+
+export type ModelsByLayerCount = (Omit<NeuralNetwork, 'mutate'> & {
+  diff?: number;
+  date?: string;
+})[];
 
 export function fileUtilities(game = '') {
   const name = (layer: number) => `${game}_${layer}`;
@@ -19,7 +23,6 @@ export function fileUtilities(game = '') {
     layers: number,
     models: NeuralNetwork[],
     namespace = name(layers),
-    allowLower = false,
   ) {
     const olds = loadModels(layers);
     const exclude: (keyof NeuralNetwork)[] = [
@@ -29,21 +32,30 @@ export function fileUtilities(game = '') {
       'mutationFactor',
       'score',
     ];
-    if (olds[0] && olds[0].score > models[0].score) {
-      console.debug(
-        `skipping save based on score ${olds[0].score} > ${models[0].score}`,
+    const name = `${models.length}x ${layers}-${models[0]?.version}`;
+    const diff = Math.round(
+      olds[0] ? models[0].score - olds[0].score : models[0].score,
+    );
+    if (diff < 0) {
+      console.info(
+        `😿 ${name} performed ${diff} points under previous version`,
       );
-    } else if (isSameObject(models, olds, exclude)) {
-      // console.error('models are identical');
-    } else {
-      const data = JSON.stringify(models);
-      console.debug(
-        `saving ${models.length} gen-${models[0]?.version} ${game} models (${layers} layers).`,
-      );
+      const save = olds.map((m) => ({ ...m, diff, date: new Date() }));
+      const data = JSON.stringify(save);
       localStorage.setItem(namespace, data);
-      return 1;
+    } else if (isSameObject(models, olds, exclude)) {
+      console.info(`😬 ${name} is identical to previous version`);
+    } else {
+      const save = models.map((m) => ({
+        ...m,
+        version: m.version + 1,
+        diff,
+        date: new Date(),
+      }));
+      const data = JSON.stringify(save);
+      console.info(`👍 ${name} increment by ${diff} points`);
+      localStorage.setItem(namespace, data);
     }
-    return 0;
   }
 
   function loadModels(layers: number, namespace = name(layers)) {
@@ -74,9 +86,8 @@ export function fileUtilities(game = '') {
       save[space] = [...previous, model].sort((a, b) => b.score - a.score);
     });
 
-    let count = 0;
-    save.forEach((models, layersNb) => (count += saveModels(layersNb, models)));
-    console.debug(`Written ${count} models`);
+    console.info(`💾 Saving best ${amountPerComplexity} models...`);
+    save.forEach((models, layersNb) => saveModels(layersNb, models));
   }
 
   function loadAllModelLayers(maxLayer = 1) {

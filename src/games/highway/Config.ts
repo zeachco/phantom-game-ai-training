@@ -1,15 +1,15 @@
 class Config {
-  public CAR_NB = 1500;
-  public MAX_NETWORK_LAYERS = 10;
-  public MUTATION_LVL = 0.025;
+  public CAR_NB = 1000;
+  public MAX_NETWORK_LAYERS = 5;
+  public MUTATION_LVL = 0.005;
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
 
   // env
-  public SENSORS = 9;
-  public SENSOR_ANGLE = (Math.PI / 2) * 2.2;
-  public DEATH_SPEED = 0.002;
+  public SENSORS = 11;
+  public SENSOR_ANGLE = (Math.PI / 2) * 3.7;
+  public DEATH_SPEED = 0.0025;
 
   // car
   public CAR_ACCELERATION = 0.03;
@@ -21,9 +21,9 @@ class Config {
   // lane/y/speed/name
   public trafficConfig = [
     // trial of evasion
-    [0, -300, 0.2, 'A'],
-    [1, -500, 0.4, 'B'],
-    [2, -300, 0.6, 'C'],
+    [0, -300, 0.1, 'A'],
+    [1, -500, 0.2, 'B'],
+    [2, -300, 0.3, 'C'],
     // moving cars
     [0, -400, 2, 'LA'],
     [0, -600, 2.2, 'LB'],
@@ -34,11 +34,8 @@ class Config {
     [1, -900, 2.3],
     [2, -900, 2.1],
     [2, -950, 2.4, 'SP'],
-    [1, -1400, 2.5, 'M0'],
-    [0, -1550, 2.3, 'EL'],
-    [2, -1550, 2.4, 'ER'],
-    [0, -1950, 2.2, 'E2L'],
-    [2, -1950, 2.2, 'E2R'],
+    [0, -1950, 2, 'EL'],
+    [2, -1950, 2, 'ER'],
   ] as const;
 
   public get CAR_PER_LEVELS() {

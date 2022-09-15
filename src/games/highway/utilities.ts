@@ -1,4 +1,5 @@
 import { ModelsByLayerCount } from '../../ai/utils';
+import { getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
 
@@ -39,7 +40,7 @@ export function drawScores(
 
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
-      const emoji = ref.damaged ? '💀' : '❤️';
+      const emoji = ref.damaged ? '☠️' : '❤️';
       ctx.fillStyle = ref.damaged ? '#def' : ref.color;
       ctx.fillText(
         `${emoji} ${ref.label} ${Math.round(ref.brain.score)}`,
@@ -47,11 +48,16 @@ export function drawScores(
         FH * 5 + index * FH,
       );
     } else {
-      ctx.fillStyle = 'white';
+      ctx.fillStyle = getColorScale(
+        ref.levels.length / config.MAX_NETWORK_LAYERS,
+      );
+      let change = '';
+      if (ref.diff > 0) change = ` +${ref.diff}`;
+      if (ref.diff < 0) change = ` ${ref.diff}`;
       ctx.fillText(
         `👻 ${ref.levels.length}-${ref.version}-${
           ref.mutationIndex
-        } ${Math.round(ref.score)}`,
+        } ${Math.round(ref.score)} ${change}`,
         TL,
         FH * 5 + index * FH,
       );

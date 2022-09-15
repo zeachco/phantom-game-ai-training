@@ -50,8 +50,8 @@ export class Car {
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
       this.brain = new NeuralNetwork(
-        this.sensor.rayCount,
-        Object.keys(this.controls).length + 1,
+        this.sensor.rayCount + 1,
+        Object.keys(this.controls).length,
         brainLayers,
       );
     }
@@ -103,6 +103,10 @@ export class Car {
     this.brain.score += Math.cos(this.angle) * this.speed;
     // travel distance
     this.brain.score += this.speed / 2;
+    // less input is best
+    const { forward, left, right } = this.controls;
+    if (left || right) this.brain.score -= 0.01;
+    if (!forward) this.brain.score -= 0.1;
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {
@@ -151,8 +155,8 @@ export class Car {
     if (this.speed < 0) this.speed += this.friction;
     if (Math.abs(this.speed) < this.friction) this.speed = 0;
 
-    if (this.controls.left) this.va += this.speed / 100;
-    if (this.controls.right) this.va -= this.speed / 100;
+    if (this.controls.left) this.va += this.speed / 300;
+    if (this.controls.right) this.va -= this.speed / 300;
 
     this.va *= 0.6;
     this.angle += this.va;
