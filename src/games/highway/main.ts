@@ -9,6 +9,7 @@ import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
+import { lerp } from '../../utilities/math';
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -46,8 +47,12 @@ export default async (state: typeof defaultState) => {
         );
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
+          const mutationTarget = Math.min(
+            config.MUTATION_LVL,
+            (5000 / savedModel.score) * config.MUTATION_LVL,
+          );
           car.brain.mutationFactor =
-            (i / config.CAR_PER_LEVELS) * config.MUTATION_LVL;
+            (i / config.CAR_PER_LEVELS) * mutationTarget;
 
           car.brain.mutate(savedModel);
           car.label = car.brain.id;

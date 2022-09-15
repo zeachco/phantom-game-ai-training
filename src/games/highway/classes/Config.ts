@@ -1,7 +1,7 @@
 class Config {
-  public CAR_NB = 1500;
+  public CAR_NB = 2000;
   public MAX_NETWORK_LAYERS = 10;
-  public MUTATION_LVL = 0.025;
+  public MUTATION_LVL = 0.75;
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
@@ -9,13 +9,13 @@ class Config {
   // env
   public SENSORS = 9;
   public SENSOR_ANGLE = (Math.PI / 2) * 2.2;
-  public DEATH_SPEED = 0.002;
+  public DEATH_SPEED = 0.0018;
 
   // car
   public CAR_ACCELERATION = 0.03;
   public CAR_FRICTION = 0.005;
   public CAR_MAX_SPEED = 5;
-  public CLEAR_STORAGE = false;
+  public CLEAR_STORAGE = /clear/.test(window.location.href);
 
   // road
   // lane/y/speed/name

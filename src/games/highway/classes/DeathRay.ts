@@ -2,7 +2,7 @@ import { config } from './Config';
 
 export class DeathRay {
   private speed = 0;
-  public y = 300;
+  public y = 150;
 
   update() {
     this.speed += config.DEATH_SPEED;

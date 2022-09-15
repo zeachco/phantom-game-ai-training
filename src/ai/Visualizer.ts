@@ -32,7 +32,7 @@ export class Visualizer {
     ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
     ctx.translate(0, fh);
     ctx.fillText(
-      `Mutation ${Math.round(network.mutationFactor * 100)}%`,
+      `Mutation ${(network.mutationFactor * 100).toFixed(3)}%`,
       0,
       0,
       tWidth,

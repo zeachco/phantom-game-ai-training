@@ -103,10 +103,6 @@ export class Car {
     this.brain.score += Math.cos(this.angle) * this.speed;
     // travel distance
     this.brain.score += this.speed / 2;
-    // less input is best
-    const { forward, left, right } = this.controls;
-    if (left || right) this.brain.score -= 0.01;
-    if (!forward) this.brain.score -= 0.1;
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {

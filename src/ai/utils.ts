@@ -33,13 +33,10 @@ export function fileUtilities(game = '') {
       'score',
     ];
     const name = `${models.length}x ${layers}-${models[0]?.version}`;
-    const diff = Math.round(
-      olds[0] ? models[0].score - olds[0].score : models[0].score,
-    );
+    const diff = olds[0] ? models[0].score - olds[0].score : models[0].score;
+    const score = `${models[0].score.toFixed(4)} ${diff.toFixed(6)}`;
     if (diff < 0) {
-      console.info(
-        `😿 ${name} performed ${diff} points under previous version`,
-      );
+      console.info(`💣 ${name} scores ${score}`);
       const save = olds.map((m) => ({ ...m, diff, date: new Date() }));
       const data = JSON.stringify(save);
       localStorage.setItem(namespace, data);
@@ -53,7 +50,7 @@ export function fileUtilities(game = '') {
         date: new Date(),
       }));
       const data = JSON.stringify(save);
-      console.info(`👍 ${name} increment by ${diff} points`);
+      console.info(`👍 ${name} scores ${score}`);
       localStorage.setItem(namespace, data);
     }
   }
