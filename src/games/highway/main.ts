@@ -108,9 +108,10 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       const isBest =
         state.sortedCars[0] === state.cars[i] || !state.cars[i].useAI;
-      carCtx.globalAlpha = isBest ? 1 : 0.2;
+      carCtx.globalAlpha = isBest ? 1 : 0.1;
       state.cars[i].draw(carCtx, i === 0, i);
     }
+
     carCtx.restore();
 
     drawScores(state, carCtx);
@@ -123,6 +124,7 @@ export default async (state: typeof defaultState) => {
   });
   function initialize() {
     Object.assign(state, defaultState);
+    state.playing = true;
     state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
 
     // Game ender
@@ -150,11 +152,14 @@ export default async (state: typeof defaultState) => {
   }
 
   function endExperiment() {
-    const finalSort = state.sortedCars.filter((c) => c.useAI);
-    io.saveBestModels(
-      finalSort.map((c) => c.brain),
-      7,
-    );
-    initialize();
+    if (state.playing) {
+      const finalSort = state.sortedCars.filter((c) => c.useAI);
+      io.saveBestModels(
+        finalSort.map((c) => c.brain),
+        7,
+      );
+      state.playing = false;
+      setTimeout(initialize, 1500);
+    }
   }
 };

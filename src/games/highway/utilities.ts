@@ -10,6 +10,7 @@ export const defaultState = {
   traffic: [] as Car[],
   player: new Car(),
   sortedModels: [] as ModelsByLayerCount[],
+  playing: false,
 };
 
 const FH = 12;
