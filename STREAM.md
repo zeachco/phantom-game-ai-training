@@ -1,8 +1,15 @@
 # Currently working on
 
-- Competing neural networks with different layers levels.
-- Saving multiple neural structures to drive future mutations
-- training the model based on a dynamic mutation factor
+## Goal: Cars numbers for each layers based on their global score ratio scores
+
+- given 1000 cars and 3 layers
+- scores for each layers are
+1:100 2:50 3:10
+
+we want to have
+900% the amount of cars for layer 3 than for layer 1 and layer 2 about at 200% of layer 1
+
+that way it would give time for late-game models to catch up with early-game ones and compare the end game with better balance
 
 ## how it works
 

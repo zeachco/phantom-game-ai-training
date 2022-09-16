@@ -34,7 +34,7 @@ export function fileUtilities(game = '') {
     ];
     const name = `${models.length}x ${layers}-${models[0]?.version}`;
     const diff = olds[0] ? models[0].score - olds[0].score : models[0].score;
-    const score = `${models[0].score.toFixed(4)} ${diff.toFixed(6)}`;
+    const score = `${models[0].score.toFixed(4)} ${diff.toFixed(10)}`;
     if (diff < 0) {
       console.info(`💣 ${name} scores ${score}`);
       const save = olds.map((m) => ({ ...m, diff, date: new Date() }));

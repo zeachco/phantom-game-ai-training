@@ -34,7 +34,9 @@ export default async (state: typeof defaultState) => {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
-      for (let i = 0; i <= config.CAR_PER_LEVELS; i++) {
+      const carsNbForThisLayer = config.CARS_PER_LAYERS[l - 1];
+
+      for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
           road.getLane(1),
           100,
@@ -50,11 +52,10 @@ export default async (state: typeof defaultState) => {
             config.MUTATION_LVL,
             (10000 / savedModel.score) * config.MUTATION_LVL,
           );
-          car.brain.mutationFactor =
-            (i / config.CAR_PER_LEVELS) * mutationTarget;
+          car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
           car.brain.mutate(savedModel);
-          car.label = car.brain.id;
+          car.label = [l, i].join('-');
         }
         cars.push(car);
       }
@@ -65,7 +66,6 @@ export default async (state: typeof defaultState) => {
   try {
     initialize();
   } catch (err) {
-    io.discardModels();
     throw err;
   }
 

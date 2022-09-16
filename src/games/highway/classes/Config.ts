@@ -1,7 +1,8 @@
 class Config {
-  public CAR_NB = 2000;
+  public CAR_NB = 10;
   public MAX_NETWORK_LAYERS = 10;
   public MUTATION_LVL = 0.75;
+  public CARS_PER_LAYERS = [50, 50, 50, 50, 50, 50, 50, 50, 50, 2000];
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
@@ -46,4 +47,4 @@ class Config {
   }
 }
 
-export const config = new Config();
+export const config = ((window as any).config = new Config());
