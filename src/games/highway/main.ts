@@ -27,6 +27,7 @@ export default async (state: typeof defaultState) => {
 
   const loop = new GameLoop();
   let ray: DeathRay;
+  let carRay: DeathRay;
 
   function setupAIs() {
     const cars: Car[] = [];
@@ -76,7 +77,10 @@ export default async (state: typeof defaultState) => {
     }
     for (let i = 0; i < state.cars.length; i++) {
       state.cars[i].update(road.borders, state.traffic);
-      if (state.cars[i].y > ray.y) state.cars[i].damaged = true;
+      const y = state.cars[i].y;
+      if (y > ray.y || y > state.player.y + state.player.height) {
+        state.cars[i].damaged = true;
+      }
     }
     state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
     state.livingCars = state.cars.filter((a) => !a.damaged);
@@ -94,11 +98,16 @@ export default async (state: typeof defaultState) => {
 
     road.draw(carCtx);
     ray.draw(carCtx);
+    if (state.player.speed) {
+      carRay.y = state.player.y + state.player.height;
+      carRay.draw(carCtx);
+    }
     for (let i = 0; i < state.traffic.length; i++) {
       state.traffic[i].draw(carCtx);
     }
-    for (let i = 0; i < state.sortedCars.length; i++) {
-      const isBest = i === 0 || !state.cars[i].useAI;
+    for (let i = 0; i < state.cars.length; i++) {
+      const isBest =
+        state.sortedCars[0] === state.cars[i] || !state.cars[i].useAI;
       carCtx.globalAlpha = isBest ? 1 : 0.2;
       state.cars[i].draw(carCtx, i === 0, i);
     }
@@ -118,6 +127,7 @@ export default async (state: typeof defaultState) => {
 
     // Game ender
     ray = new DeathRay();
+    carRay = new DeathRay();
 
     // Obstacles
     state.traffic = config.trafficConfig.map(
@@ -135,7 +145,7 @@ export default async (state: typeof defaultState) => {
     state.cars = setupAIs();
 
     // local player
-    state.player = new Car(road.getLane(1), -200, ControlType.KEYS, 3.5, 'You');
+    state.player = new Car(road.getLane(1), 100, ControlType.KEYS, 3, 'You');
     state.cars.push(state.player);
   }
 

@@ -65,7 +65,7 @@ export class Car {
 
     const maskCtx = this.mask.getContext('2d')!;
     this.img.onload = () => {
-      maskCtx.fillStyle = color;
+      maskCtx.fillStyle = this.color;
       maskCtx.rect(0, 0, this.width, this.height);
       maskCtx.fill();
 
