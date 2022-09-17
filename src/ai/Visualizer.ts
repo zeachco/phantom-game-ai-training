@@ -12,6 +12,8 @@ export class Visualizer {
     return getRGBA(value);
   }
   static drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+    const height = ctx.canvas.height - MARGIN * 2;
+    const levelHeight = height / network.levels.length;
     const pWidth = 150;
     const marg = 8;
     const fh = 18;
@@ -20,10 +22,7 @@ export class Visualizer {
       network.levels.length / config.MAX_NETWORK_LAYERS,
     );
     ctx.save();
-    ctx.translate(
-      ctx.canvas.width * 0.5 + MARGIN,
-      ctx.canvas.height * 0.5 - fh * 2,
-    );
+    ctx.translate(ctx.canvas.width * 0.5 + MARGIN, levelHeight * 0.5);
     ctx.font = fh + 'px Arial';
     ctx.strokeStyle = levelColor;
     ctx.fillStyle = 'rgba(32, 32, 32, .76)';

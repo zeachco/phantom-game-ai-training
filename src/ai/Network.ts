@@ -11,6 +11,10 @@ export class NeuralNetwork {
   public mutationFactor: number = 0.5;
   /** iteration number of the same initial network */
   public mutationIndex: number = 0.5;
+  /** Score different with previous version */
+  public diff = 0;
+  /** Date of last version */
+  public date = Date.now();
 
   constructor(inputNb, outputNb, intermediateLayers = Math.ceil(inputNb / 4)) {
     if (inputNb < outputNb) {
