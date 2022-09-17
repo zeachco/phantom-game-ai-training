@@ -1,9 +1,10 @@
+import { NeuralNetwork } from '../../../ai/Network';
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
   public CAR_NB = 2000;
-  public MUTATION_LVL = 0.25;
-  public CARS_PER_LAYERS = [70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70];
+  public MUTATION_LVL = 0.75;
+  public CARS_PER_LAYERS = [25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25];
   public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
   // visual
@@ -49,29 +50,34 @@ class Config {
   }
 
   public autoDistributeByScores(saves: ModelsByLayerCount[]) {
-    let totalScore = 0;
-    const modelIndexes = [];
-    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
-      if (!saves[i] || !saves[i][0]) continue;
-      totalScore += saves[i][0].score;
-    }
-    const newArrays: number[] = [];
-    let remainig = this.CAR_NB;
-    while (remainig) {
-      remainig--;
-    }
-    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
-      if (!saves[i] || !saves[i][0]) continue;
-      const value = saves[i][0].score / totalScore;
-      const distribRatio = (this.CAR_NB * value) / this.MAX_NETWORK_LAYERS;
+    const getModel = (layer) => saves[layer] && saves[layer][0];
+    const layerScore = (models: ModelsByLayerCount[number]) =>
+      (models && models[0] && models[0].score) || 0;
 
-      newArrays[i] = Math.ceil(
-        (this.CAR_NB * distribRatio) / this.MAX_NETWORK_LAYERS,
-      );
+    let totalScore = 0;
+    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
+      const save = getModel(i);
+      if (!save) continue;
+      totalScore += save.score;
     }
-    newArrays.splice(0, 1);
-    console.table(newArrays);
-    // this.CARS_PER_LAYERS = newArrays;
+
+    const sortedLayers = [...saves].sort(
+      (a, b) => layerScore(a) - layerScore(b),
+    );
+
+    let remainingScore = totalScore;
+
+    sortedLayers.forEach((models) => {
+      if (!models || !models[0]) return;
+      const layer = models[0].levels.length - 1;
+      const give = layer ? Math.round(remainingScore * 0.75) : 0;
+      remainingScore -= give;
+      this.CARS_PER_LAYERS[layer] = Math.round(
+        (give / totalScore) * this.CAR_NB,
+      );
+    });
+
+    console.info(this.CARS_PER_LAYERS);
   }
 }
 
