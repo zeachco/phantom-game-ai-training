@@ -1,5 +1,6 @@
 import { isSameObject } from '../utilities/object';
 import type { NeuralNetwork } from './Network';
+import { NeuralSaves } from './NeuralSaves';
 
 /**
  * index is the layer amount
@@ -56,7 +57,7 @@ export function fileUtilities(game = '') {
   }
 
   function loadModels(layers: number, namespace = name(layers)) {
-    let models: ModelsByLayerCount = [];
+    let models: NeuralSaves['layers'] = [];
     try {
       const data = localStorage.getItem(namespace);
       if (!data) throw new Error(`not found`);

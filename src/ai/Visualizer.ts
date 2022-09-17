@@ -8,6 +8,9 @@ const RADIUS = 12;
 const MARGIN = Math.max(RADIUS, 10);
 
 export class Visualizer {
+  static getColor(value) {
+    return getRGBA(value);
+  }
   static drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     const pWidth = 150;
     const marg = 8;
@@ -91,7 +94,8 @@ export class Visualizer {
         ctx.moveTo(Visualizer.#getNodeX(inputs, i, left, right), bottom);
         ctx.lineTo(Visualizer.#getNodeX(outputs, j, left, right), top);
         ctx.lineWidth = 2;
-        ctx.strokeStyle = getRGBA(weights[i][j]);
+        ctx.strokeStyle = Visualizer.getColor(weights[i][j]);
+        Visualizer.getColor(weights[i][j]);
         ctx.stroke();
       }
     }
@@ -104,7 +108,7 @@ export class Visualizer {
       ctx.fill();
       ctx.beginPath();
       ctx.arc(x, bottom, RADIUS * 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = getRGBA(inputs[i]);
+      ctx.fillStyle = Visualizer.getColor(inputs[i]);
       ctx.fill();
     }
 
@@ -116,13 +120,13 @@ export class Visualizer {
       ctx.fill();
       ctx.beginPath();
       ctx.arc(x, top, RADIUS * 0.6, 0, Math.PI * 2);
-      ctx.fillStyle = getRGBA(outputs[i]);
+      ctx.fillStyle = Visualizer.getColor(outputs[i]);
       ctx.fill();
 
       ctx.beginPath();
       ctx.lineWidth = 2;
       ctx.arc(x, top, RADIUS * 0.8, 0, Math.PI * 2);
-      ctx.strokeStyle = getRGBA(biases[i]);
+      ctx.strokeStyle = Visualizer.getColor(biases[i]);
       ctx.setLineDash([3, 3]);
       ctx.stroke();
       ctx.setLineDash([]);

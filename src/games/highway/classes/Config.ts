@@ -1,8 +1,10 @@
+import { ModelsByLayerCount } from '../../../ai/utils';
+
 class Config {
   public CAR_NB = 2000;
-  public MAX_NETWORK_LAYERS = 10;
-  public MUTATION_LVL = 0.1;
-  public CARS_PER_LAYERS = [250, 250, 250, 250, 250, 250, 250, 250, 250, 250];
+  public MUTATION_LVL = 0.25;
+  public CARS_PER_LAYERS = [70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70];
+  public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
@@ -44,6 +46,32 @@ class Config {
 
   public get CAR_PER_LEVELS() {
     return this.CAR_NB / this.MAX_NETWORK_LAYERS;
+  }
+
+  public autoDistributeByScores(saves: ModelsByLayerCount[]) {
+    let totalScore = 0;
+    const modelIndexes = [];
+    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
+      if (!saves[i] || !saves[i][0]) continue;
+      totalScore += saves[i][0].score;
+    }
+    const newArrays: number[] = [];
+    let remainig = this.CAR_NB;
+    while (remainig) {
+      remainig--;
+    }
+    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
+      if (!saves[i] || !saves[i][0]) continue;
+      const value = saves[i][0].score / totalScore;
+      const distribRatio = (this.CAR_NB * value) / this.MAX_NETWORK_LAYERS;
+
+      newArrays[i] = Math.ceil(
+        (this.CAR_NB * distribRatio) / this.MAX_NETWORK_LAYERS,
+      );
+    }
+    newArrays.splice(0, 1);
+    console.table(newArrays);
+    // this.CARS_PER_LAYERS = newArrays;
   }
 }
 

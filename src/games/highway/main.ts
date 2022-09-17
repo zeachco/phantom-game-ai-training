@@ -31,6 +31,7 @@ export default async (state: typeof defaultState) => {
 
   function setupAIs() {
     const cars: Car[] = [];
+    config.autoDistributeByScores(state.sortedModels);
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
