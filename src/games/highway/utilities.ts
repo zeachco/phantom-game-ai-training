@@ -15,21 +15,22 @@ export const defaultState = {
 
 const FH = 12;
 const TL = 0;
+let gradient;
+
+function drawGradient(ctx: CanvasRenderingContext2D, x, y, w, h) {
+  if (!gradient) {
+    gradient = ctx.createLinearGradient(0, 0, w, 0);
+    gradient.addColorStop(0, '#555');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x, y, w, h);
+}
 
 export function drawScores(
   state: typeof defaultState,
   ctx: CanvasRenderingContext2D,
 ) {
-  ctx.fillStyle = getColorScale(
-    state.livingCars.length / state.sortedCars.length,
-  );
-  ctx.font = `bold ${FH}px serif`;
-  ctx.fillText(
-    `${state.livingCars.length}/${state.sortedCars.length} cars`,
-    TL,
-    FH * 3,
-  );
-
   const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
     ...state.sortedModels.map((m) => m[0]).filter(Boolean),
     ...state.sortedCars.filter(
@@ -40,6 +41,18 @@ export function drawScores(
     const scoreB = b instanceof Car ? b.brain.score : b.score;
     return scoreB - scoreA;
   });
+
+  drawGradient(ctx, 0, FH * 1.75, 125, (displayedScoreCars.length + 2) * FH);
+
+  ctx.fillStyle = getColorScale(
+    state.livingCars.length / state.sortedCars.length,
+  );
+  ctx.font = `bold ${FH}px serif`;
+  ctx.fillText(
+    `${state.livingCars.length}/${state.sortedCars.length} cars`,
+    TL,
+    FH * 3,
+  );
 
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
