@@ -13,7 +13,7 @@ export const defaultState = {
   playing: false,
 };
 
-const FH = 12;
+const FH = 10;
 const TL = 0;
 let gradient;
 
@@ -62,10 +62,10 @@ export function drawScores(
       let emoji = '';
       let add = '';
       if (diff > 0) {
-        emoji = ref.damaged ? '📈' : '🏆';
+        emoji = ref.damaged ? '🏆' : '💚';
         add = ` +${diff.toFixed(2)}`;
       } else {
-        emoji = ref.damaged ? '💀' : '💗';
+        emoji = ref.damaged ? '💀' : '💜';
       }
 
       ctx.fillStyle = ref.damaged ? '#def' : ref.color;
@@ -79,11 +79,11 @@ export function drawScores(
         ref.levels.length / config.MAX_NETWORK_LAYERS,
       );
 
-      const symb = ref.diff > 0 ? '+' : '';
+      const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
       ctx.fillText(
         `👻 ${ref.levels.length}-${ref.version}-${
           ref.mutationIndex
-        } ${Math.round(ref.score)} ${symb}${ref.diff.toFixed(2)}`,
+        } ${Math.round(ref.score)} ${symb}`,
         TL,
         FH * 4 + index * FH,
       );

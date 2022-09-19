@@ -25,9 +25,9 @@ showing as `layers-gen-index`
 
 ### Score legend
 
-- 👶 neural network is first generation
+- 👶 is first generation
 - 💀 car has crashed
-- 📈 car has crashed with a higher score
-- 💗 car is racing
-- 🏆 car is besting the best score
+- 🏆 car has crashed with a higher score
+- 💜 car is racing
+- 💚 car is besting the best score
 - 👻 ghost car from a previous generation

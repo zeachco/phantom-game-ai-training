@@ -1,10 +1,9 @@
-import { NeuralNetwork } from '../../../ai/Network';
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 2000;
-  public MUTATION_LVL = 0.75;
-  public CARS_PER_LAYERS = [25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25];
+  public CAR_NB = 1000;
+  public MUTATION_LVL = 0.5;
+  public CARS_PER_LAYERS = [75, 75, 75, 75, 75, 75, 75, 75, 75, 75];
   public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
   // visual
@@ -69,15 +68,16 @@ class Config {
 
     sortedLayers.forEach((models) => {
       if (!models || !models[0]) return;
-      const layer = models[0].levels.length - 1;
-      const give = layer ? Math.round(remainingScore * 0.75) : 0;
+      const layer = models[0].levels.length;
+      const give = layer ? Math.round(remainingScore * 0.55) : 0;
       remainingScore -= give;
       this.CARS_PER_LAYERS[layer] = Math.round(
         (give / totalScore) * this.CAR_NB,
       );
+      console.log(
+        `set layer ${layer} with ${this.CARS_PER_LAYERS[layer]} cars`,
+      );
     });
-
-    console.info(this.CARS_PER_LAYERS);
   }
 }
 

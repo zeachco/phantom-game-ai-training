@@ -9,6 +9,7 @@ import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
+import { NeuralNetwork } from '../../ai/Network';
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -36,7 +37,7 @@ export default async (state: typeof defaultState) => {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
-      const carsNbForThisLayer = config.CARS_PER_LAYERS[l - 1];
+      const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
 
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
@@ -54,7 +55,8 @@ export default async (state: typeof defaultState) => {
             config.MUTATION_LVL,
             (10000 / savedModel.score) * config.MUTATION_LVL,
           );
-          car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
+          car.brain.mutationFactor =
+            i === 0 ? 0.000001 : (i / carsNbForThisLayer) * mutationTarget;
 
           car.brain.mutate(savedModel);
           car.label = [l, i].join('-');
@@ -79,7 +81,7 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       state.cars[i].update(road.borders, state.traffic);
       const y = state.cars[i].y;
-      if (y > ray.y || y > state.player.y + state.player.height) {
+      if (y > ray.y || y > carRay.y) {
         state.cars[i].damaged = true;
       }
     }
@@ -91,7 +93,7 @@ export default async (state: typeof defaultState) => {
     networkCanvas.width = window.innerWidth - carCanvas.width;
 
     carCtx.save();
-    if (state.player.brain.score > 0 && !state.player.damaged) {
+    if (state.player?.brain?.score > 0 && !state.player?.damaged) {
       carCtx.translate(0, -state.player.y + carCanvas.height * 0.7);
     } else {
       carCtx.translate(0, -state.sortedCars[0].y + carCanvas.height * 0.7);
@@ -99,7 +101,7 @@ export default async (state: typeof defaultState) => {
 
     road.draw(carCtx);
     ray.draw(carCtx);
-    if (state.player.speed) {
+    if (state.player) {
       carRay.y = state.player.y + state.player.height;
       carRay.draw(carCtx);
     }
@@ -109,7 +111,7 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       const isBest =
         state.sortedCars[0] === state.cars[i] || !state.cars[i].useAI;
-      carCtx.globalAlpha = isBest ? 1 : 0.1;
+      carCtx.globalAlpha = isBest ? 1 : 0.3;
       state.cars[i].draw(carCtx, i === 0, i);
     }
 
@@ -120,8 +122,10 @@ export default async (state: typeof defaultState) => {
     networkCtx.lineDashOffset = -dt / 50;
     Visualizer.drawNetwork(networkCtx, state.sortedCars[0].brain!);
     Visualizer.drawStats(networkCtx, state.sortedCars[0].brain!);
-    const [first] = state.livingCars;
-    if (!first) endExperiment();
+    const livingCarsWithMutations = state.livingCars.filter((c) => {
+      return c.brain.mutationFactor > 0;
+    });
+    if (!livingCarsWithMutations[0]) endExperiment();
   });
   function initialize() {
     Object.assign(state, defaultState);
@@ -147,9 +151,28 @@ export default async (state: typeof defaultState) => {
     // Experiments
     state.cars = setupAIs();
 
-    // local player
-    state.player = new Car(road.getLane(1), 100, ControlType.KEYS, 3, 'You');
-    state.cars.push(state.player);
+    // best car
+    const bestLayers = [...state.sortedModels].sort((a, b) => {
+      return (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0);
+    });
+    const bestModel = bestLayers[0][0];
+    if (bestModel) {
+      const bestLayerNb = bestModel.levels.length;
+      state.player = new Car(
+        road.getLane(1),
+        100,
+        ControlType.AI,
+        3,
+        '☠️',
+        getColorScale(bestLayerNb / config.MAX_NETWORK_LAYERS),
+        bestLayerNb,
+      );
+      console.log(`Death car is layer ${bestLayerNb}`);
+      state.player.brain.mutationFactor = 0;
+      state.player.brain.mutationIndex = 0;
+      state.player.brain.mutate(bestModel);
+      state.cars.push(state.player);
+    }
   }
 
   function endExperiment() {
