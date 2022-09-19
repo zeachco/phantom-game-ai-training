@@ -6,8 +6,7 @@ const apps = new Map<string, Function>([
   ['phatom-race', () => import(`./games/phantom-race/index.js`)],
   ['ping-pong', () => import(`./games/ping-pong/index.js`)],
   ['space-shield', () => import(`./games/space-shield/index.js`)],
-  ['tower-def', () => import(`./games/tower-def/index.js`)],
-  ['savana', () => import(`./games/savana/index.js`)],
+  ['tower-def', () => import(`./games/waypoints/main.js`)],
 ]);
 
 const ul = document.createElement("ul");

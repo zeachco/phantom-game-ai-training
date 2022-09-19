@@ -5,6 +5,8 @@
   "url": "https://zeachco.github.io/phantom-game-ai-training/",
   "license": "MIT",
   "dependencies": {
+    "@types/matter-js": "^0.18.2",
+    "matter-js": "^0.18.0",
     "three": "^0.139.2"
   },
   "devDependencies": {
