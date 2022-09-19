@@ -4,7 +4,7 @@ import { getColorScale, getRGBA } from '../utilities/colors';
 import { lerp } from '../utilities/math';
 import { Level, NeuralNetwork } from './Network';
 
-const RADIUS = 12;
+const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
 
 export class Visualizer {
@@ -85,7 +85,7 @@ export class Visualizer {
     const right = left + width;
     const bottom = top + height;
 
-    const { inputs, outputs, weights, biases } = level;
+    const { inputs, outputs, weights } = level;
 
     for (let i = 0; i < inputs.length; i++) {
       for (let j = 0; j < outputs.length; j++) {
@@ -101,45 +101,42 @@ export class Visualizer {
 
     for (let i = 0; i < inputs.length; i++) {
       const x = Visualizer.#getNodeX(inputs, i, left, right);
+      const value = inputs[i];
       ctx.beginPath();
       ctx.arc(x, bottom, RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = 'black';
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(x, bottom, RADIUS * 0.8, 0, Math.PI * 2);
+      ctx.arc(x, bottom, RADIUS * 0.8, 0, Math.PI * 2 * Math.abs(value));
       ctx.fillStyle = Visualizer.getColor(inputs[i]);
-      ctx.fill();
+      ctx.strokeStyle = value > 0 ? 'orange' : 'green';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
+      ctx.stroke();
     }
 
     for (let i = 0; i < outputs.length; i++) {
       const x = Visualizer.#getNodeX(outputs, i, left, right);
+      const value = outputs[i];
       ctx.beginPath();
       ctx.arc(x, top, RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = 'black';
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(x, top, RADIUS * 0.6, 0, Math.PI * 2);
+      ctx.strokeStyle = value > 0 ? 'orange' : 'green';
+      ctx.lineWidth = 3;
+      ctx.arc(x, top, RADIUS * 0.8, 0, Math.PI * 2 * value);
       ctx.fillStyle = Visualizer.getColor(outputs[i]);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.arc(x, top, RADIUS * 0.8, 0, Math.PI * 2);
-      ctx.strokeStyle = Visualizer.getColor(biases[i]);
-      ctx.setLineDash([3, 3]);
       ctx.stroke();
+
       ctx.setLineDash([]);
 
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'white';
+      ctx.font = RADIUS + 'px Arial';
       if (outputLabels[i]) {
-        ctx.beginPath();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'black';
-        ctx.strokeStyle = 'white';
-        ctx.font = RADIUS * 1.5 + 'px Arial';
         ctx.fillText(outputLabels[i], x, top + RADIUS * 0.1);
-        ctx.lineWidth = 0.5;
-        ctx.strokeText(outputLabels[i], x, top + RADIUS * 0.1);
       }
     }
   }

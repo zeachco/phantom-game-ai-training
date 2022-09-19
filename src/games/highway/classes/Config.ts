@@ -2,8 +2,9 @@ import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
   public CAR_NB = 1000;
+  public AUTO_DISTRIBUTE_LAYERS = false;
   public MUTATION_LVL = 0.5;
-  public CARS_PER_LAYERS = [75, 75, 75, 75, 75, 75, 75, 75, 75, 75];
+  public CARS_PER_LAYERS = [0, 100, 100, 100, 100, 100, 100, 100, 100, 100];
   public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
   // visual
@@ -49,6 +50,7 @@ class Config {
   }
 
   public autoDistributeByScores(saves: ModelsByLayerCount[]) {
+    if (!this.AUTO_DISTRIBUTE_LAYERS) return;
     const getModel = (layer) => saves[layer] && saves[layer][0];
     const layerScore = (models: ModelsByLayerCount[number]) =>
       (models && models[0] && models[0].score) || 0;

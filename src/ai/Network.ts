@@ -1,4 +1,3 @@
-import { config } from '../games/highway/classes/Config';
 import { lerp, rand } from '../utilities/math';
 import { ModelsByLayerCount } from './utils';
 
@@ -53,13 +52,6 @@ export class NeuralNetwork {
       return;
     }
     for (let l = 0; l < this.levels.length; l++) {
-      for (let b = 0; b < this.levels[l].biases.length; b++) {
-        this.levels[l].biases[b] = lerp(
-          network.levels[l].biases[b],
-          rand(),
-          this.mutationFactor,
-        );
-      }
       for (let i = 0; i < this.levels[l].weights.length; i++) {
         for (let j = 0; j < this.levels[l].weights[i].length; j++) {
           this.levels[l].weights[i][j] = lerp(
@@ -74,14 +66,12 @@ export class NeuralNetwork {
 }
 
 export class Level {
-  inputs;
-  outputs;
-  biases;
-  weights: number[][];
+  public inputs;
+  public outputs;
+  public weights: number[][];
   constructor(inputCount = 1, outputCount = 1) {
     this.inputs = new Array(inputCount);
     this.outputs = new Array(outputCount);
-    this.biases = new Array(outputCount);
 
     this.weights = [];
     for (let i = 0; i < inputCount; i++) {
@@ -97,10 +87,6 @@ export class Level {
         level.weights[i][j] = rand();
       }
     }
-
-    for (let i = 0; i < level.biases.length; i++) {
-      level.biases[i] = rand();
-    }
   }
 
   static feedForward(givenInputs: number[], level: Level) {
@@ -114,11 +100,7 @@ export class Level {
         sum += level.inputs[j] * level.weights[j][i];
       }
 
-      if (sum > level.biases[i]) {
-        level.outputs[i] = 1;
-      } else {
-        level.outputs[i] = 0;
-      }
+      level.outputs[i] = sum;
     }
 
     return level.outputs;

@@ -143,16 +143,17 @@ export class Car {
   }
 
   #move() {
-    if (this.controls.forward) this.speed += this.acceleration;
-    if (this.controls.reverse) this.speed -= this.acceleration;
+    const { forward, reverse, left, right } = this.controls;
+    if (forward > 0) this.speed += this.acceleration * forward;
+    if (reverse > 0) this.speed -= this.acceleration * reverse;
     if (this.speed > this.maxSpeed) this.speed = this.maxSpeed;
     if (this.speed < -this.maxSpeed / 2) this.speed = -this.maxSpeed / 2;
     if (this.speed > 0) this.speed -= this.friction;
     if (this.speed < 0) this.speed += this.friction;
     if (Math.abs(this.speed) < this.friction) this.speed = 0;
 
-    if (this.controls.left) this.va += this.speed / 300;
-    if (this.controls.right) this.va -= this.speed / 300;
+    if (left > 0) this.va += (this.speed / 300) * left;
+    if (right > 0) this.va -= (this.speed / 300) * right;
 
     this.va *= 0.6;
     this.angle += this.va;
