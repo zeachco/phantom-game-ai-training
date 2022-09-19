@@ -1,6 +1,6 @@
 import { config } from '../games/highway/classes/Config';
 import { roundRect } from '../utilities/canvas';
-import { getColorScale, getRGBA } from '../utilities/colors';
+import { getColorScale } from '../utilities/colors';
 import { lerp } from '../utilities/math';
 import { Level, NeuralNetwork } from './Network';
 
@@ -9,7 +9,9 @@ const MARGIN = Math.max(RADIUS, 10);
 
 export class Visualizer {
   static getColor(value) {
-    return getRGBA(value);
+    return `hsla(56, 100%, ${Math.round((value + 1) * 100)}%, ${Math.abs(
+      value,
+    )})`;
   }
   static drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     const height = ctx.canvas.height - MARGIN * 2;
@@ -87,11 +89,13 @@ export class Visualizer {
 
     const { inputs, outputs, weights } = level;
 
+
+    ctx.setLineDash([3, 2]);
     for (let i = 0; i < inputs.length; i++) {
       for (let j = 0; j < outputs.length; j++) {
         ctx.beginPath();
         ctx.moveTo(Visualizer.#getNodeX(inputs, i, left, right), bottom);
-        ctx.lineTo(Visualizer.#getNodeX(outputs, j, left, right), top);
+        ctx.lineTo(Visualizer.#getNodeX(outputs, j, left, right), top + RADIUS);
         ctx.lineWidth = 2;
         ctx.strokeStyle = Visualizer.getColor(weights[i][j]);
         Visualizer.getColor(weights[i][j]);
@@ -99,6 +103,7 @@ export class Visualizer {
       }
     }
 
+    ctx.setLineDash([5, 1]);
     for (let i = 0; i < inputs.length; i++) {
       const x = Visualizer.#getNodeX(inputs, i, left, right);
       const value = inputs[i];
@@ -107,11 +112,10 @@ export class Visualizer {
       ctx.fillStyle = 'black';
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(x, bottom, RADIUS * 0.8, 0, Math.PI * 2 * Math.abs(value));
+      ctx.arc(x, bottom, RADIUS * 0.5, 0, Math.PI * 2 * Math.abs(value));
       ctx.fillStyle = Visualizer.getColor(inputs[i]);
       ctx.strokeStyle = value > 0 ? 'orange' : 'green';
       ctx.lineWidth = 3;
-      ctx.setLineDash([]);
       ctx.stroke();
     }
 
@@ -120,16 +124,14 @@ export class Visualizer {
       const value = outputs[i];
       ctx.beginPath();
       ctx.arc(x, top, RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = 'black';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.fill();
       ctx.beginPath();
-      ctx.strokeStyle = value > 0 ? 'orange' : 'green';
+      ctx.strokeStyle = value > 0 ? '#def' : '#86f';
       ctx.lineWidth = 3;
       ctx.arc(x, top, RADIUS * 0.8, 0, Math.PI * 2 * value);
       ctx.fillStyle = Visualizer.getColor(outputs[i]);
       ctx.stroke();
-
-      ctx.setLineDash([]);
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

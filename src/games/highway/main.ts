@@ -55,8 +55,7 @@ export default async (state: typeof defaultState) => {
             config.MUTATION_LVL,
             (10000 / savedModel.score) * config.MUTATION_LVL,
           );
-          car.brain.mutationFactor =
-            i === 0 ? 0.000001 : (i / carsNbForThisLayer) * mutationTarget;
+          car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
           car.brain.mutate(savedModel);
           car.label = [l, i].join('-');
@@ -93,7 +92,7 @@ export default async (state: typeof defaultState) => {
     networkCanvas.width = window.innerWidth - carCanvas.width;
 
     carCtx.save();
-    if (state.player?.brain?.score > 0 && !state.player?.damaged) {
+    if (state.player && !state.player.damaged) {
       carCtx.translate(0, -state.player.y + carCanvas.height * 0.7);
     } else {
       carCtx.translate(0, -state.sortedCars[0].y + carCanvas.height * 0.7);
@@ -155,22 +154,23 @@ export default async (state: typeof defaultState) => {
     const bestLayers = [...state.sortedModels].sort((a, b) => {
       return (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0);
     });
-    const bestModel = bestLayers[0][0];
-    if (bestModel) {
-      const bestLayerNb = bestModel.levels.length;
+    const deathCarModel =
+      bestLayers[Math.round(config.MAX_NETWORK_LAYERS / 2)][0];
+    if (deathCarModel) {
+      const bestLayerNb = deathCarModel.levels.length;
       state.player = new Car(
         road.getLane(1),
         100,
         ControlType.AI,
         3,
-        '☠️',
+        '🎥 Camera',
         getColorScale(bestLayerNb / config.MAX_NETWORK_LAYERS),
         bestLayerNb,
       );
       console.log(`Death car is layer ${bestLayerNb}`);
       state.player.brain.mutationFactor = 0;
       state.player.brain.mutationIndex = 0;
-      state.player.brain.mutate(bestModel);
+      state.player.brain.mutate(deathCarModel);
       state.cars.push(state.player);
     }
   }
