@@ -1,16 +1,18 @@
 import { isSameObject } from '../utilities/object';
 import type { NeuralNetwork } from './Network';
-import { NeuralSaves } from './NeuralSaves';
 
 /**
  * index is the layer amount
  * value is a list of sorted NeuralNetwork by score
  */
 
-export type ModelsByLayerCount = (Omit<NeuralNetwork, 'mutate'> & {
-  diff?: number;
-  date?: string;
-})[];
+export type ModelsByLayerCount = (
+  | (Omit<NeuralNetwork, 'mutate'> & {
+      diff?: number;
+      date?: string;
+    })
+  | any
+)[];
 
 export function fileUtilities(game = '') {
   const name = (layer: number) => `${game}_${layer}`;
@@ -57,7 +59,7 @@ export function fileUtilities(game = '') {
   }
 
   function loadModels(layers: number, namespace = name(layers)) {
-    let models: NeuralSaves['layers'] = [];
+    let models: ModelsByLayerCount[number] = [];
     try {
       const data = localStorage.getItem(namespace);
       if (!data) throw new Error(`not found`);

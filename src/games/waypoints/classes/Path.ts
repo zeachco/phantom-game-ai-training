@@ -1,5 +1,5 @@
-import { randInt } from "../../../utilities/math";
-import { Segment } from "./Segment";
+import { randInt } from '../../../utilities/math';
+import { Segment } from './Segment';
 
 export class Path {
   constructor(public segments: Segment[][] = []) {}

@@ -2,8 +2,8 @@ import { lerp, rand } from '../utilities/math';
 import { ModelsByLayerCount } from './utils';
 
 export class NeuralNetwork {
-  version = 0;
-  levels: Level[];
+  public version = 0;
+  public levels: Level[];
   /** fatasy points given to train the model */
   public score: number = 0;
   /** 0-1 amount kept when merging to another model */

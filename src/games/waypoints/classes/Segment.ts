@@ -1,4 +1,5 @@
 import { MeshBasicMaterial, RingGeometry, Mesh, Clock } from "three";
+import { rand } from '../../../utilities/math';
 
 const geometry = new RingGeometry();
 const material = new MeshBasicMaterial({
@@ -15,6 +16,7 @@ export class Segment {
     this.mesh.scale.set(0.2, 0.2, 0.02);
     this.mesh.position.x = x;
     this.mesh.position.y = y;
+    // this.mesh.position.z = rand(-20, 20);
   }
 
   public isInRange(mesh: Mesh, range = 0.1) {
