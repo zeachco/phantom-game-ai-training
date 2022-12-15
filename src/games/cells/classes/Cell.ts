@@ -31,6 +31,7 @@ export class Cell {
 
     public attack() {
         if (this.dead || this.atk > 5) return
+        this.energy -= 5
         this.vatk = 10;
     }
 
@@ -51,7 +52,8 @@ export class Cell {
         this.vatk *= 0.99
         this.atk = (this.atk + this.vatk) * .7
         if (this.dead) return
-        this.energy -= this.s / 100
+        this.energy -= this.s / 50
+        this.energy -= this.va / 100
         this.x += Math.cos(this.a) * this.s
         this.y += Math.sin(this.a) * this.s
         this.a += this.va / (1 + this.atk / 2)
@@ -84,7 +86,7 @@ export class Cell {
 
     public draw(ctx: CanvasRenderingContext2D) {
         if (this.focused) this.drawRelations(ctx)
-        const frontAngle = Math.PI * this.mouthSize / 10
+        const frontAngle = Math.PI * lerp(0.15, .4, this.atk / 10)
         ctx.strokeStyle = 'rgba(255, 255, 255, .8)'
         ctx.fillStyle = this.focused ? 'rgba(255, 128, 128, .8)' : 'rgba(0, 128, 128, .8)'
 
@@ -107,8 +109,6 @@ export class Cell {
         ctx.stroke()
         ctx.fill()
         ctx.restore()
-
-        ctx.fillText(`${this.energy.toFixed(0)}`, this.x - 5, this.y - this.radius)
     }
 
     private get radius() {
@@ -162,7 +162,7 @@ export class Cell {
         this.energy += chunk
         this.score += 1
 
-        if (cell.energy < 5) {
+        if (cell.energy < 2) {
             cell.dead = true
         }
     }

@@ -49,9 +49,9 @@ export default async () => {
   }
 
   function AIControl(cell: Cell) {
-    if (Math.random() > .75) cell.forward()
-    if (Math.random() > .25) cell.turnLeft()
-    if (Math.random() > .25) cell.turnRight()
-    if (Math.random() > .85) cell.attack()
+    if (Math.random() > .6) cell.forward()
+    if (Math.random() > .5) cell.turnLeft()
+    if (Math.random() > .5) cell.turnRight()
+    if (Math.random() > .9) cell.attack()
   }
 };
