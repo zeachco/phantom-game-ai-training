@@ -73,3 +73,7 @@ export function angleOffset(a1: number, a2: number) {
   if (diffAngle < -Math.PI) diffAngle += Math.PI * 2
   return diffAngle
 }
+
+export function vecLength(x: number, y: number) {
+  return Math.sqrt(x * x + y * y)
+}

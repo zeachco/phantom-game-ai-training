@@ -3,6 +3,7 @@ import { NeuralUnit } from "./NeuralUnit.js";
 
 export class NeuralNetwork {
   public layers: NeuralUnit[][] = [];
+  public score = 0;
 
   constructor(
     public inputs: number,
@@ -40,6 +41,7 @@ export class NeuralNetwork {
 
   public toJSON(): string {
     const data = {
+      score: this.score,
       generation: this.generation,
       layers: this.layers,
     };
