@@ -2,24 +2,20 @@
 
 ## Game
 
-Cells running at each others eating the compatible ones and fleeing from predatorial ones
+Cells running at each others eating the ones in a bad position ones and fleeing from predatorial ones
 
 ## Rules
 
-cells leave traces of their composition
-cells can change their composition with enough energy
-bigger cells cells eats smaller ones (bits per bits)
+bigger cells eats smaller ones (bits per bits)
 
 ## Controls
 
 - turn left
 - turn right
 - advance
+- feed
 
 ## Sensors
 
-- color detector
+- array of n enemies with their distance, relative angle, vulnerability (back-facing)
 - color side
-
-- In a radius, get an array of cells and their team
-- Relative positioning with angle

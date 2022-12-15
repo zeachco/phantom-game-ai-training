@@ -59,3 +59,17 @@ export function easeInCirc(x: number): number {
 export function sum(...nbs: number[]) {
   return nbs.reduce((acc, nb) => acc + nb, 0);
 }
+
+/**
+ * Return between -Math.PI and Math.PI
+ */
+export function getAngle(x: number, y: number) {
+  return Math.atan2(y, x);
+}
+
+export function angleOffset(a1: number, a2: number) {
+  let diffAngle = a1 - a2;
+  if (diffAngle > Math.PI) diffAngle -= Math.PI * 2
+  if (diffAngle < -Math.PI) diffAngle += Math.PI * 2
+  return diffAngle
+}

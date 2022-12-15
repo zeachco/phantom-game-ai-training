@@ -1,7 +1,7 @@
 import { Ball } from "./Ball";
 import { CollisionBox } from "./CollisionBox";
 import { Player } from "./Player";
-import {createCanvas} from '../../utilities/dom'
+import { createCanvas } from '../../utilities/dom'
 
 export default () => {
   const canvas = createCanvas();
