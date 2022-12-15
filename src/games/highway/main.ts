@@ -9,7 +9,6 @@ import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
-import { NeuralNetwork } from '../../ai/Network';
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -32,7 +31,7 @@ export default async (state: typeof defaultState) => {
 
   function setupAIs() {
     const cars: Car[] = [];
-    // config.autoDistributeByScores(state.sortedModels);
+    config.autoDistributeByScores(state.sortedModels);
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
@@ -124,6 +123,16 @@ export default async (state: typeof defaultState) => {
     const livingCarsWithMutations = state.livingCars.filter((c) => {
       return c.brain.mutationFactor > 0;
     });
+    if (!state.playing) {
+      carCtx.font = 'bold 24px Arial'
+      carCtx.textBaseline = 'middle'
+      carCtx.textAlign = 'center'
+      carCtx.fillStyle = 'red'
+      carCtx.strokeStyle = '#800'
+      carCtx.lineWidth = 1
+      carCtx.fillText(`GAME OVER`, carCanvas.width/2, carCanvas.height/2)
+      carCtx.strokeText(`GAME OVER`, carCanvas.width/2, carCanvas.height/2)
+    }
     if (!livingCarsWithMutations[0]) endExperiment();
   });
   function initialize() {
