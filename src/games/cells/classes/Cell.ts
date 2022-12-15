@@ -86,7 +86,7 @@ export class Cell {
 
     public draw(ctx: CanvasRenderingContext2D) {
         if (this.focused) this.drawRelations(ctx)
-        const frontAngle = Math.PI * lerp(0.15, .4, this.atk / 10)
+        const frontAngle = Math.PI * lerp(0.15, .4, this.atk / 50)
         ctx.strokeStyle = 'rgba(255, 255, 255, .8)'
         ctx.fillStyle = this.focused ? 'rgba(255, 128, 128, .8)' : 'rgba(0, 128, 128, .8)'
 
@@ -100,7 +100,8 @@ export class Cell {
         ctx.lineTo(0, 0)
 
         // mouth
-        ctx.arc(this.attkRange, 0, this.mouthSize, 0, Math.PI * 2)
+        ctx.arc(this.attkRange, 0, this.mouthSize, frontAngle, Math.PI * 2 - frontAngle)
+        ctx.lineTo(0, 0)
 
         if (this.dead) {
             ctx.fillStyle = 'rgba(255, 255, 255, .05)'
