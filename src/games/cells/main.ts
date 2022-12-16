@@ -1,4 +1,5 @@
 
+import { NeuralVisualizer } from '../../ai/NeuralVisualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { rand, randInt } from '../../utilities/math';
@@ -10,6 +11,7 @@ export default async () => {
   const gamepad = new GamePad()
   const canvas = createCanvas();
   const ctx = canvas.getContext("2d");
+  const vizualizer = new NeuralVisualizer(ctx)
   if (!ctx) throw new Error("no 2d context");
 
   const GW = (canvas.width = window.innerWidth);
@@ -19,6 +21,7 @@ export default async () => {
   let cells: Cell[] = []
 
   let currentTop = cells[0]
+  let renderViz = false
 
   const dummy = new Cell()
   dummy.brain.loadFromFile('top')
@@ -66,7 +69,7 @@ export default async () => {
         })
 
         cell.brain.loadFromFile('top')
-        cell.brain.mutationAmount = total / Cell.MAX_NB / (1 + bestSavedScore) * 500
+        cell.brain.mutationAmount = total / Cell.MAX_NB / (1 + bestSavedScore)
         cell.brain.randomize()
         cell.brain.score = 0
         cells.push(cell)
@@ -75,6 +78,7 @@ export default async () => {
 
     cells.forEach(cell => cell.updateTargets(cells, GW, GH))
     const scores = cells.concat().sort((a, b) => b.brain.score - a.brain.score)
+    window.scores = scores
     cells.forEach(cell => {
       cell.focused = cell === scores[0]
       cell.draw(ctx)
@@ -90,6 +94,15 @@ export default async () => {
       currentTop.brain.saveToFile('top')
     }
 
+    if (gamepad.once('KeyV')) renderViz = !renderViz
+    if (renderViz) vizualizer.render()
+    else {
+      ctx.fillStyle = 'rgba(255, 255, 255, .6)'
+      ctx.font = '24px Arial'
+      ctx.textAlign = "left"
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(`Press V for neural network visuals`, 0, GH)
+    }
   });
 
   function humanControl(cell: Cell) {

@@ -12,7 +12,9 @@ interface Target {
 export class Cell {
     public static TRACK_NB = 3
     public static RADIUS = 10
-    public static MAX_NB = 20
+    public static MAX_NB = 2
+    public static MIN_AGE_TO_INTERACT = 1
+    public static SENIOR_AGE = 100
 
     public faction: number = randInt(0, MAX_FACTIONS - 1);
 
@@ -30,6 +32,7 @@ export class Cell {
     public energy = 100
     public atk = 0;
     public vatk = 0;
+    public age = 0;
 
     public brain = new NeuralNetwork(Cell.MAX_NB * 2, 3, [Cell.MAX_NB, 5])
 
@@ -51,6 +54,9 @@ export class Cell {
     public get radius() {
         return Cell.RADIUS + this.energy / 20
     }
+    public kill() {
+        this.dead = true;
+    }
 
     public update() {
         this.s *= 0.99
@@ -67,7 +73,9 @@ export class Cell {
         this.a += this.va
         if (this.a > Math.PI) this.a -= Math.PI * 2
         if (this.a < -Math.PI) this.a += Math.PI * 2
-        if (this.brain.score < -25) this.dead = true
+        if (this.brain.score < -25) this.kill()
+        this.age += 0.01
+        if (this.age > 100) this.brain.score -= 1
     }
 
     public updateTargets(others: Cell[], gw, gh) {
@@ -83,19 +91,6 @@ export class Cell {
             const isPrey = factionOffset(this.faction, -1) === other.faction
             if (isPredator) opportunity--
             if (isPrey) opportunity++
-            if (distance < this.radius + other.radius) {
-                // Collide with predator
-                if (factionOffset(this.faction, 1) === other.faction) {
-                    this.dead = true
-                    this.brain.score -= 10
-                }
-
-                // Collide with prey 
-                if (factionOffset(this.faction, -1) === other.faction) {
-                    other.dead = true
-                    this.brain.score += 10
-                }
-            }
 
             let x = other.x
             let y = other.y
@@ -110,6 +105,23 @@ export class Cell {
                 distance,
                 opportunity,
             })
+
+            if (this.age < Cell.MIN_AGE_TO_INTERACT || other.age < Cell.MIN_AGE_TO_INTERACT) continue
+
+            if (distance < this.radius + other.radius) {
+                // Collide with predator
+                if (factionOffset(this.faction, 1) === other.faction) {
+                    // this.dead = true
+                    this.brain.score -= 10
+                }
+
+                // Collide with prey
+                if (factionOffset(this.faction, -1) === other.faction) {
+                    other.kill()
+                    this.brain.score += 10
+                }
+            }
+
         }
 
         this.others.sort((a, b) => a.distance - b.distance)
@@ -117,18 +129,19 @@ export class Cell {
     }
 
     public draw(ctx: CanvasRenderingContext2D) {
-        if (this.focused) this.drawRelations(ctx)
+        if (this.focused) this.drawSensors(ctx)
         this.drawBody(ctx)
         this.drawScore(ctx)
     }
 
     private drawBody(ctx: CanvasRenderingContext2D) {
-        const alpha = this.focused ? 1 : .4
+        const alpha = this.focused ? 1 : .51
         const target = factionOffset(this.faction, -1)
         const frontAngle = Math.PI * .1
+        const light = this.age > Cell.SENIOR_AGE ? '80%' : '50%'
         ctx.lineWidth = 3
         ctx.strokeStyle = `hsla(${FACTIONS[this.faction]}, 100%, 70%, ${alpha})`
-        ctx.fillStyle = `hsla(${FACTIONS[this.faction]}, 100%, 50%, ${alpha})`
+        ctx.fillStyle = `hsla(${FACTIONS[this.faction]}, 100%,${light}, ${alpha})`
 
         ctx.save()
         ctx.translate(this.x, this.y)
@@ -140,7 +153,7 @@ export class Cell {
         ctx.lineTo(this.radius * .5, 0)
 
         ctx.stroke()
-        ctx.fill()
+        if (this.age > Cell.MIN_AGE_TO_INTERACT) ctx.fill()
         ctx.beginPath()
 
         ctx.strokeStyle = `hsla(${FACTIONS[target]}, 100%, 80%, ${alpha})`
@@ -153,7 +166,7 @@ export class Cell {
         ctx.restore()
     }
 
-    private drawRelations(ctx: CanvasRenderingContext2D) {
+    private drawSensors(ctx: CanvasRenderingContext2D) {
         ctx.setLineDash([3, 3]);
         ctx.lineWidth = 2
         this.others.slice(0, Cell.TRACK_NB).forEach((target, index) => {
@@ -163,6 +176,11 @@ export class Cell {
             ctx.moveTo(this.x, this.y)
             ctx.lineTo(target.x, target.y)
             ctx.stroke()
+
+            const a = getAngle(this.x - target.x, this.y - target.y)
+
+            ctx.fillStyle = 'black'
+            ctx.fillText(a.toFixed(1), target.x, target.y)
         })
         ctx.setLineDash([]);
     }
