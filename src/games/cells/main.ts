@@ -20,7 +20,7 @@ export default async () => {
   let cells: Cell[] = [];
 
   let currentTop = cells[0];
-  let renderViz = false;
+  let renderViz = true;
 
   const dummy = new Cell();
   dummy.brain.loadFromFile('top');
@@ -85,8 +85,10 @@ export default async () => {
     cells = cells.filter((cell) => !cell.dead);
 
     currentTop = scores[0];
+    vizualizer.network = cells[0]?.brain;
     if (currentTop && currentTop.brain.score > bestSavedScore) {
       const newScore = currentTop.brain.score;
+      vizualizer.network = currentTop.brain;
       console.log(
         `New score: ${bestSavedScore} > ${newScore.toFixed()} (+${(
           newScore - bestSavedScore
