@@ -20,7 +20,7 @@ export default async () => {
   let cells: Cell[] = [];
 
   let currentTop = cells[0];
-  let renderViz = true;
+  let renderViz = false;
 
   const dummy = new Cell();
   dummy.brain.loadFromFile('top');
@@ -34,7 +34,7 @@ export default async () => {
     const factionTotal = new Array(MAX_FACTIONS).fill(0);
     cells.forEach((cell, index) => {
       factionTotal[cell.faction]++;
-      // if (cell.focused) humanControl(cell)
+      // if (cell.focused) humanControl(cell);
       // else AIControl(cell)
       AIControl(cell);
 
@@ -55,9 +55,9 @@ export default async () => {
     factionTotal.forEach((total, index) => {
       if (total < Cell.MAX_NB) {
         const orgCell = cells.find((c) => c.faction === index);
-        const x = orgCell?.x || randInt(0, GW);
-        const y = orgCell?.y || randInt(0, GH);
-        const a = orgCell?.a || rand(-Math.PI, Math.PI);
+        const x = randInt(0, GW);
+        const y = randInt(0, GH);
+        const a = rand(-Math.PI, Math.PI);
 
         const cell = new Cell({
           x,
@@ -67,6 +67,9 @@ export default async () => {
           faction: index,
         });
 
+        if (orgCell) {
+          cell.brain.name = `${orgCell.brain.name} => ${index}`;
+        }
         cell.brain.loadFromFile('top');
         cell.brain.mutationAmount = total / Cell.MAX_NB / (1 + bestSavedScore);
         cell.brain.randomize();
@@ -76,7 +79,7 @@ export default async () => {
     });
 
     cells.forEach((cell) => cell.updateTargets(cells, GW, GH));
-    const scores = cells.concat().sort((a, b) => b.brain.score - a.brain.score);
+    const scores = cells.concat().sort((a, b) => b.scorediff - a.scorediff);
     (window as any).scores = scores;
     cells.forEach((cell) => {
       cell.focused = cell === scores[0];
@@ -86,9 +89,11 @@ export default async () => {
 
     currentTop = scores[0];
     vizualizer.network = cells[0]?.brain;
+    vizualizer.entity = cells[0];
     if (currentTop && currentTop.brain.score > bestSavedScore) {
       const newScore = currentTop.brain.score;
       vizualizer.network = currentTop.brain;
+      vizualizer.entity = currentTop;
       console.log(
         `New score: ${bestSavedScore} > ${newScore.toFixed()} (+${(
           newScore - bestSavedScore

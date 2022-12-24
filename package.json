@@ -5,6 +5,7 @@
   "url": "https://zeachco.github.io/phantom-game-ai-training/",
   "license": "MIT",
   "dependencies": {
+    "@tensorflow/tfjs": "^4.1.0",
     "@types/matter-js": "^0.18.2",
     "matter-js": "^0.18.0",
     "three": "^0.139.2"

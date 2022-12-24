@@ -1,9 +1,10 @@
-import { lerp, rand } from "../../../utilities/math.js";
-import { NeuralUnit } from "./NeuralUnit.js";
+import { lerp, rand } from '../../../utilities/math.js';
+import { NeuralUnit } from './NeuralUnit.js';
 
 export class NeuralNetwork {
   public layers: NeuralUnit[][] = [];
   public score = 0;
+  public name;
 
   constructor(
     public inputs: number,
@@ -12,13 +13,19 @@ export class NeuralNetwork {
     public generation = 0,
     public mutationAmount = 0,
   ) {
+    this.name = `Network ${[
+      this.inputs,
+      ...this.hiddenLayers,
+      this.outputs,
+    ].join('.')}`;
     this.layers = [inputs, ...hiddenLayers, outputs].map((unitCount) =>
-      new Array(unitCount).fill(0).map(() =>
-        new NeuralUnit({
-          bias: 0,
-          weight: 0,
-        })
-      )
+      new Array(unitCount).fill(0).map(
+        () =>
+          new NeuralUnit({
+            bias: 0,
+            weight: 0,
+          }),
+      ),
     );
 
     this.randomize(1);
@@ -32,7 +39,7 @@ export class NeuralNetwork {
   }
 
   public saveToFile(filename: string) {
-    localStorage.setItem(filename, this.toJSON())
+    localStorage.setItem(filename, this.toJSON());
   }
 
   public fromObject(data: NeuralNetwork) {
