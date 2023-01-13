@@ -1,0 +1,1 @@
+import{c as t}from"./dom.be162d4e.js";import{GamePad as n}from"./Gamepad.270f14b5.js";import{GameLoop as e}from"./GameLoop.ae440459.js";import"./three.module.13bf8b03.js";const d=async()=>{const o=t();if(new n(new Map,!0,o),!o.getContext("2d"))throw new Error("no 2d context");o.width=window.innerWidth,o.height=window.innerHeight,new e().play((i,c)=>{})};export{d as default};
