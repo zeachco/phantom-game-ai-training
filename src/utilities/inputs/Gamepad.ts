@@ -5,14 +5,35 @@ export class GamePad {
   constructor(
     public aliases: Map<string, string> = new Map(),
     public debug = true,
+    private container: HTMLElement | Document = document,
   ) {
-    document.addEventListener('keydown', register.bind(this));
-    document.addEventListener('keyup', unregister.bind(this));
-    document.addEventListener('keypress', onkey.bind(this));
-    document.addEventListener('mousedown', register.bind(this));
-    document.addEventListener('mouseup', unregister.bind(this));
-    document.addEventListener('mouseclick', onkey.bind(this));
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.register = this.register.bind(this);
+    this.unregister = this.unregister.bind(this);
+    this.onkey = this.onkey.bind(this);
+    this.handleMouveMovement = this.handleMouveMovement.bind(this);
+    this.cancel = this.cancel.bind(this);
+
+    container.addEventListener('keydown', this.register);
+    container.addEventListener('keyup', this.unregister);
+    container.addEventListener('keypress', this.onkey);
+    container.addEventListener('mousedown', this.register);
+    container.addEventListener('mouseup', this.unregister);
+    container.addEventListener('mouseclick', this.onkey);
+    container.addEventListener('contextmenu', this.cancel);
+    container.addEventListener('mousemove', this.handleMouveMovement);
+    container.addEventListener('wheel', this.handleMouveMovement);
+  }
+
+  public remove() {
+    this.container.addEventListener('keydown', this.register);
+    this.container.addEventListener('keyup', this.unregister);
+    this.container.addEventListener('keypress', this.onkey);
+    this.container.addEventListener('mousedown', this.register);
+    this.container.addEventListener('mouseup', this.unregister);
+    this.container.addEventListener('mouseclick', this.onkey);
+    this.container.addEventListener('contextmenu', this.cancel);
+    this.container.addEventListener('mousemove', this.handleMouveMovement);
+    this.container.addEventListener('wheel', this.handleMouveMovement);
   }
 
   public get(code: string): number {
@@ -33,20 +54,31 @@ export class GamePad {
     if (val) this.inputs.delete(key);
     return Boolean(val);
   }
-}
 
-function register(ev: KeyboardEvent) {
-  ev.preventDefault();
-  const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
-  this.set(key, 1);
-}
-function unregister(ev: KeyboardEvent) {
-  ev.preventDefault();
-  const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
-  this.set(key, 0);
-}
-function onkey(ev: KeyboardEvent) {
-  ev.preventDefault();
-  const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
-  this.set(key, 1, true);
+  private register(ev: KeyboardEvent | MouseEvent) {
+    ev.preventDefault();
+    const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
+    this.set(key, 1);
+  }
+  private unregister(ev: KeyboardEvent | MouseEvent) {
+    ev.preventDefault();
+    const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
+    this.set(key, 0);
+  }
+  private onkey(ev: KeyboardEvent | MouseEvent) {
+    ev.preventDefault();
+    const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
+    this.set(key, 1, true);
+  }
+  private handleMouveMovement(ev: MouseEvent | WheelEvent) {
+    if (ev instanceof WheelEvent) {
+      this.set('MouseZ', (ev as any).wheelDelta);
+    } else {
+      this.set('MouseX', ev.x);
+      this.set('MouseY', ev.y);
+    }
+  }
+  private cancel(ev: MouseEvent) {
+    ev.preventDefault();
+  }
 }

@@ -7,8 +7,8 @@ import { Cell } from './classes/Cell';
 import { MAX_FACTIONS } from './factions';
 
 export default async () => {
-  const gamepad = new GamePad();
   const canvas = createCanvas();
+  const gamepad = new GamePad(new Map(), true, canvas);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('no 2d context');
 
@@ -16,10 +16,11 @@ export default async () => {
   let GH = (canvas.height = window.innerHeight);
   const loop = new GameLoop();
 
-  loop.play((_es, _dt) => {
-    GW = canvas.width = window.innerWidth;
-    GH = canvas.height = window.innerHeight;
+  let drawing = false;
 
+  loop.play((_es, _dt) => {
+    // GW = canvas.width = window.innerWidth;
+    // GH = canvas.height = window.innerHeight;
     // if (gamepad.once('KeyV'))
   });
 
