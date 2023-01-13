@@ -13,6 +13,10 @@ export class GamePad {
     this.handleMouveMovement = this.handleMouveMovement.bind(this);
     this.cancel = this.cancel.bind(this);
 
+    this.inputs.set('MouseX', 0);
+    this.inputs.set('MouseY', 0);
+    this.inputs.set('MouseZ', 0);
+
     container.addEventListener('keydown', this.register);
     container.addEventListener('keyup', this.unregister);
     container.addEventListener('keypress', this.onkey);
@@ -72,8 +76,11 @@ export class GamePad {
   }
   private handleMouveMovement(ev: MouseEvent | WheelEvent) {
     if (ev instanceof WheelEvent) {
+      this.set('MouseOZ', this.get('MouseZ'));
       this.set('MouseZ', (ev as any).wheelDelta);
     } else {
+      this.set('MouseOX', this.get('MouseX'));
+      this.set('MouseOY', this.get('MouseY'));
       this.set('MouseX', ev.x);
       this.set('MouseY', ev.y);
     }

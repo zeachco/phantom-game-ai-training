@@ -1,28 +1,60 @@
 import { NeuralVisualizer } from '../../ai/NeuralVisualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
-import { rand, randInt } from '../../utilities/math';
+import { randInt } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Cell } from './classes/Cell';
-import { MAX_FACTIONS } from './factions';
+
+const DRAW_SIZE = 160;
+let lineSize = 4;
 
 export default async () => {
   const canvas = createCanvas();
-  const gamepad = new GamePad(new Map(), true, canvas);
+  const gamepad = new GamePad(new Map(), false, canvas);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('no 2d context');
 
   let GW = (canvas.width = window.innerWidth);
   let GH = (canvas.height = window.innerHeight);
   const loop = new GameLoop();
+  clear();
 
-  let drawing = false;
+  let [drawing, mx, my] = [false, 0, 0];
 
   loop.play((_es, _dt) => {
-    // GW = canvas.width = window.innerWidth;
-    // GH = canvas.height = window.innerHeight;
-    // if (gamepad.once('KeyV'))
+    if (gamepad.get('Mouse2')) clear();
+    if (gamepad.get('Mouse0') && !drawing) {
+      mx = gamepad.get('MouseX');
+      my = gamepad.get('MouseY');
+      drawing = true;
+    }
+    if (drawing && !gamepad.get('Mouse0')) {
+      drawing = false;
+    }
+    if (drawing) {
+      ctx.beginPath();
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = lineSize;
+      ctx.moveTo(mx, my);
+      mx = gamepad.get('MouseX');
+      my = gamepad.get('MouseY');
+      ctx.lineTo(mx, my);
+      ctx.stroke();
+    }
   });
+
+  function clear() {
+    GW = canvas.width = window.innerWidth;
+    GH = canvas.height = window.innerHeight;
+    ctx.fillStyle = 'white';
+    lineSize = randInt(1, 5);
+    ctx.fillRect(
+      GW / 2 - DRAW_SIZE / 2,
+      GH / 2 - DRAW_SIZE / 2,
+      DRAW_SIZE,
+      DRAW_SIZE,
+    );
+  }
 
   function humanControl(cell: Cell) {
     if (gamepad.get('ArrowUp')) cell.forward();
