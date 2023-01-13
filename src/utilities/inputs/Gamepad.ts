@@ -4,14 +4,15 @@ export class GamePad {
 
   constructor(
     public aliases: Map<string, string> = new Map(),
-    public debug = false,
+    public debug = true,
   ) {
-    const register = (ev: KeyboardEvent) => this.set(ev.code, 1);
-    const unregister = (ev: KeyboardEvent) => this.set(ev.code, 0);
-    const onkey = (ev: KeyboardEvent) => this.set(ev.code, 1, true);
     document.addEventListener('keydown', register.bind(this));
     document.addEventListener('keyup', unregister.bind(this));
     document.addEventListener('keypress', onkey.bind(this));
+    document.addEventListener('mousedown', register.bind(this));
+    document.addEventListener('mouseup', unregister.bind(this));
+    document.addEventListener('mouseclick', onkey.bind(this));
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   public get(code: string): number {
@@ -32,4 +33,20 @@ export class GamePad {
     if (val) this.inputs.delete(key);
     return Boolean(val);
   }
+}
+
+function register(ev: KeyboardEvent) {
+  ev.preventDefault();
+  const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
+  this.set(key, 1);
+}
+function unregister(ev: KeyboardEvent) {
+  ev.preventDefault();
+  const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
+  this.set(key, 0);
+}
+function onkey(ev: KeyboardEvent) {
+  ev.preventDefault();
+  const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
+  this.set(key, 1, true);
 }

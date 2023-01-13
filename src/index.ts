@@ -8,18 +8,19 @@ const apps = new Map<string, Function>([
   ['space-shield', () => import(`./games/space-shield/index.js`)],
   ['waypoints', () => import(`./games/waypoints/main.js`)],
   ['cells', () => import(`./games/cells/main.js`)],
+  ['number', () => import(`./games/number/main.js`)],
 ]);
 
-const ul = document.createElement("ul");
+const ul = document.createElement('ul');
 document.body.appendChild(ul);
 
 apps.forEach((_game, key) => {
-  const li = document.createElement("li");
+  const li = document.createElement('li');
   li.innerHTML = `<a href="?game=${key}">${key}</a>`;
   ul.appendChild(li);
 });
 
-const game = urlParams.get("game") || "";
+const game = urlParams.get('game') || '';
 const app = apps.get(game);
 
 if (app) {
