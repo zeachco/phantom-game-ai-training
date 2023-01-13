@@ -81,8 +81,8 @@ export class GamePad {
     } else {
       this.set('MouseOX', this.get('MouseX'));
       this.set('MouseOY', this.get('MouseY'));
-      this.set('MouseX', ev.x);
-      this.set('MouseY', ev.y);
+      this.set('MouseX', ev.offsetX);
+      this.set('MouseY', ev.offsetY);
     }
   }
   private cancel(ev: MouseEvent) {
