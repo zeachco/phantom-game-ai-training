@@ -6,12 +6,21 @@ import { GameLoop } from '../../utilities/three/GameLoop';
 import { Cell } from './classes/Cell';
 
 const DRAW_SIZE = 160;
+const LOD_RATIO = 0.1;
 let lineSize = 4;
 
 export default async () => {
+  const preview = createCanvas();
   const canvas = createCanvas();
+  canvas.style.margin = '100px';
+  preview.style.margin = '100px';
+  preview.style.outlineStyle = 'dotted';
+  canvas.style.outlineStyle = 'dotted';
+  preview.style.width = DRAW_SIZE + 'px';
+  preview.style.height = DRAW_SIZE + 'px';
   const gamepad = new GamePad(new Map(), false, canvas);
   const ctx = canvas.getContext('2d');
+  const pctx = preview.getContext('2d');
   if (!ctx) throw new Error('no 2d context');
 
   let GW = (canvas.width = window.innerWidth);
@@ -30,22 +39,35 @@ export default async () => {
     }
     if (drawing && !gamepad.get('Mouse0')) {
       drawing = false;
+      refreshPreview();
     }
     if (drawing) {
       ctx.beginPath();
+      pctx.beginPath();
       ctx.strokeStyle = 'black';
-      ctx.lineWidth = lineSize;
+      pctx.strokeStyle = 'black';
+      ctx.lineWidth = 6;
+      pctx.lineWidth = 1;
       ctx.moveTo(mx, my);
+      pctx.moveTo(mx * LOD_RATIO, my * LOD_RATIO);
       mx = gamepad.get('MouseX');
       my = gamepad.get('MouseY');
       ctx.lineTo(mx, my);
+      pctx.lineTo(mx * LOD_RATIO, my * LOD_RATIO);
       ctx.stroke();
+      pctx.stroke();
     }
   });
 
   function clear() {
-    GW = canvas.width = window.innerWidth;
-    GH = canvas.height = window.innerHeight;
+    GW = canvas.width = DRAW_SIZE;
+    GH = canvas.height = DRAW_SIZE;
+    preview.width = GW * LOD_RATIO;
+    preview.height = GH * LOD_RATIO;
+    // pctx.fillStyle = 'white';
+    // pctx.fillRect(0, 0, GW, GH);
+    ctx.fillStyle = 'gray';
+    ctx.fillRect(0, 0, GW, GH);
     ctx.fillStyle = 'white';
     lineSize = randInt(1, 5);
     ctx.fillRect(
@@ -55,6 +77,8 @@ export default async () => {
       DRAW_SIZE,
     );
   }
+
+  function refreshPreview() {}
 
   function humanControl(cell: Cell) {
     if (gamepad.get('ArrowUp')) cell.forward();
