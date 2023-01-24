@@ -1,4 +1,4 @@
-import { MeshBasicMaterial, RingGeometry, Mesh, Clock } from "three";
+import { MeshBasicMaterial, RingGeometry, Mesh, Clock } from 'three';
 import { rand } from '../../../utilities/math';
 
 const geometry = new RingGeometry();
@@ -25,7 +25,7 @@ export class Segment {
   }
 
   update() {
-    this.mesh.rotateZ(2);
-    this.mesh.scale.y = 0.2 + Math.sin(this.clock.getElapsedTime() * 10) * 0.02;
+    // this.mesh.rotateZ(2);
+    // this.mesh.scale.y = 0.2 + Math.sin(this.clock.getElapsedTime() * 10) * 0.02;
   }
 }

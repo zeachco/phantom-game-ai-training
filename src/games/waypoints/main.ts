@@ -1,8 +1,8 @@
-import { Scene, PerspectiveCamera, WebGLRenderer, Clock } from "three";
-import { Mob } from "./classes/Mob";
-import { Path } from "./classes/Path";
-import { Segment } from "./classes/Segment";
-import map from "./maps/default";
+import { Scene, PerspectiveCamera, WebGLRenderer, Clock } from 'three';
+import { Mob } from './classes/Mob';
+import { Path } from './classes/Path';
+import { Segment } from './classes/Segment';
+import map from './maps/default';
 
 export default () => {
   const scene = new Scene();
@@ -60,7 +60,7 @@ export default () => {
 
     // Apply matrix like this to rotate the camera.
     const es = clock.getElapsedTime() * 0.1 * Math.PI;
-    camera.position.set(5 + Math.cos(es) * 10, 15 + Math.sin(es) * 10, 20);
+    camera.position.set(-8 + Math.cos(es) * 5, -8 + Math.sin(es) * 5, 25);
 
     // Make camera look at the box.
     camera.lookAt(0, 0, 0);
