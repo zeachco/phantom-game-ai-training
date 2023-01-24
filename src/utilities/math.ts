@@ -3,7 +3,7 @@ export interface Vector {
   y: number;
 }
 
-export function rand(min = -1, max = 1) {
+export function rand(min = -1, max = 1): number {
   return min + Math.random() * (max - min);
 }
 
@@ -42,7 +42,7 @@ export function polysIntersect(poly1: Vector[], poly2: Vector[]) {
         poly1[i],
         poly1[(i + 1) % poly1.length],
         poly2[j],
-        poly2[(j + 1) % poly2.length]
+        poly2[(j + 1) % poly2.length],
       );
       if (touch) {
         return true;
@@ -69,11 +69,11 @@ export function getAngle(x: number, y: number) {
 
 export function angleOffset(a1: number, a2: number) {
   let diffAngle = a1 - a2;
-  if (diffAngle > Math.PI) diffAngle -= Math.PI * 2
-  if (diffAngle < -Math.PI) diffAngle += Math.PI * 2
-  return diffAngle
+  if (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+  if (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+  return diffAngle;
 }
 
 export function vecLength(x: number, y: number) {
-  return Math.sqrt(x * x + y * y)
+  return Math.sqrt(x * x + y * y);
 }

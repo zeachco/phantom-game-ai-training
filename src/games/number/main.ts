@@ -1,13 +1,13 @@
 import { NeuralVisualizer } from '../../ai/NeuralVisualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
-import { randInt } from '../../utilities/math';
+import { lerp, rand, randInt } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Cell } from './classes/Cell';
 
 const DRAW_SIZE = 160;
 const LOD_RATIO = 0.1;
-let lineSize = 4;
+const BAR_H = 100;
 
 export default async () => {
   const preview = createCanvas();
@@ -29,8 +29,14 @@ export default async () => {
   clear();
 
   let [drawing, mx, my] = [false, 0, 0];
+  var currentTarget = 0;
 
   loop.play((_es, _dt) => {
+    ctx.font = '120px monospace';
+    ctx.fillStyle = 'rgba(230,230,230,0.1)';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.fillText('' + currentTarget, GW / 2, GH / 2);
     if (gamepad.get('Mouse2')) clear();
     if (gamepad.get('Mouse0') && !drawing) {
       mx = gamepad.get('MouseX');
@@ -46,7 +52,7 @@ export default async () => {
       pctx.beginPath();
       ctx.strokeStyle = 'black';
       pctx.strokeStyle = 'black';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 10;
       pctx.lineWidth = 1;
       ctx.moveTo(mx, my);
       pctx.moveTo(mx * LOD_RATIO, my * LOD_RATIO);
@@ -57,9 +63,39 @@ export default async () => {
       ctx.stroke();
       pctx.stroke();
     }
+
+    for (let nb = 0; nb < 10; nb++) {
+      const xs = lerp(0, GW, nb / 10);
+      const ratio = rand(0, 1);
+      const height = ratio * BAR_H;
+      ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(255, 255, 255, .2)';
+      ctx.fillRect(xs, GW - BAR_H / 3, GW / 10, BAR_H / 3);
+      ctx.fillStyle = `hsla(${90 - Math.round(ratio * 45)}, 100%, 50%, .3)`;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillRect(
+        xs + 2,
+        GW - BAR_H / 3 + (BAR_H - height),
+        GW / 10 - 4,
+        height,
+      );
+      ctx.strokeRect(
+        xs + 2,
+        GW - BAR_H / 3 + (BAR_H - height),
+        GW / 10 - 4,
+        height,
+      );
+      ctx.fillStyle = 'gray';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`${nb}`, xs + GW / 20, GH);
+    }
   });
 
   function clear() {
+    currentTarget++;
+    if (currentTarget > 9) currentTarget = 0;
     GW = canvas.width = DRAW_SIZE;
     GH = canvas.height = DRAW_SIZE;
     preview.width = GW * LOD_RATIO;
@@ -69,7 +105,6 @@ export default async () => {
     ctx.fillStyle = 'gray';
     ctx.fillRect(0, 0, GW, GH);
     ctx.fillStyle = 'white';
-    lineSize = randInt(1, 5);
     ctx.fillRect(
       GW / 2 - DRAW_SIZE / 2,
       GH / 2 - DRAW_SIZE / 2,

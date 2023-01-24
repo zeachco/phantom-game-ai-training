@@ -4,8 +4,9 @@ export class GamePad {
 
   constructor(
     public aliases: Map<string, string> = new Map(),
-    public debug = true,
+    public debug = false,
     private container: HTMLElement | Document = document,
+    private useMouse = false,
   ) {
     this.register = this.register.bind(this);
     this.unregister = this.unregister.bind(this);
@@ -20,24 +21,28 @@ export class GamePad {
     container.addEventListener('keydown', this.register);
     container.addEventListener('keyup', this.unregister);
     container.addEventListener('keypress', this.onkey);
-    container.addEventListener('mousedown', this.register);
-    container.addEventListener('mouseup', this.unregister);
-    container.addEventListener('mouseclick', this.onkey);
-    container.addEventListener('contextmenu', this.cancel);
-    container.addEventListener('mousemove', this.handleMouveMovement);
-    container.addEventListener('wheel', this.handleMouveMovement);
+    if (this.useMouse) {
+      container.addEventListener('mousedown', this.register);
+      container.addEventListener('mouseup', this.unregister);
+      container.addEventListener('mouseclick', this.onkey);
+      container.addEventListener('contextmenu', this.cancel);
+      container.addEventListener('mousemove', this.handleMouveMovement);
+      container.addEventListener('wheel', this.handleMouveMovement);
+    }
   }
 
   public remove() {
     this.container.addEventListener('keydown', this.register);
     this.container.addEventListener('keyup', this.unregister);
     this.container.addEventListener('keypress', this.onkey);
-    this.container.addEventListener('mousedown', this.register);
-    this.container.addEventListener('mouseup', this.unregister);
-    this.container.addEventListener('mouseclick', this.onkey);
-    this.container.addEventListener('contextmenu', this.cancel);
-    this.container.addEventListener('mousemove', this.handleMouveMovement);
-    this.container.addEventListener('wheel', this.handleMouveMovement);
+    if (this.useMouse) {
+      this.container.addEventListener('mousedown', this.register);
+      this.container.addEventListener('mouseup', this.unregister);
+      this.container.addEventListener('mouseclick', this.onkey);
+      this.container.addEventListener('contextmenu', this.cancel);
+      this.container.addEventListener('mousemove', this.handleMouveMovement);
+      this.container.addEventListener('wheel', this.handleMouveMovement);
+    }
   }
 
   public get(code: string): number {
