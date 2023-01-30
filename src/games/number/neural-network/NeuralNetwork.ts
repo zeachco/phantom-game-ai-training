@@ -112,6 +112,30 @@ export class NeuralNetwork {
     return this.feedForward(outputs, layerIndex + 1);
   }
 
+  // public backprop(inputs: number[], targets: number[], learningRate: number) {
+  //   console.log(inputs, targets);
+  //   const { activations, zs } = this.feedForward(inputs);
+  //   const deltas: number[][] = [];
+  //   let delta = activations[activations.length - 1].map(
+  //     (a, i) => (a - targets[i]) * this.sigmoidPrime(zs[zs.length - 1][i]),
+  //   );
+  //   deltas.unshift(delta);
+  //   for (let i = this.weights.length - 2; i >= 0; i--) {
+  //     delta = this.weights[i + 1]
+  //       .map((w) => delta.reduce((a, b, j) => a + b * w[j], 0))
+  //       .map((d, j) => d * this.sigmoidPrime(zs[i][j]));
+  //     deltas.unshift(delta);
+  //   }
+  //   for (let i = 0; i < this.weights.length; i++) {
+  //     this.weights[i] = this.weights[i].map((w, j) =>
+  //       w.map((wi, k) => wi - delta[k] * activations[i][j] * learningRate),
+  //     );
+  //     this.biases[i] = this.biases[i].map(
+  //       (b, j) => b - delta[j] * learningRate,
+  //     );
+  //   }
+  // }
+
   public randomize(mutationLevel = this.mutationAmount) {
     for (let layerIndex = 0; layerIndex < this.layers.length; layerIndex++) {
       const layer = this.layers[layerIndex];
@@ -121,5 +145,13 @@ export class NeuralNetwork {
         unit.weight = lerp(unit.weight, rand(-1, 1), mutationLevel);
       }
     }
+  }
+
+  private sigmoid(x: number) {
+    return 1 / (1 + Math.exp(-x));
+  }
+
+  private sigmoidPrime(x: number) {
+    return this.sigmoid(x) * (1 - this.sigmoid(x));
   }
 }
