@@ -124,14 +124,14 @@ export default async (state: typeof defaultState) => {
       return c.brain.mutationFactor > 0;
     });
     if (!state.playing) {
-      carCtx.font = 'bold 24px Arial'
-      carCtx.textBaseline = 'middle'
-      carCtx.textAlign = 'center'
-      carCtx.fillStyle = 'red'
-      carCtx.strokeStyle = '#800'
-      carCtx.lineWidth = 1
-      carCtx.fillText(`GAME OVER`, carCanvas.width/2, carCanvas.height/2)
-      carCtx.strokeText(`GAME OVER`, carCanvas.width/2, carCanvas.height/2)
+      carCtx.font = 'bold 24px Arial';
+      carCtx.textBaseline = 'middle';
+      carCtx.textAlign = 'center';
+      carCtx.fillStyle = 'red';
+      carCtx.strokeStyle = '#800';
+      carCtx.lineWidth = 1;
+      carCtx.fillText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
+      carCtx.strokeText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
     }
     if (!livingCarsWithMutations[0]) endExperiment();
   });

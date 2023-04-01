@@ -77,3 +77,7 @@ export function angleOffset(a1: number, a2: number) {
 export function vecLength(x: number, y: number) {
   return Math.sqrt(x * x + y * y);
 }
+
+export function ratio(value, min = 0, max = 1) {
+  return Math.max(min, Math.min(value, max));
+}

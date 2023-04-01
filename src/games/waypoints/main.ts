@@ -6,7 +6,7 @@ import { Path } from './classes/Path';
 import { Segment } from './classes/Segment';
 import map from './maps/default';
 
-const TOTAL_MOBS = 8000;
+const TOTAL_MOBS = 1000;
 
 export default () => {
   let bestScore = 0;
@@ -38,15 +38,20 @@ export default () => {
   const mobs: Mob[] = [];
   const neuralCtrls: NeuralInput[] = [];
 
+  const EXP_MOBS_NB = TOTAL_MOBS;
+  console.log({ EXP_MOBS_NB });
+
   paths.forEach((path) => {
-    for (var i = 0; i < TOTAL_MOBS; i++) {
+    for (var i = 0; i < EXP_MOBS_NB; i++) {
       const mob = new Mob(path, onCheckpoint);
       scene.add(mob.mesh);
       mobs.push(mob);
       const nc = new NeuralInput(mob);
+      if (i === 0) bestScore = nc.brain.score;
+      nc.brain.score = 0;
       mob.ctrl = nc;
-      const mutationLevel = lerp(0, 1, i / TOTAL_MOBS);
-      nc.brain.randomize(mutationLevel);
+      nc.brain.mutationAmount = lerp(0, 1 / (1 + bestScore), i / EXP_MOBS_NB);
+      nc.brain.randomize();
       neuralCtrls.push(nc);
       scene.add(nc.mesh);
     }
@@ -55,24 +60,26 @@ export default () => {
   const [player] = mobs;
   const clock = new Clock();
 
+  console.log(`Starting score at ${bestScore}`);
+
   function animate() {
     requestAnimationFrame(animate);
-    if (
-      canvas.width !== canvas.clientWidth ||
-      canvas.height !== canvas.clientHeight
-    ) {
-      // This stuff in here is just for auto-resizing.
-      renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-      camera.aspect = canvas.clientWidth / canvas.clientHeight;
-      camera.updateProjectionMatrix();
-    }
+    // if (
+    //   canvas.width !== canvas.clientWidth ||
+    //   canvas.height !== canvas.clientHeight
+    // ) {
+    //   // This stuff in here is just for auto-resizing.
+    //   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    //   camera.aspect = canvas.clientWidth / canvas.clientHeight;
+    //   camera.updateProjectionMatrix();
+    // }
 
     // Apply matrix like this to rotate the camera.
     const es = clock.getElapsedTime() * 0.1 * Math.PI;
-    camera.position.set(0, 0, 30);
+    camera.position.set(-0, -25, 25);
 
     // Make camera look at the box.
-    camera.lookAt(player.mesh.position);
+    // camera.lookAt(player.mesh.position);
 
     renderer.render(scene, camera);
     paths.forEach((path) => path.update());

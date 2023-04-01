@@ -2,6 +2,7 @@ import { Segment } from './Segment';
 import { Path } from './Path';
 import { BoxGeometry, Mesh, MeshBasicMaterial } from 'three';
 import { NeuralInput } from './NeuralInput';
+import { rand, ratio } from '../../../utilities/math';
 
 const geometry = new BoxGeometry();
 
@@ -49,26 +50,18 @@ export class Mob {
       this.targetIndex++;
     }
 
-    // this.material.color.setHSL(0, 50, 50);
     if (this.isDead()) {
       this.material.color.setRGB(128, 128, 128);
       this.onCheckpoint(this);
       this.reset();
     } else {
-      const col = (c) => {
-        let co = c * 2.55;
-        if (co < 0) co = 0;
-        if (co > 255) co = 255;
-        return Math.round(co);
-      };
-      this.material.color.setRGB(
-        col(this.fuel),
-        col(this.oxygen),
-        col(this.oxygen),
-      );
+      const [fuelCol, OxyCol] = [
+        ratio(this.fuel * 0.01, 0, 1),
+        ratio(this.oxygen * 0.01, 0, 1),
+      ];
+      this.material.color.setRGB(1 - fuelCol, fuelCol, OxyCol);
     }
 
-    // this.material.color
     this.mesh.position.set(this.x, this.y, 0);
     this.mesh.rotation.set(0, 0, this.a);
   }
@@ -115,6 +108,7 @@ export class Mob {
   }
 
   public reset() {
+    this.targetIndex = 0;
     this.vx = 0;
     this.vy = 0;
     this.va = 0;
@@ -124,5 +118,6 @@ export class Mob {
     this.fuel = 100;
     this.oxygen = 100;
     this.score = 0;
+    this.ctrl.brain.randomize();
   }
 }

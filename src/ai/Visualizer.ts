@@ -89,19 +89,18 @@ export class Visualizer {
 
     const { inputs, outputs, weights } = level;
 
-
-    ctx.setLineDash([3, 2]);
-    for (let i = 0; i < inputs.length; i++) {
-      for (let j = 0; j < outputs.length; j++) {
-        ctx.beginPath();
-        ctx.moveTo(Visualizer.#getNodeX(inputs, i, left, right), bottom);
-        ctx.lineTo(Visualizer.#getNodeX(outputs, j, left, right), top + RADIUS);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = Visualizer.getColor(weights[i][j]);
-        Visualizer.getColor(weights[i][j]);
-        ctx.stroke();
-      }
-    }
+    // ctx.setLineDash([3, 2]);
+    // for (let i = 0; i < inputs.length; i++) {
+    //   for (let j = 0; j < outputs.length; j++) {
+    //     ctx.beginPath();
+    //     ctx.moveTo(Visualizer.#getNodeX(inputs, i, left, right), bottom);
+    //     ctx.lineTo(Visualizer.#getNodeX(outputs, j, left, right), top + RADIUS);
+    //     ctx.lineWidth = 2;
+    //     ctx.strokeStyle = Visualizer.getColor(weights[i][j]);
+    //     Visualizer.getColor(weights[i][j]);
+    //     ctx.stroke();
+    //   }
+    // }
 
     ctx.setLineDash([5, 1]);
     for (let i = 0; i < inputs.length; i++) {

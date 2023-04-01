@@ -10,7 +10,7 @@ export class NeuralInput {
   private material: LineBasicMaterial;
   private geometry: BufferGeometry;
   public mesh: Line;
-  public brain = new NeuralNetwork(8, 2);
+  public brain = new NeuralNetwork(8, 2, [8, 4]);
 
   constructor(public mob: Mob, public pad?: GamePad) {
     this.material = new LineBasicMaterial({ color: pad ? 0xffdd22 : 0xffaa00 });
@@ -21,7 +21,6 @@ export class NeuralInput {
     this.geometry = new BufferGeometry().setFromPoints(points);
     this.mesh = new Line(this.geometry, this.material);
     this.brain.loadFromFile(FILE_SAVE);
-    this.brain.score = 0;
   }
 
   public generateInputs() {
@@ -65,6 +64,7 @@ export class NeuralInput {
 
     const inputs = this.generateInputs();
     const [left, right] = this.brain.feedForward(inputs);
+    // console.log({left, right})
     // if (this.pad) {
     //   const [hLeft, hRight] = [
     //     this.pad.get('ArrowLeft'),
