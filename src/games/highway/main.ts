@@ -1,5 +1,4 @@
 import { fileUtilities } from '../../ai/utils';
-import { Visualizer } from '../../ai/Visualizer';
 import { createCanvas } from '../../utilities/dom';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
@@ -9,6 +8,10 @@ import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
+import { Visualizer } from '../../ai/v2/Visualizer';
+
+const neuralVisualizer = new Visualizer(config);
+neuralVisualizer.renderLines = false;
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -118,8 +121,8 @@ export default async (state: typeof defaultState) => {
     drawScores(state, carCtx);
 
     networkCtx.lineDashOffset = -dt / 50;
-    Visualizer.drawNetwork(networkCtx, state.sortedCars[0].brain!);
-    Visualizer.drawStats(networkCtx, state.sortedCars[0].brain!);
+    neuralVisualizer.drawNetwork(networkCtx, state.sortedCars[0].brain!);
+    neuralVisualizer.drawStats(networkCtx, state.sortedCars[0].brain!);
     const livingCarsWithMutations = state.livingCars.filter((c) => {
       return c.brain.mutationFactor > 0;
     });

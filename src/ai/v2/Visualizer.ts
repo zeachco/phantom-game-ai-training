@@ -1,19 +1,27 @@
-import { config } from '../games/highway/classes/Config';
-import { roundRect } from '../utilities/canvas';
-import { getColorScale } from '../utilities/colors';
-import { lerp } from '../utilities/math';
-import { Level, NeuralNetwork } from './Network';
+import { roundRect } from '../../utilities/canvas';
+import { getColorScale } from '../../utilities/colors';
+import { lerp } from '../../utilities/math';
+import { Level, NeuralNetwork } from '../Network';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
 
-export class Visualizer {
-  static getColor(value) {
+interface BaseConfig {
+  MAX_NETWORK_LAYERS: number;
+}
+
+export class Visualizer<T extends BaseConfig = BaseConfig> {
+  /** Can affect performance, turn off if it's the case */
+  public renderLines = true;
+
+  constructor(public config: T) {}
+
+  getColor(value) {
     return `hsla(56, 100%, ${Math.round((value + 1) * 100)}%, ${Math.abs(
       value,
     )})`;
   }
-  static drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+  drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     const height = ctx.canvas.height - MARGIN * 2;
     const levelHeight = height / network.levels.length;
     const pWidth = 150;
@@ -21,7 +29,7 @@ export class Visualizer {
     const fh = 18;
     const tWidth = pWidth - marg;
     const levelColor = getColorScale(
-      network.levels.length / config.MAX_NETWORK_LAYERS,
+      network.levels.length / this.config.MAX_NETWORK_LAYERS,
     );
     ctx.save();
     ctx.translate(ctx.canvas.width * 0.5 + MARGIN, levelHeight * 0.5);
@@ -45,7 +53,7 @@ export class Visualizer {
     ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
     ctx.restore();
   }
-  static drawNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+  drawNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     const left = MARGIN;
     const top = MARGIN;
     const width = ctx.canvas.width - MARGIN * 2;
@@ -63,7 +71,7 @@ export class Visualizer {
         );
 
       ctx.setLineDash([7, 3]);
-      Visualizer.drawLevel(
+      this.drawLevel(
         ctx,
         network.levels[i],
         left,
@@ -75,7 +83,7 @@ export class Visualizer {
     }
   }
 
-  static drawLevel(
+  drawLevel(
     ctx: CanvasRenderingContext2D,
     level: Level,
     left: number,
@@ -89,21 +97,23 @@ export class Visualizer {
 
     const { inputs, outputs, weights } = level;
 
-    for (let i = 0; i < inputs.length; i++) {
-      for (let j = 0; j < outputs.length; j++) {
-        ctx.beginPath();
-        ctx.setLineDash([3, 2]);
-        ctx.moveTo(Visualizer.#getNodeX(inputs, i, left, right), bottom);
-        ctx.lineTo(Visualizer.#getNodeX(outputs, j, left, right), top + RADIUS);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = Visualizer.getColor(weights[i][j]);
-        Visualizer.getColor(weights[i][j]);
-        ctx.stroke();
+    if (this.renderLines) {
+      for (let i = 0; i < inputs.length; i++) {
+        for (let j = 0; j < outputs.length; j++) {
+          ctx.beginPath();
+          ctx.setLineDash([3, 2]);
+          ctx.moveTo(this.#getNodeX(inputs, i, left, right), bottom);
+          ctx.lineTo(this.#getNodeX(outputs, j, left, right), top + RADIUS);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = this.getColor(weights[i][j]);
+          this.getColor(weights[i][j]);
+          ctx.stroke();
+        }
       }
     }
 
     for (let i = 0; i < inputs.length; i++) {
-      const x = Visualizer.#getNodeX(inputs, i, left, right);
+      const x = this.#getNodeX(inputs, i, left, right);
       const value = inputs[i];
       ctx.beginPath();
       ctx.setLineDash([5, 1]);
@@ -112,14 +122,14 @@ export class Visualizer {
       ctx.fill();
       ctx.beginPath();
       ctx.arc(x, bottom, RADIUS * 0.5, 0, Math.PI * 2 * Math.abs(value));
-      ctx.fillStyle = Visualizer.getColor(inputs[i]);
+      ctx.fillStyle = this.getColor(inputs[i]);
       ctx.strokeStyle = value > 0 ? 'orange' : 'green';
       ctx.lineWidth = 3;
       ctx.stroke();
     }
 
     for (let i = 0; i < outputs.length; i++) {
-      const x = Visualizer.#getNodeX(outputs, i, left, right);
+      const x = this.#getNodeX(outputs, i, left, right);
       const value = outputs[i];
       ctx.beginPath();
       ctx.arc(x, top, RADIUS, 0, Math.PI * 2);
@@ -129,7 +139,7 @@ export class Visualizer {
       ctx.strokeStyle = value > 0 ? '#def' : '#86f';
       ctx.lineWidth = 3;
       ctx.arc(x, top, RADIUS * 0.8, 0, Math.PI * 2 * value);
-      ctx.fillStyle = Visualizer.getColor(outputs[i]);
+      ctx.fillStyle = this.getColor(outputs[i]);
       ctx.stroke();
 
       ctx.textAlign = 'center';
@@ -142,7 +152,7 @@ export class Visualizer {
     }
   }
 
-  static #getNodeX(nodes: any[], index: number, left: number, right: number) {
+  #getNodeX(nodes: any[], index: number, left: number, right: number) {
     return lerp(
       left,
       right,
