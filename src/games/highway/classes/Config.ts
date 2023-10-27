@@ -23,8 +23,8 @@ class Config {
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
 
   // env
-  public SENSORS = 9;
-  public SENSOR_ANGLE = (Math.PI / 2) * 2.2;
+  public SENSORS = 15;
+  public SENSOR_ANGLE = (Math.PI / 2) * 3;
   public DEATH_SPEED = 0.0018;
 
   // car
