@@ -9,7 +9,6 @@ import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
 import { Visualizer } from '../../ai/v2/Visualizer';
-import { lerp } from '../../utilities/math';
 
 const neuralVisualizer = new Visualizer(config);
 neuralVisualizer.renderLines = false;
@@ -54,7 +53,7 @@ export default async (state: typeof defaultState) => {
         );
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
-          const mutationTarget = config.MUTATION_LVL;
+          const mutationTarget = config.MAX_MUTATION_LVL * (car.brain.score / 15000);
 
           car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
@@ -159,11 +158,11 @@ export default async (state: typeof defaultState) => {
     state.cars = setupAIs();
 
     // best car
-    const bestLayers = [...state.sortedModels].sort((a, b) => {
+    const [bestLayer] = [...state.sortedModels].sort((a, b) => {
       return (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0);
     });
-    const deathCarModel =
-      bestLayers[Math.round(config.MAX_NETWORK_LAYERS / 2)][0];
+    const worstCarFromBestLayer = bestLayer[bestLayer.length - 1];
+    const deathCarModel = worstCarFromBestLayer;
     if (deathCarModel) {
       const bestLayerNb = deathCarModel.levels.length;
       state.player = new Car(

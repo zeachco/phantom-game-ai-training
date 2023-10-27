@@ -3,7 +3,7 @@ import { ModelsByLayerCount } from '../../../ai/utils';
 class Config {
   public CAR_NB = 100;
   public AUTO_DISTRIBUTE_LAYERS = false;
-  public MUTATION_LVL = 0.5;
+  public MAX_MUTATION_LVL = 0.9;
   public CARS_PER_LAYERS = [
     0,
     this.CAR_NB,
@@ -82,7 +82,7 @@ class Config {
     sortedLayers.forEach((models) => {
       if (!models || !models[0]) return;
       const layer = models[0].levels.length;
-      const give = layer ? Math.round(remainingScore * 0.55) : 0;
+      const give = layer ? Math.ceil(remainingScore * 0.55) : 0;
       remainingScore -= give;
       this.CARS_PER_LAYERS[layer] = Math.round(
         (give / totalScore) * this.CAR_NB,
