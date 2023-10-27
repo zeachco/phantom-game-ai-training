@@ -27,14 +27,14 @@ export class NeuralNetwork {
     // ];
     this.weights = [
       // hidden
-      new Array(inputSize)
-        .fill(0)
-        .map(() => new Array(hiddenSize).fill(0).map(() => rand(-1, 1))),
+      // new Array(inputSize)
+      //   .fill(0)
+      //   .map(() => new Array(hiddenSize).fill(0).map(() => rand(-1, 1))),
 
-      // output
-      new Array(hiddenSize)
-        .fill(0)
-        .map(() => new Array(outputSize).fill(0).map(() => rand(-1, 1))),
+      // // output
+      // new Array(hiddenSize)
+      //   .fill(0)
+      //   .map(() => new Array(outputSize).fill(0).map(() => rand(-1, 1))),
     ];
 
     // for (let inputIdx = 0; inputIdx < this.weights.length; inputIdx++) {
@@ -59,17 +59,17 @@ export class NeuralNetwork {
   }
 
   private feedforward(inputs: number[]) {
-    let activations = inputs;
+    let activations: number[][] = [inputs];
     let zs: number[][] = [];
-    for (let i = 0; i < this.weights.length; i++) {
-      const z = activations.map(
-        (_, j) =>
-          this.weights[i].map((w) => w[j]).reduce((a, b) => a + b, 0) +
-          this.biases[i],
-      );
-      zs.push(z);
-      activations = z.map(this.sigmoid);
-    }
+    // for (let i = 0; i < this.weights.length; i++) {
+    //   const z = activations.map(
+    //     (_, j) =>
+    //       this.weights[i].map((w) => w[j]).reduce((a, b) => a + b, 0) +
+    //       this.biases[i],
+    //   );
+    //   zs.push(z);
+    //   activations = z.map(this.sigmoid);
+    // }
     return { activations, zs };
   }
 
@@ -87,9 +87,9 @@ export class NeuralNetwork {
       deltas.unshift(delta);
     }
     for (let i = 0; i < this.weights.length; i++) {
-      this.weights[i] = this.weights[i].map((w, j) =>
-        w.map((wi, k) => wi - delta[k] * activations[i][j] * learningRate),
-      );
+      // this.weights[i] = this.weights[i].map((w, j) =>
+      //   w.map((wi, k) => wi - delta[k] * activations[i][j] * learningRate),
+      // );
       this.biases[i] = this.biases[i].map(
         (b, j) => b - delta[j] * learningRate,
       );
