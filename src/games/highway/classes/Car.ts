@@ -104,7 +104,7 @@ export class Car {
     // vertical distance
     this.brain.score += Math.cos(this.angle) * this.speed;
     // travel distance
-    this.brain.score += this.speed / 2;
+    this.brain.score += this.speed / 10;
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {
