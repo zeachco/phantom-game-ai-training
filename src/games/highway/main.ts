@@ -56,6 +56,8 @@ export default async (state: typeof defaultState) => {
 
       const mutationTarget = lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, (1 - scoreRatio));
 
+      console.log(`# ${l} score ${layerOriginScore.toFixed(1)} mutationTarget ${mutationTarget.toFixed(5)} cars: ${carsNbForThisLayer}`);
+
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
           road.getLane(1),
