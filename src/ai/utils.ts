@@ -8,9 +8,9 @@ import type { NeuralNetwork } from './Network';
 
 export type ModelsByLayerCount = (
   | (Omit<NeuralNetwork, 'mutate'> & {
-      diff?: number;
-      date?: string;
-    })
+    diff?: number;
+    date?: string;
+  })
   | any
 )[];
 
@@ -64,9 +64,6 @@ export function fileUtilities(game = '') {
       const data = localStorage.getItem(namespace);
       if (!data) throw new Error(`not found`);
       models = JSON.parse(data);
-      console.debug(
-        `Retreived ${models.length} gen-${models[0].version} for layer ${layers}`,
-      );
     } catch {
       console.debug(`Nothing for layer ${layers}`);
     }

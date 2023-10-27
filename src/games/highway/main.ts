@@ -36,11 +36,15 @@ export default async (state: typeof defaultState) => {
     const cars: Car[] = [];
     config.autoDistributeByScores(state.sortedModels);
 
-    const scores = state.sortedModels.map(([firstModel]) =>
-      Math.round(firstModel?.score) || 0,
-    ).sort((a, b) => b - a).filter(Boolean);
+    const scores = state.sortedModels
+      .map(([firstModel]) => Math.round(firstModel?.score) || 0)
+      .sort((a, b) => b - a)
+      .filter(Boolean);
 
-    const [bestScore = 1, worstScore = 0] = [scores[0], scores[scores.length - 1]];
+    const [bestScore = 1, worstScore = 0] = [
+      scores[0],
+      scores[scores.length - 1],
+    ];
     const advantage = bestScore - worstScore;
 
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
@@ -53,9 +57,16 @@ export default async (state: typeof defaultState) => {
 
       const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
 
-      const mutationTarget = lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, (1 - scoreRatio));
+      const mutationTarget = lerp(
+        config.MIN_MUTATION_LVL,
+        config.MAX_MUTATION_LVL,
+        1 - scoreRatio,
+      );
 
-      console.debug(`# ${l} score ${layerOriginScore.toFixed(1)} mutationTarget ${mutationTarget.toFixed(5)} cars: ${carsNbForThisLayer}`);
+      console.debug(
+        `#${l} Gen-${savedModel?.version} Mutation ${Math.round(mutationTarget * 100000) / 1000
+        }% | Score: ${Math.round(layerOriginScore)} `,
+      );
 
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
@@ -63,13 +74,12 @@ export default async (state: typeof defaultState) => {
           100,
           ControlType.AI,
           3,
-          `${l}-0 👶`,
+          `${l} - 0 👶`,
           getColorScale(l / config.MAX_NETWORK_LAYERS),
           l,
         );
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
-
 
           car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
@@ -137,7 +147,7 @@ export default async (state: typeof defaultState) => {
     drawScores(state, carCtx);
 
     networkCtx.lineDashOffset = -dt / 50;
-    neuralVisualizer.render(networkCtx, state.sortedCars[0].brain!)
+    neuralVisualizer.render(networkCtx, state.sortedCars[0].brain!);
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';
@@ -173,8 +183,8 @@ export default async (state: typeof defaultState) => {
 
     // Experiments
     state.cars = setupAIs();
-    const [bestModel] = [...state.sortedModels].sort((a, b) =>
-      (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0)
+    const [bestModel] = [...state.sortedModels].sort(
+      (a, b) => (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0),
     );
     const deathCarModel = bestModel[bestModel.length - 1];
     if (deathCarModel) {
