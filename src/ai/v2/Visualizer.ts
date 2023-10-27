@@ -66,13 +66,30 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.translate(0, marg);
     ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
     ctx.translate(0, fh);
-    ctx.fillText(
-      `Mutation ${(network.mutationFactor * 100).toFixed(4)}%`,
-      0,
-      0,
-      tWidth,
-    );
-    ctx.translate(0, fh);
+    if (network.mutationIndex === 0) {
+      ctx.fillText(
+        'Original model',
+        0,
+        0,
+        tWidth,
+      );
+      ctx.translate(0, fh);
+    } else {
+      ctx.fillText(
+        `Mutation ${(network.mutationFactor * 100).toFixed(4)}%`,
+        0,
+        0,
+        tWidth,
+      );
+      ctx.translate(0, fh);
+      ctx.fillText(
+        `MutationIndex ${(network.mutationIndex)}`,
+        0,
+        0,
+        tWidth,
+      );
+      ctx.translate(0, fh);
+    }
     ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
     ctx.restore();
   }
