@@ -1,9 +1,9 @@
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 25;
+  public CAR_NB = 100;
   public AUTO_DISTRIBUTE_LAYERS = false;
-  public MUTATION_LVL = 0.1;
+  public MUTATION_LVL = 0.5;
   public CARS_PER_LAYERS = [
     0,
     this.CAR_NB,

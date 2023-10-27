@@ -55,7 +55,7 @@ export default async (state: typeof defaultState) => {
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
           const mutationTarget = config.MUTATION_LVL;
-          
+
           car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
           car.brain.mutate(savedModel);
@@ -122,9 +122,6 @@ export default async (state: typeof defaultState) => {
     networkCtx.lineDashOffset = -dt / 50;
     neuralVisualizer.drawNetwork(networkCtx, state.sortedCars[0].brain!);
     neuralVisualizer.drawStats(networkCtx, state.sortedCars[0].brain!);
-    const livingCarsWithMutations = state.livingCars.filter((c) => {
-      return c.brain.mutationFactor > 0;
-    });
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';
@@ -135,7 +132,7 @@ export default async (state: typeof defaultState) => {
       carCtx.fillText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
       carCtx.strokeText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
     }
-    if (!livingCarsWithMutations[0]) endExperiment();
+    if (!state.livingCars[0]) endExperiment();
   });
   function initialize() {
     Object.assign(state, defaultState);

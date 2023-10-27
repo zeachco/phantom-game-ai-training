@@ -81,8 +81,7 @@ export function drawScores(
 
       const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
       ctx.fillText(
-        `👻 ${ref.levels.length}-${ref.version}-${
-          ref.mutationIndex
+        `👻 ${ref.levels.length}-${ref.version}-${ref.mutationIndex
         } ${Math.round(ref.score)} ${symb}`,
         TL,
         FH * 4 + index * FH,
