@@ -55,7 +55,7 @@ export default async (state: typeof defaultState) => {
 
       const mutationTarget = lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, (1 - scoreRatio));
 
-      console.log(`# ${l} score ${layerOriginScore.toFixed(1)} mutationTarget ${mutationTarget.toFixed(5)} cars: ${carsNbForThisLayer}`);
+      console.debug(`# ${l} score ${layerOriginScore.toFixed(1)} mutationTarget ${mutationTarget.toFixed(5)} cars: ${carsNbForThisLayer}`);
 
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
@@ -119,7 +119,7 @@ export default async (state: typeof defaultState) => {
     road.draw(carCtx);
     ray.draw(carCtx);
     if (state.player) {
-      carRay.y = state.player.y + state.player.height;
+      carRay.y = state.player.y + state.player.height * 10;
       carRay.draw(carCtx);
     }
     for (let i = 0; i < state.traffic.length; i++) {
@@ -176,7 +176,7 @@ export default async (state: typeof defaultState) => {
     const [bestModel] = [...state.sortedModels].sort((a, b) =>
       (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0)
     );
-    const deathCarModel = bestModel[bestModel.length - 1];;
+    const deathCarModel = bestModel[bestModel.length - 1];
     if (deathCarModel) {
       const bestLayerNb = deathCarModel.levels.length;
       state.player = new Car(
