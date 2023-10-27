@@ -6,6 +6,7 @@ import carImg from '../assets/car.png';
 import { polysIntersect, randInt, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
 import { config } from './Config';
+import { DeathRay } from './DeathRay';
 
 export class Car {
   public speed: number;
@@ -74,7 +75,7 @@ export class Car {
     };
   }
 
-  update(roadBorders: Vector[][], traffic: Car[]) {
+  update(roadBorders: Vector[][], traffic: Car[], deathRays: DeathRay[]) {
     if (this.damaged) return;
     this.#move();
     if (this.brain) this.#updateScore();
@@ -82,7 +83,7 @@ export class Car {
     this.polygon = this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
     if (this.sensor) {
-      this.sensor.update(roadBorders, traffic);
+      this.sensor.update(roadBorders, traffic, deathRays);
       const offsets = this.sensor.readings.map((s) =>
         s == null ? 0 : 1 - s.offset,
       );

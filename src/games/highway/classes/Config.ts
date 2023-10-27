@@ -1,7 +1,7 @@
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 100;
+  public CAR_NB = 25;
   public AUTO_DISTRIBUTE_LAYERS = false;
   public MAX_MUTATION_LVL = .7;
   public MIN_MUTATION_LVL = .01;
@@ -23,8 +23,10 @@ class Config {
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
 
   // env
-  public SENSORS = 15;
-  public SENSOR_ANGLE = (Math.PI / 2) * 3;
+  public SENSORS = 13;
+  public SENSOR_ANGLE = (Math.PI / 2) * 3.5;
+  public SENSORS_MAX_DEPTH = 200;
+  public SENSORS_MAX_WIDTH = 120;
   public DEATH_SPEED = 0.0018;
 
   // car

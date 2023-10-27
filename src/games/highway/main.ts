@@ -44,7 +44,6 @@ export default async (state: typeof defaultState) => {
     const [bestScore = 1, worstScore = 0] = [scores[0], scores[scores.length - 1]];
     const advantage = bestScore - worstScore;
 
-
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
@@ -56,7 +55,6 @@ export default async (state: typeof defaultState) => {
       const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
 
       const mutationTarget = lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, (1 - scoreRatio));
-      console.log(`Layer ${l} score ${layerOriginScore.toFixed(1)} with mutation target of ${mutationTarget.toFixed(5)}`);
 
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
@@ -80,6 +78,7 @@ export default async (state: typeof defaultState) => {
         cars.push(car);
       }
     }
+
     return cars;
   }
 
@@ -91,11 +90,12 @@ export default async (state: typeof defaultState) => {
 
   loop.play((_es, dt) => {
     ray.update();
+    const deathRays = [ray, carRay];
     for (let i = 0; i < state.traffic.length; i++) {
-      state.traffic[i].update(road.borders, []);
+      state.traffic[i].update(road.borders, [], deathRays);
     }
     for (let i = 0; i < state.cars.length; i++) {
-      state.cars[i].update(road.borders, state.traffic);
+      state.cars[i].update(road.borders, state.traffic, deathRays);
       const y = state.cars[i].y;
       if (y > ray.y || y > carRay.y) {
         state.cars[i].damaged = true;
@@ -173,13 +173,10 @@ export default async (state: typeof defaultState) => {
 
     // Experiments
     state.cars = setupAIs();
-
-    // best car
-    const [bestLayer] = [...state.sortedModels].sort((a, b) => {
-      return (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0);
-    });
-    const worstCarFromBestLayer = bestLayer[bestLayer.length - 1];
-    const deathCarModel = worstCarFromBestLayer;
+    const [bestModel] = [...state.sortedModels].sort((a, b) =>
+      (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0)
+    );
+    const deathCarModel = bestModel[bestModel.length - 1];;
     if (deathCarModel) {
       const bestLayerNb = deathCarModel.levels.length;
       state.player = new Car(

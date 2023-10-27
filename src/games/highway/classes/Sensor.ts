@@ -1,33 +1,30 @@
 import type { Car } from './Car';
 import { getIntersection, lerp, Vector } from '../../../utilities/math';
 import { config } from './Config';
+import { DeathRay } from './DeathRay';
 
 export class Sensor {
   car: Car;
   rayCount: number;
-  rayLength: number;
-  raySpread: number;
   rays: Vector[][];
   readings: { x: number; y: number; offset: number }[];
   constructor(car: Car) {
     this.car = car;
     this.rayCount = config.SENSORS;
-    this.rayLength = 200;
-    this.raySpread = config.SENSOR_ANGLE;
 
     this.rays = [];
     this.readings = [];
   }
 
-  update(roadBorders: Vector[][], traffic: Car[]) {
+  update(roadBorders: Vector[][], traffic: Car[], deathRays: DeathRay[]) {
     this.#castRays();
     this.readings = [];
     for (let i = 0; i < this.rays.length; i++) {
-      this.readings.push(this.#getReading(this.rays[i], roadBorders, traffic));
+      this.readings.push(this.#getReading(this.rays[i], roadBorders, traffic, deathRays));
     }
   }
 
-  #getReading(ray: Vector[], roadBorders: Vector[][], traffic: Car[]) {
+  #getReading(ray: Vector[], roadBorders: Vector[][], traffic: Car[], deathRays: DeathRay[]) {
     let touches: any[] = [];
 
     for (let i = 0; i < roadBorders.length; i++) {
@@ -57,6 +54,18 @@ export class Sensor {
       }
     }
 
+    for (let i = 0; i < deathRays.length; i++) {
+      const touch = getIntersection(
+        ray[0],
+        ray[1],
+        { x: 0, y: deathRays[i].y },
+        { x: 500, y: deathRays[i].y },
+      );
+      if (touch) {
+        touches.push(touch);
+      }
+    }
+
     if (touches.length == 0) {
       return null;
     } else {
@@ -71,15 +80,15 @@ export class Sensor {
     for (let i = 0; i < this.rayCount; i++) {
       const rayAngle =
         lerp(
-          this.raySpread / 2,
-          -this.raySpread / 2,
+          config.SENSOR_ANGLE / 2,
+          -config.SENSOR_ANGLE / 2,
           this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
         ) + this.car.angle;
 
       const start = { x: this.car.x, y: this.car.y };
       const end = {
-        x: this.car.x - Math.sin(rayAngle) * this.rayLength,
-        y: this.car.y - Math.cos(rayAngle) * this.rayLength,
+        x: this.car.x - Math.sin(rayAngle) * config.SENSORS_MAX_WIDTH,
+        y: this.car.y - Math.cos(rayAngle) * config.SENSORS_MAX_DEPTH,
       };
       this.rays.push([start, end]);
     }
