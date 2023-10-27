@@ -45,12 +45,6 @@ export class NeuralNetwork {
 
   mutate(network: ModelsByLayerCount[number]) {
     this.version = network.version;
-    if (this.levels.length !== network.levels.length) {
-      console.warn(
-        `Neural mismatch ${this.levels.length}>${network.levels.length}`,
-      );
-      return;
-    }
     for (let l = 0; l < this.levels.length; l++) {
       for (let i = 0; i < this.levels[l].weights.length; i++) {
         for (let j = 0; j < this.levels[l].weights[i].length; j++) {

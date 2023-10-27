@@ -68,6 +68,8 @@ export default async (state: typeof defaultState) => {
         }% | Score: ${Math.round(layerOriginScore)} `,
       );
 
+      let isSaveCompatible = true;
+
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
           road.getLane(1),
@@ -83,7 +85,16 @@ export default async (state: typeof defaultState) => {
 
           car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
-          car.brain.mutate(savedModel);
+          try {
+            if (isSaveCompatible) car.brain.mutate(savedModel);
+          } catch (err) {
+            isSaveCompatible = false;
+            console.error(
+              `Unable to mutate existing network #${car.brain.id}.\nReset data with ${location.href}&clear=true`,
+              err.message,
+            );
+          }
+
           car.label = [l, i].join('-');
         }
         cars.push(car);
