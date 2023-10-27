@@ -9,6 +9,7 @@ import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { lerp } from '../../utilities/math';
 
 const neuralVisualizer = new Visualizer(config);
 neuralVisualizer.renderLines = false;
@@ -53,10 +54,8 @@ export default async (state: typeof defaultState) => {
         );
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
-          const mutationTarget = Math.min(
-            config.MUTATION_LVL,
-            (10000 / savedModel.score) * config.MUTATION_LVL,
-          );
+          const mutationTarget = config.MUTATION_LVL;
+          
           car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 
           car.brain.mutate(savedModel);

@@ -1,10 +1,21 @@
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 200;
-  public AUTO_DISTRIBUTE_LAYERS = true;
-  public MUTATION_LVL = 0.5;
-  public CARS_PER_LAYERS = [0, 100, 100, 100, 100, 100, 100, 100, 100, 100];
+  public CAR_NB = 25;
+  public AUTO_DISTRIBUTE_LAYERS = false;
+  public MUTATION_LVL = 0.1;
+  public CARS_PER_LAYERS = [
+    0,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+    this.CAR_NB,
+  ];
   public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
   // visual
