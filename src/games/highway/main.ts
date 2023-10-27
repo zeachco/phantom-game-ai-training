@@ -182,7 +182,7 @@ export default async (state: typeof defaultState) => {
       state.player = new Car(
         road.getLane(1),
         100,
-        ControlType.AI,
+        ControlType.KEYS,
         3,
         '🎥 Camera',
         getColorScale(bestLayerNb / config.MAX_NETWORK_LAYERS),
