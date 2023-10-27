@@ -12,7 +12,6 @@ import { Visualizer } from '../../ai/v2/Visualizer';
 import { lerp } from '../../utilities/math';
 
 const neuralVisualizer = new Visualizer(config);
-neuralVisualizer.renderLines = false;
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -138,8 +137,7 @@ export default async (state: typeof defaultState) => {
     drawScores(state, carCtx);
 
     networkCtx.lineDashOffset = -dt / 50;
-    neuralVisualizer.drawNetwork(networkCtx, state.sortedCars[0].brain!);
-    neuralVisualizer.drawStats(networkCtx, state.sortedCars[0].brain!);
+    neuralVisualizer.render(networkCtx, state.sortedCars[0].brain!)
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';
