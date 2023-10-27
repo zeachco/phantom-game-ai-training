@@ -9,6 +9,7 @@ import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores } from './utilities';
 import { getColorScale } from '../../utilities/colors';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { lerp } from '../../utilities/math';
 
 const neuralVisualizer = new Visualizer(config);
 neuralVisualizer.renderLines = false;
@@ -35,11 +36,27 @@ export default async (state: typeof defaultState) => {
   function setupAIs() {
     const cars: Car[] = [];
     config.autoDistributeByScores(state.sortedModels);
+
+    const scores = state.sortedModels.map(([firstModel]) =>
+      Math.round(firstModel?.score) || 0,
+    ).sort((a, b) => b - a).filter(Boolean);
+
+    const [bestScore = 1, worstScore = 0] = [scores[0], scores[scores.length - 1]];
+    const advantage = bestScore - worstScore;
+
+
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
+      const layerOriginScore = savedModel?.score || 0;
+      const scoreAdvantage = layerOriginScore - worstScore;
+      const scoreRatio = scoreAdvantage / advantage;
+
       const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
+
+      const mutationTarget = lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, (1 - scoreRatio));
+      console.log(`Layer ${l} score ${layerOriginScore.toFixed(1)} with mutation target of ${mutationTarget.toFixed(5)}`);
 
       for (let i = 0; i <= carsNbForThisLayer; i++) {
         const car = new Car(
@@ -53,7 +70,7 @@ export default async (state: typeof defaultState) => {
         );
         if (savedModel && car.brain) {
           car.brain.mutationIndex = i;
-          const mutationTarget = config.MAX_MUTATION_LVL * (car.brain.score / 15000);
+
 
           car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
 

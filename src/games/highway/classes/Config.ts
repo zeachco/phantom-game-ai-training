@@ -3,7 +3,8 @@ import { ModelsByLayerCount } from '../../../ai/utils';
 class Config {
   public CAR_NB = 100;
   public AUTO_DISTRIBUTE_LAYERS = false;
-  public MAX_MUTATION_LVL = 0.9;
+  public MAX_MUTATION_LVL = .7;
+  public MIN_MUTATION_LVL = .01;
   public CARS_PER_LAYERS = [
     0,
     this.CAR_NB,
