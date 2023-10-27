@@ -6,6 +6,7 @@ import { Level, NeuralNetwork } from '../Network';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
+const FH = 18;
 
 interface BaseConfig {
   MAX_NETWORK_LAYERS: number;
@@ -34,7 +35,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
     if (this.renderEnable) this.#drawNetwork(ctx, network);
-    else this.#rederHelp(ctx, network);
+    else this.#rederHelp(ctx);
 
     if (this.renderStats) this.#drawStats(ctx, network);
   }
@@ -45,88 +46,58 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     )})`;
   }
 
+  #createCursor(ctx: CanvasRenderingContext2D, fontHeight = FH, width = 200) {
+    return function print(text: string, height = fontHeight) {
+      ctx.font = height + 'px Arial';
+      ctx.fillText(text, 0, 0, width);
+      ctx.translate(0, height);
+    }
+  }
+
   #drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    const height = ctx.canvas.height - MARGIN * 2;
+    const isOriginal = network.mutationIndex === 0
+    const textsHeight = FH * (isOriginal ? 3 : 4)
     const pWidth = 200;
-    const marg = 18;
-    const fh = 18;
-    const tWidth = pWidth - marg;
     const levelColor = getColorScale(
       network.levels.length / this.config.MAX_NETWORK_LAYERS,
     );
+    const print = this.#createCursor(ctx);
     ctx.save();
     ctx.translate(ctx.canvas.width * 0.5 + MARGIN, MARGIN * 2);
-    ctx.font = fh + 'px Arial';
     ctx.strokeStyle = levelColor;
     ctx.fillStyle = 'rgba(32, 32, 32, .76)';
-    roundRect(ctx, pWidth * -0.5, 0, pWidth, fh * 3 + marg * 2, marg, true);
+    roundRect(ctx, pWidth * -0.5, 0, pWidth, textsHeight + MARGIN * 2, MARGIN, true); ctx.translate(0, MARGIN);
     ctx.fillStyle = levelColor;
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
-    ctx.translate(0, marg);
-    ctx.fillText(`Network ${network.id}`, 0, 0, tWidth);
-    ctx.translate(0, fh);
-    if (network.mutationIndex === 0) {
-      ctx.fillText(
-        'Original model',
-        0,
-        0,
-        tWidth,
-      );
-      ctx.translate(0, fh);
+    print(`Network ${network.id}`);
+    if (isOriginal) {
+      print('Original model');
     } else {
-      ctx.fillText(
-        `Mutation ${(network.mutationFactor * 100).toFixed(4)}%`,
-        0,
-        0,
-        tWidth,
-      );
-      ctx.translate(0, fh);
-      ctx.fillText(
-        `MutationIndex ${(network.mutationIndex)}`,
-        0,
-        0,
-        tWidth,
-      );
-      ctx.translate(0, fh);
+      print(`Mutation ${(network.mutationFactor * 100).toFixed(4)}%`);
+      print(`MutationIndex ${(network.mutationIndex)}`);
     }
-    ctx.fillText(`Score ${Math.round(network.score)}`, 0, 0, tWidth);
-    ctx.restore();
+    print(`Score ${Math.round(network.score)}`);
+    ctx.restore()
   }
 
-  #rederHelp(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+  #rederHelp(ctx: CanvasRenderingContext2D) {
+    const print = this.#createCursor(ctx);
     const height = ctx.canvas.height - MARGIN * 2;
     const pWidth = 250;
-    const marg = 18;
-    const fh = 18;
     ctx.save();
-    ctx.translate(ctx.canvas.width * 0.5 + MARGIN, height - fh * 3 - MARGIN * 2);
-    ctx.font = fh + 'px Arial';
+    ctx.translate(ctx.canvas.width * 0.5, height - FH * 3 - MARGIN * 2);
     ctx.strokeStyle = 'gray';
     ctx.fillStyle = 'rgba(32, 32, 32, .76)';
-    roundRect(ctx, pWidth * -0.5, 0, pWidth, fh * 3 + marg * 2, marg, true);
+    roundRect(ctx, pWidth * -0.5, 0, pWidth, FH * 3 + MARGIN * 2, MARGIN, true);
+    ctx.translate(0, MARGIN);
     ctx.fillStyle = 'gray';
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
-    ctx.translate(0, marg);
-    ctx.fillText(
-      `[S] Toggle name stats`,
-      0,
-      0,
-    );
-    ctx.translate(0, fh);
-    ctx.fillText(
-      `[V] Toggle neural network`,
-      0,
-      0,
-    );
-    ctx.translate(0, fh);
-    ctx.fillText(
-      `[L] Toggle neurons links`,
-      0,
-      0,
-    );
-    ctx.restore();
+    print("Press [V] to toggle network");
+    print("Press [L] to toggle links");
+    print("Press [S] to toggle stats");
+    ctx.restore()
   }
 
   #drawNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
