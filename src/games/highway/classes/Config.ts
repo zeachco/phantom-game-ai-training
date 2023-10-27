@@ -1,21 +1,22 @@
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 300;
-  public AUTO_DISTRIBUTE_LAYERS = false;
+  public CAR_NB = 1000;
+  public AUTO_DISTRIBUTE_LAYERS = true;
   public MAX_MUTATION_LVL = .9;
   public MIN_MUTATION_LVL = .0001;
   public CARS_PER_LAYERS = [
     0,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
-    this.CAR_NB,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
+    this.CAR_NB / 10,
   ];
   public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
@@ -25,7 +26,7 @@ class Config {
   // env
   public SENSORS = 17;
   public SENSOR_ANGLE = (Math.PI / 2) * 3.5;
-  public SENSORS_MAX_DEPTH = 200;
+  public SENSORS_MAX_DEPTH = 120;
   public SENSORS_MAX_WIDTH = 120;
   public DEATH_SPEED = 0.0018;
 
@@ -88,7 +89,7 @@ class Config {
       const give = layer ? Math.ceil(remainingScore * 0.55) : 0;
       remainingScore -= give;
       this.CARS_PER_LAYERS[layer] = Math.round(
-        (give / totalScore) * this.CAR_NB,
+        (give / totalScore) * this.CAR_NB + 2,
       );
       console.log(
         `set layer ${layer} with ${this.CARS_PER_LAYERS[layer]} cars`,
