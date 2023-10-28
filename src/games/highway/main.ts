@@ -57,14 +57,15 @@ export default async (state: typeof defaultState) => {
 
       const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
 
+      const divider = (savedModel?.version > 10 ? savedModel?.version : 10) / 10;
       const mutationTarget = lerp(
         config.MIN_MUTATION_LVL,
         config.MAX_MUTATION_LVL,
         1 - scoreRatio,
-      );
+      ) / divider;
 
       console.debug(
-        `#${l} Gen-${savedModel?.version} Mutation ${Math.round(mutationTarget * 100000) / 1000
+        `#${l} Gen-${savedModel?.version} Mutation ${Math.round(mutationTarget * 10000000) / 100000
         }% | Score: ${Math.round(layerOriginScore)} `,
       );
 
