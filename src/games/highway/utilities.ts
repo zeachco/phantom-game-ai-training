@@ -1,5 +1,6 @@
+import { ORCHESTRATOR_KIND, OrchestratorNetwork } from '../../ai/Orchestrator';
 import { ModelsByLayerCount } from '../../ai/utils';
-import { getColorScale } from '../../utilities/colors';
+import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
 
@@ -10,8 +11,58 @@ export const defaultState = {
   traffic: [] as Car[],
   player: new Car(),
   sortedModels: [] as ModelsByLayerCount[],
+  sortedOrchestrators: [] as ModelsByLayerCount[],
   playing: false,
 };
+
+const isOrchestrator = (model: ModelsByLayerCount[number]) =>
+  model.kind === ORCHESTRATOR_KIND;
+
+/** previous best save a model is competing against, kinds have their own saves */
+function previousSave(
+  state: typeof defaultState,
+  model: ModelsByLayerCount[number],
+) {
+  const saves = isOrchestrator(model)
+    ? state.sortedOrchestrators
+    : state.sortedModels;
+  const models = saves[model.levels.length];
+  return (models && models[0]) || undefined;
+}
+
+/** color a layer depth gets on the scale shared by every brain of the game */
+const layerColor = (layer: number) =>
+  getColorScale(layer / config.MAX_NETWORK_LAYERS);
+
+/**
+ * Accent of an orchestrator: the colors of the brains it drives with, weighted
+ * by how much of the run each of them has been driving.
+ */
+export function orchestratorColor(brain: OrchestratorNetwork) {
+  const shares = brain.selectionShares;
+  return blendColorScale(
+    brain.expertLayers.map((layer, i) => ({
+      ratio: layer / config.MAX_NETWORK_LAYERS,
+      weight: shares[i],
+    })),
+    config.ORCHESTRATOR_COLOR,
+  );
+}
+
+/** same blend for a save, where the experts are only kept as `layer.rank` slots */
+const savedOrchestratorColor = (model: ModelsByLayerCount[number]) =>
+  blendColorScale(
+    (model.expertIds || []).map((slot: string, i: number) => ({
+      ratio: parseInt(slot, 10) / config.MAX_NETWORK_LAYERS,
+      weight: (model.selectionCounts && model.selectionCounts[i]) || 0,
+    })),
+    config.ORCHESTRATOR_COLOR,
+  );
+
+const modelColor = (model: ModelsByLayerCount[number]) =>
+  isOrchestrator(model)
+    ? savedOrchestratorColor(model)
+    : layerColor(model.levels.length);
 
 const FH = 10;
 const TL = 0;
@@ -33,6 +84,7 @@ export function drawScores(
 ) {
   const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
     ...state.sortedModels.map((m) => m[0]).filter(Boolean),
+    ...state.sortedOrchestrators.map((m) => m[0]).filter(Boolean),
     ...state.sortedCars.filter(
       (c, i) => i < config.SCORES_NB || c === state.player,
     ),
@@ -56,8 +108,8 @@ export function drawScores(
 
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
-      const models = state.sortedModels[ref.brain.levels.length];
-      const previousScore = (models[0] && models[0].score) || 0;
+      const previous = previousSave(state, ref.brain);
+      const previousScore = (previous && previous.score) || 0;
       const diff = ref.brain.score - previousScore;
       let emoji = '';
       let add = '';
@@ -75,14 +127,15 @@ export function drawScores(
         FH * 4 + index * FH,
       );
     } else {
-      ctx.fillStyle = getColorScale(
-        ref.levels.length / config.MAX_NETWORK_LAYERS,
-      );
+      ctx.fillStyle = modelColor(ref);
 
       const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
+      const emoji = isOrchestrator(ref) ? '🧭' : '👻';
+      const name = isOrchestrator(ref)
+        ? `${ref.version}-${ref.mutationIndex}`
+        : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
       ctx.fillText(
-        `👻 ${ref.levels.length}-${ref.version}-${ref.mutationIndex
-        } ${Math.round(ref.score)} ${symb}`,
+        `${emoji} ${name} ${Math.round(ref.score)} ${symb}`,
         TL,
         FH * 4 + index * FH,
       );

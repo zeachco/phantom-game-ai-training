@@ -6,10 +6,17 @@ import { config } from './classes/Config';
 import { Road } from './classes/Road';
 import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
-import { defaultState, drawScores } from './utilities';
+import { defaultState, drawScores, orchestratorColor } from './utilities';
 import { getColorScale } from '../../utilities/colors';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { lerp } from '../../utilities/math';
+import {
+  expertSlotIds,
+  hydrateExperts,
+  ORCHESTRATOR_KIND,
+  ORCHESTRATOR_LEVELS,
+  OrchestratorNetwork,
+} from '../../ai/Orchestrator';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -102,7 +109,82 @@ export default async (state: typeof defaultState) => {
       }
     }
 
+    setupOrchestrators(cars);
+
     return cars;
+  }
+
+  /**
+   * Spawns the cars driven by an orchestrator: a shallow selector that reads the
+   * same sensors and answers with one of the trained brains, which then drives
+   * with those very inputs. Experts stay frozen, only the routing is trained.
+   */
+  function setupOrchestrators(cars: Car[]) {
+    if (!config.ORCHESTRATOR_ENABLED) return;
+
+    const inputNb = config.SENSORS + 1;
+    const outputNb = 4;
+    const experts = hydrateExperts(
+      state.sortedModels,
+      inputNb,
+      outputNb,
+      config.ORCHESTRATOR_EXPERTS_PER_LAYER,
+    );
+
+    if (experts.length < config.ORCHESTRATOR_MIN_EXPERTS) {
+      console.debug(
+        `🧭 Orchestrator needs ${config.ORCHESTRATOR_MIN_EXPERTS} trained brains, ${experts.length} available`,
+      );
+      return;
+    }
+
+    const savedModel = state.sortedOrchestrators[ORCHESTRATOR_LEVELS]?.[0];
+    const divider = (savedModel?.version > 10 ? savedModel.version : 10) / 10;
+    const mutationTarget = config.ORCHESTRATOR_MAX_MUTATION_LVL / divider;
+
+    console.debug(
+      `🧭 Gen-${savedModel?.version ?? 0} Mutation ${Math.round(mutationTarget * config.ORCHESTRATOR_MUTATION_BOOST * 10000) / 100
+      }% | ${experts.length} experts: ${expertSlotIds(experts).join(', ')}`,
+    );
+
+    let isSaveCompatible = true;
+
+    for (let i = 0; i <= config.ORCHESTRATOR_CARS; i++) {
+      const car = new Car(
+        road.getLane(1),
+        100,
+        ControlType.AI,
+        3,
+        `🧭 0 👶`,
+        config.ORCHESTRATOR_COLOR,
+        ORCHESTRATOR_LEVELS,
+        (inputCount, outputCount) =>
+          new OrchestratorNetwork(inputCount, outputCount, experts, {
+            hiddenNodes: config.ORCHESTRATOR_HIDDEN_NODES,
+            mutationBoost: config.ORCHESTRATOR_MUTATION_BOOST,
+            resetChance: config.ORCHESTRATOR_RESET_CHANCE,
+          }),
+      );
+
+      if (savedModel && car.brain) {
+        car.brain.mutationIndex = i;
+        car.brain.mutationFactor = (i / config.ORCHESTRATOR_CARS) * mutationTarget;
+
+        try {
+          if (isSaveCompatible) car.brain.mutate(savedModel);
+        } catch (err) {
+          isSaveCompatible = false;
+          console.error(
+            `Unable to mutate existing orchestrator #${car.brain.id}, starting over.`,
+            err.message,
+          );
+        }
+
+        car.label = `🧭 ${i}`;
+      }
+
+      cars.push(car);
+    }
   }
 
   try {
@@ -119,6 +201,10 @@ export default async (state: typeof defaultState) => {
     }
     for (let i = 0; i < state.cars.length; i++) {
       state.cars[i].update(road.borders, state.traffic, deathRays);
+      const brain = state.cars[i].brain;
+      if (brain instanceof OrchestratorNetwork) {
+        state.cars[i].setColor(orchestratorColor(brain));
+      }
       const y = state.cars[i].y;
       if (y > ray.y || y > carRay.y) {
         state.cars[i].damaged = true;
@@ -176,6 +262,10 @@ export default async (state: typeof defaultState) => {
     Object.assign(state, defaultState);
     state.playing = true;
     state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
+    state.sortedOrchestrators = io.loadAllModelLayers(
+      ORCHESTRATOR_LEVELS,
+      ORCHESTRATOR_KIND,
+    );
 
     // Game ender
     ray = new DeathRay();

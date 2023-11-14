@@ -1,12 +1,16 @@
 import { roundRect } from '../../utilities/canvas';
-import { getColorScale } from '../../utilities/colors';
+import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { Level, NeuralNetwork } from '../Network';
+import { OrchestratorNetwork } from '../Orchestrator';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
 const FH = 18;
+const CONTROL_LABELS = ['F', 'L', 'R', 'B'];
+/** bars height plus the row of expert indexes under them */
+const SELECTION_HEIGHT = FH * 4;
 
 interface BaseConfig {
   MAX_NETWORK_LAYERS: number;
@@ -34,10 +38,29 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     }
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
-    if (this.renderEnable) this.#drawNetwork(ctx, network);
+    // experts are shared between the orchestrator cars, replaying the last pass
+    // puts back the activations of the brain we are about to draw
+    if (network instanceof OrchestratorNetwork) network.replay();
+
+    if (this.renderEnable) this.#drawBrain(ctx, network);
     else this.#rederHelp(ctx);
 
     if (this.renderStats) this.#drawStats(ctx, network);
+  }
+
+  #layerColor(layer: number) {
+    return getColorScale(layer / this.config.MAX_NETWORK_LAYERS);
+  }
+
+  /** the accent an orchestrator car wears: its brains weighted by usage */
+  #blendedColor(network: OrchestratorNetwork) {
+    const shares = network.selectionShares;
+    return blendColorScale(
+      network.expertLayers.map((layer, i) => ({
+        ratio: layer / this.config.MAX_NETWORK_LAYERS,
+        weight: shares[i],
+      })),
+    );
   }
 
   #getColor(value) {
@@ -54,30 +77,116 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     }
   }
 
+  /**
+   * A regular brain fills the canvas. An orchestrator shows both halves of its
+   * decision: the selector that reads the sensors on the left, the expert it
+   * routed those same sensors to on the right.
+   */
+  #drawBrain(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+    if (!(network instanceof OrchestratorNetwork)) {
+      const width = ctx.canvas.width - MARGIN * 2;
+      return this.#drawNetwork(ctx, network, MARGIN, width, CONTROL_LABELS);
+    }
+
+    const half = (ctx.canvas.width - MARGIN * 3) / 2;
+    const expertLabels = network.experts.map((_expert, i) => `${i}`);
+    this.#drawNetwork(ctx, network, MARGIN, half, expertLabels);
+
+    const expert = network.activeExpert;
+    if (expert) {
+      this.#drawNetwork(ctx, expert, MARGIN * 2 + half, half, CONTROL_LABELS);
+    }
+
+  }
+
+  /**
+   * One bar per expert, filled with the share of the run it has been driving.
+   * Drawn from the current origin, centered on it.
+   */
+  #drawSelection(
+    ctx: CanvasRenderingContext2D,
+    network: OrchestratorNetwork,
+    width: number,
+  ) {
+    const shares = network.selectionShares;
+    const height = SELECTION_HEIGHT - FH;
+    const barWidth = width / shares.length;
+    const left = width * -0.5;
+
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'hanging';
+    ctx.font = `${RADIUS * 0.7}px Arial`;
+    network.expertLayers.forEach((layer, i) => {
+      // each bar wears the color of its brain, so the blended car accent can be
+      // read straight off the distribution
+      const color = this.#layerColor(layer);
+      const isActive = i === network.selectedIndex;
+      const x = left + i * barWidth;
+      ctx.globalAlpha = isActive ? 1 : 0.45;
+      ctx.fillStyle = color;
+      ctx.fillRect(
+        x + 1,
+        height * (1 - shares[i]),
+        barWidth - 2,
+        height * shares[i],
+      );
+      ctx.fillText(`${i}`, x + barWidth * 0.5, height + 2);
+      ctx.globalAlpha = 1;
+    });
+    ctx.restore();
+  }
+
   #drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    const isOriginal = network.mutationIndex === 0
-    const textsHeight = FH * (isOriginal ? 3 : 4)
+    const orchestrator =
+      network instanceof OrchestratorNetwork ? network : undefined;
+    const lines = [`Network ${network.id}`];
+
+    if (network.mutationIndex === 0) {
+      lines.push('Original model');
+    } else {
+      lines.push(`Mutation ${(network.mutationFactor * 100).toFixed(4)}%`);
+      lines.push(`MutationIndex ${network.mutationIndex}`);
+    }
+    lines.push(`Score ${Math.round(network.score)}`);
+
+    if (orchestrator) {
+      const expert = orchestrator.activeExpert;
+      lines.push(`Driving #${orchestrator.selectedIndex} of ${orchestrator.experts.length}`);
+      const slot = orchestrator.expertIds[orchestrator.selectedIndex];
+      lines.push(`Expert ${slot || '?'} ${expert ? expert.id : 'none'}`);
+      lines.push(`Switches ${orchestrator.switches}`);
+    }
+
+    // the usage bars live inside the panel, the canvas around it is taken by
+    // the two networks
+    const barsHeight = orchestrator ? SELECTION_HEIGHT : 0;
     const pWidth = 200;
-    const levelColor = getColorScale(
-      network.levels.length / this.config.MAX_NETWORK_LAYERS,
-    );
+    const levelColor = orchestrator
+      ? this.#blendedColor(orchestrator)
+      : this.#layerColor(network.levels.length);
     const print = this.#createCursor(ctx);
     ctx.save();
+    ctx.setLineDash([]);
     ctx.translate(ctx.canvas.width * 0.5 + MARGIN, MARGIN * 2);
     ctx.strokeStyle = levelColor;
     ctx.fillStyle = 'rgba(32, 32, 32, .76)';
-    roundRect(ctx, pWidth * -0.5, 0, pWidth, textsHeight + MARGIN * 2, MARGIN, true); ctx.translate(0, MARGIN);
+    roundRect(
+      ctx,
+      pWidth * -0.5,
+      0,
+      pWidth,
+      lines.length * FH + barsHeight + MARGIN * 2,
+      MARGIN,
+      true,
+    );
+    ctx.translate(0, MARGIN);
     ctx.fillStyle = levelColor;
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
-    print(`Network ${network.id}`);
-    if (isOriginal) {
-      print('Original model');
-    } else {
-      print(`Mutation ${(network.mutationFactor * 100).toFixed(4)}%`);
-      print(`MutationIndex ${(network.mutationIndex)}`);
-    }
-    print(`Score ${Math.round(network.score)}`);
+    lines.forEach((line) => print(line));
+    if (orchestrator) this.#drawSelection(ctx, orchestrator, pWidth - MARGIN * 2);
     ctx.restore()
   }
 
@@ -100,10 +209,14 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.restore()
   }
 
-  #drawNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    const left = MARGIN;
+  #drawNetwork(
+    ctx: CanvasRenderingContext2D,
+    network: NeuralNetwork,
+    left: number,
+    width: number,
+    outputLabels: string[],
+  ) {
     const top = MARGIN;
-    const width = ctx.canvas.width - MARGIN * 2;
     const height = ctx.canvas.height - MARGIN * 2;
 
     const levelHeight = height / network.levels.length;
@@ -125,7 +238,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
         levelTop,
         width,
         levelHeight,
-        i == network.levels.length - 1 ? ['F', 'L', 'R', 'B'] : [],
+        i == network.levels.length - 1 ? outputLabels : [],
       );
     }
   }

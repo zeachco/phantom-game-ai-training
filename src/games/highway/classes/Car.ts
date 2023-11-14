@@ -23,6 +23,8 @@ export class Car {
   public height = 50;
   private img: HTMLImageElement;
   private mask: HTMLCanvasElement;
+  /** color the mask currently holds, it is only repainted when that moves */
+  private maskColor = '';
   private va = 0;
 
   constructor(
@@ -33,6 +35,8 @@ export class Car {
     public label = '',
     public color = getRandomColor(),
     public brainLayers = 1,
+    /** lets the caller swap in another kind of brain, like an orchestrator */
+    public brainBuilder?: (inputCount: number, outputCount: number) => NeuralNetwork,
   ) {
     this.x = x;
     this.y = y;
@@ -50,11 +54,11 @@ export class Car {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      this.brain = new NeuralNetwork(
-        this.sensor.rayCount + 1,
-        Object.keys(this.controls).length,
-        brainLayers,
-      );
+      const inputCount = this.sensor.rayCount + 1;
+      const outputCount = Object.keys(this.controls).length;
+      this.brain = brainBuilder
+        ? brainBuilder(inputCount, outputCount)
+        : new NeuralNetwork(inputCount, outputCount, brainLayers);
     }
 
     this.img = new Image();
@@ -64,15 +68,28 @@ export class Car {
     this.mask.width = this.width;
     this.mask.height = this.height;
 
-    const maskCtx = this.mask.getContext('2d')!;
-    this.img.onload = () => {
-      maskCtx.fillStyle = this.color;
-      maskCtx.rect(0, 0, this.width, this.height);
-      maskCtx.fill();
+    this.img.onload = () => this.#paintMask();
+  }
 
-      maskCtx.globalCompositeOperation = 'destination-atop';
-      maskCtx.drawImage(this.img, 0, 0, this.width, this.height);
-    };
+  /** the accent can move at runtime, an orchestrator blends the brains it uses */
+  setColor(color: string) {
+    if (color === this.color) return;
+    this.color = color;
+    this.#paintMask();
+  }
+
+  #paintMask() {
+    if (!this.img.complete || this.maskColor === this.color) return;
+    this.maskColor = this.color;
+
+    const maskCtx = this.mask.getContext('2d')!;
+    maskCtx.globalCompositeOperation = 'source-over';
+    maskCtx.clearRect(0, 0, this.width, this.height);
+    maskCtx.fillStyle = this.color;
+    maskCtx.fillRect(0, 0, this.width, this.height);
+
+    maskCtx.globalCompositeOperation = 'destination-atop';
+    maskCtx.drawImage(this.img, 0, 0, this.width, this.height);
   }
 
   update(roadBorders: Vector[][], traffic: Car[], deathRays: DeathRay[]) {
@@ -88,7 +105,7 @@ export class Car {
         s == null ? 0 : 1 - s.offset,
       );
       offsets.push(this.speed / this.maxSpeed);
-      const outputs = NeuralNetwork.feedForward(offsets, this.brain);
+      const outputs = this.brain.process(offsets);
 
       if (this.useAI) {
         const [forward, left, right, reverse] = outputs

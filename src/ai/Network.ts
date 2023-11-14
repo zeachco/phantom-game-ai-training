@@ -1,5 +1,8 @@
 import { lerp, rand } from '../utilities/math';
-import { ModelsByLayerCount } from './utils';
+import type { ModelsByLayerCount } from './utils';
+
+/** namespace of the regular brains, kept as-is to stay compatible with old saves */
+export const DEFAULT_KIND = 'neural';
 
 export class NeuralNetwork {
   public version = 0;
@@ -14,6 +17,8 @@ export class NeuralNetwork {
   public diff = 0;
   /** Date of last version */
   public date = Date.now();
+  /** storage namespace, brains of different kinds never mutate into each other */
+  public kind: string = DEFAULT_KIND;
 
   constructor(inputNb, outputNb, intermediateLayers = Math.ceil(inputNb / 4)) {
     if (inputNb < outputNb) {
@@ -39,8 +44,43 @@ export class NeuralNetwork {
     return outputs;
   }
 
+  /** rebuilds a usable network out of a save, levels are sized from the stored weights */
+  static hydrate(saved: ModelsByLayerCount[number]): NeuralNetwork {
+    const network = new NeuralNetwork(1, 1, 0);
+    network.levels = (saved.levels || []).map((saved) => {
+      const weights: number[][] = saved.weights;
+      const level = new Level(weights.length, weights[0].length);
+      for (let i = 0; i < weights.length; i++) {
+        for (let j = 0; j < weights[i].length; j++) {
+          level.weights[i][j] = weights[i][j];
+        }
+      }
+      return level;
+    });
+    network.version = saved.version || 0;
+    network.score = saved.score || 0;
+    network.mutationIndex = saved.mutationIndex || 0;
+    network.mutationFactor = 0;
+    network.kind = saved.kind || DEFAULT_KIND;
+    return network;
+  }
+
+  /** entry point used by the entities, subclasses can route the inputs differently */
+  process(inputs: number[]): number[] {
+    return NeuralNetwork.feedForward(inputs, this);
+  }
+
   get id() {
     return [this.levels.length, this.version, this.mutationIndex].join('-');
+  }
+
+  get inputCount() {
+    return this.levels[0] ? this.levels[0].weights.length : 0;
+  }
+
+  get outputCount() {
+    const last = this.levels[this.levels.length - 1];
+    return last ? last.weights[0].length : 0;
   }
 
   mutate(network: ModelsByLayerCount[number]) {

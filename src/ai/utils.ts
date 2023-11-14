@@ -1,5 +1,5 @@
 import { isSameObject } from '../utilities/object';
-import type { NeuralNetwork } from './Network';
+import { DEFAULT_KIND, type NeuralNetwork } from './Network';
 
 /**
  * index is the layer amount
@@ -15,7 +15,9 @@ export type ModelsByLayerCount = (
 )[];
 
 export function fileUtilities(game = '') {
-  const name = (layer: number) => `${game}_${layer}`;
+  /** regular brains keep their historical namespace, other kinds get their own */
+  const name = (layer: number, kind: string = DEFAULT_KIND) =>
+    kind === DEFAULT_KIND ? `${game}_${layer}` : `${game}_${kind}_${layer}`;
 
   return {
     saveBestModels,
@@ -25,9 +27,10 @@ export function fileUtilities(game = '') {
   function saveModels(
     layers: number,
     models: NeuralNetwork[],
-    namespace = name(layers),
+    kind: string = DEFAULT_KIND,
+    namespace = name(layers, kind),
   ) {
-    const olds = loadModels(layers);
+    const olds = loadModels(layers, kind);
     const exclude: (keyof NeuralNetwork)[] = [
       'id',
       'version',
@@ -35,7 +38,7 @@ export function fileUtilities(game = '') {
       'mutationFactor',
       'score',
     ];
-    const name = `${models.length}x ${layers}-${models[0]?.version}`;
+    const name = `${models.length}x ${kind} ${layers}-${models[0]?.version}`;
     const diff = olds[0] ? models[0].score - olds[0].score : models[0].score;
     const score = `${models[0].score.toFixed(4)} ${diff.toFixed(10)}`;
     if (diff < 0) {
@@ -58,14 +61,18 @@ export function fileUtilities(game = '') {
     }
   }
 
-  function loadModels(layers: number, namespace = name(layers)) {
+  function loadModels(
+    layers: number,
+    kind: string = DEFAULT_KIND,
+    namespace = name(layers, kind),
+  ) {
     let models: ModelsByLayerCount[number] = [];
     try {
       const data = localStorage.getItem(namespace);
       if (!data) throw new Error(`not found`);
       models = JSON.parse(data);
     } catch {
-      console.debug(`Nothing for layer ${layers}`);
+      console.debug(`Nothing for layer ${layers} of ${kind}`);
     }
     return models;
   }
@@ -73,10 +80,14 @@ export function fileUtilities(game = '') {
   /**
    * Receives all neural networks with a score and determine how to same them
    * stored by compatibility (neural networks are easier to mutate from similar neural network complexity AKA same amount of levels)
+   * Kinds are kept apart, an orchestrator and a regular brain of the same depth
+   * are not interchangeable.
    */
   function saveBestModels(models: NeuralNetwork[], amountPerComplexity = 1) {
-    const save: NeuralNetwork[][] = new Array();
+    const byKind: Record<string, NeuralNetwork[][]> = {};
     models.forEach((model) => {
+      const kind = model.kind || DEFAULT_KIND;
+      const save = (byKind[kind] = byKind[kind] || []);
       const space = model.levels.length;
       const previous = save[space] || [];
       if (previous.length >= amountPerComplexity) return;
@@ -84,14 +95,18 @@ export function fileUtilities(game = '') {
     });
 
     console.info(`💾 Saving best ${amountPerComplexity} models...`);
-    save.forEach((models, layersNb) => saveModels(layersNb, models));
+    Object.keys(byKind).forEach((kind) =>
+      byKind[kind].forEach((models, layersNb) =>
+        saveModels(layersNb, models, kind),
+      ),
+    );
   }
 
-  function loadAllModelLayers(maxLayer = 1) {
+  function loadAllModelLayers(maxLayer = 1, kind: string = DEFAULT_KIND) {
     const load: ModelsByLayerCount[] = new Array();
     try {
       for (let i = 1; i <= maxLayer; i++) {
-        const model = loadModels(i);
+        const model = loadModels(i, kind);
         if (model) load[i] = model;
       }
     } catch (err) {
