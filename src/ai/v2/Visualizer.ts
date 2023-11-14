@@ -12,38 +12,239 @@ const CONTROL_LABELS = ['F', 'L', 'R', 'B'];
 /** bars height plus the row of expert indexes under them */
 const SELECTION_HEIGHT = FH * 4;
 
+const TAU = Math.PI * 2;
+/** dash patterns are reused instead of rebuilt, setLineDash copies them anyway */
+const LINK_DASH = [3, 2];
+const NODE_DASH = [5, 1];
+const NO_DASH: number[] = [];
+const NO_LABELS: string[] = [];
+
+/**
+ * Link shades are quantized. A brain draws thousands of links and the canvas
+ * has to parse a color and close the current path on every style change, so the
+ * shades are precomputed once and the links sharing one are stroked together.
+ */
+const WEIGHT_STEPS = 48;
+const WEIGHT_COLORS = new Array(WEIGHT_STEPS).fill(0).map((_step, i) => {
+  const value = (i / (WEIGHT_STEPS - 1)) * 2 - 1;
+  return `hsla(56, 100%, ${Math.round((value + 1) * 100)}%, ${Math.abs(
+    value,
+  )})`;
+});
+/** the opacity of a link is its weight, under that it never reaches a pixel */
+const MIN_LINK_WEIGHT = 0.03;
+
 interface BaseConfig {
   MAX_NETWORK_LAYERS: number;
 }
 
+/** where one level of a brain sits, recomputed when the canvas moves */
+interface LevelLayout {
+  level: Level;
+  top: number;
+  bottom: number;
+  inputX: number[];
+  outputX: number[];
+  labels: string[];
+}
+
 const controls = new Map();
-controls.set('KeyV', 'ToggleRender');
 controls.set('KeyL', 'ToggleLines');
 controls.set('KeyS', 'ToggleStats');
 
 const pad = new GamePad(controls);
 
+function weightBucket(weight: number) {
+  const ratio = (Math.max(-1, Math.min(1, weight)) + 1) * 0.5;
+  return Math.round(ratio * (WEIGHT_STEPS - 1));
+}
+
+function nodePositions(count: number, left: number, right: number) {
+  const positions = new Array<number>(count);
+  for (let i = 0; i < count; i++) {
+    positions[i] = lerp(left, right, count == 1 ? 0.5 : i / (count - 1));
+  }
+  return positions;
+}
+
+/** `0`, `1`, ... reused across frames, an orchestrator relabels its experts on each one */
+const indexLabelsCache: string[][] = [];
+function indexLabels(count: number) {
+  if (!indexLabelsCache[count]) {
+    indexLabelsCache[count] = new Array(count)
+      .fill(0)
+      .map((_expert, i) => `${i}`);
+  }
+  return indexLabelsCache[count];
+}
+
+/** consecutive arcs of a path get joined by a line, each one moves first */
+function traceCircle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+) {
+  ctx.moveTo(x + radius, y);
+  ctx.arc(x, y, radius, 0, TAU);
+}
+
+/**
+ * The gauges of a whole row, stroked in two passes: nodes only differ by the
+ * sign of their value and that sign is all their color says.
+ */
+function strokeGauges(
+  ctx: CanvasRenderingContext2D,
+  positions: number[],
+  y: number,
+  radius: number,
+  values: number[],
+  positiveColor: string,
+  negativeColor: string,
+  absolute: boolean,
+) {
+  for (let pass = 0; pass < 2; pass++) {
+    const isPositive = pass === 0;
+    let traced = false;
+    ctx.beginPath();
+    for (let i = 0; i < positions.length; i++) {
+      const value = values[i];
+      if (!value || value > 0 !== isPositive) continue;
+      ctx.moveTo(positions[i] + radius, y);
+      ctx.arc(
+        positions[i],
+        y,
+        radius,
+        0,
+        TAU * (absolute ? Math.abs(value) : value),
+      );
+      traced = true;
+    }
+    if (!traced) continue;
+    ctx.strokeStyle = isPositive ? positiveColor : negativeColor;
+    ctx.stroke();
+  }
+}
+
+/** one path per shade instead of one per link */
+function drawLinks(ctx: CanvasRenderingContext2D, layout: LevelLayout) {
+  const { level, inputX, outputX, bottom } = layout;
+  const top = layout.top + RADIUS;
+  const weights = level.weights;
+  const buckets: number[][] = [];
+
+  for (let i = 0; i < inputX.length; i++) {
+    const row = weights[i];
+    if (!row) continue;
+    for (let j = 0; j < outputX.length; j++) {
+      const weight = row[j];
+      // an invisible link costs as much as a visible one, and they are the many
+      if (!(Math.abs(weight) > MIN_LINK_WEIGHT)) continue;
+      const bucket = weightBucket(weight);
+      const pairs = buckets[bucket] || (buckets[bucket] = []);
+      pairs.push(i, j);
+    }
+  }
+
+  for (let bucket = 0; bucket < buckets.length; bucket++) {
+    const pairs = buckets[bucket];
+    if (!pairs) continue;
+    ctx.beginPath();
+    for (let k = 0; k < pairs.length; k += 2) {
+      ctx.moveTo(inputX[pairs[k]], bottom);
+      ctx.lineTo(outputX[pairs[k + 1]], top);
+    }
+    ctx.strokeStyle = WEIGHT_COLORS[bucket];
+    ctx.stroke();
+  }
+}
+
+/**
+ * The links of a brain only move when its weights do, which never happens
+ * during a run: they are rasterized once and blitted on the frames that follow,
+ * leaving only the activations to redraw.
+ *
+ * This freezes `lineDashOffset` on the links; animating it would mean
+ * rasterizing thousands of dashed strokes again on every frame.
+ */
+class LinkLayer {
+  /** room for the stroke width on both sides of the strip */
+  static PAD = 2;
+
+  #canvas = document.createElement('canvas');
+  #ctx = this.#canvas.getContext('2d') as CanvasRenderingContext2D;
+  #network: NeuralNetwork | undefined;
+  #left = NaN;
+  #width = 0;
+  #height = 0;
+
+  draw(
+    ctx: CanvasRenderingContext2D,
+    network: NeuralNetwork,
+    layouts: LevelLayout[],
+    left: number,
+    width: number,
+  ) {
+    const stripWidth = Math.ceil(width) + LinkLayer.PAD * 2;
+    const stripHeight = ctx.canvas.height;
+    if (stripWidth < 1 || stripHeight < 1) return;
+
+    if (
+      this.#network !== network ||
+      this.#left !== left ||
+      this.#width !== stripWidth ||
+      this.#height !== stripHeight
+    ) {
+      this.#rasterize(network, layouts, left, stripWidth, stripHeight);
+    }
+
+    ctx.drawImage(this.#canvas, left - LinkLayer.PAD, 0);
+  }
+
+  #rasterize(
+    network: NeuralNetwork,
+    layouts: LevelLayout[],
+    left: number,
+    width: number,
+    height: number,
+  ) {
+    const ctx = this.#ctx;
+    // assigning a size clears the strip and resets its context
+    this.#canvas.width = width;
+    this.#canvas.height = height;
+    // the links are traced in the coordinates of the canvas they came from, the
+    // strip is blitted back exactly where it was rasterized for
+    ctx.setTransform(1, 0, 0, 1, LinkLayer.PAD - left, 0);
+    ctx.lineWidth = 2;
+    ctx.setLineDash(LINK_DASH);
+    for (let i = 0; i < layouts.length; i++) drawLinks(ctx, layouts[i]);
+
+    this.#network = network;
+    this.#left = left;
+    this.#width = width;
+    this.#height = height;
+  }
+}
+
 export class Visualizer<T extends BaseConfig = BaseConfig> {
-  public renderEnable = false;
   public renderLines = true;
   public renderStats = true;
 
-  constructor(public config: T) { }
+  /** the selector half and the expert half go stale on their own */
+  #mainLinks = new LinkLayer();
+  #expertLinks = new LinkLayer();
+
+  constructor(public config: T) {}
 
   render(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    if (pad.once('ToggleRender')) this.renderEnable = !this.renderEnable;
-    if (pad.once('ToggleLines')) {
-      this.renderLines = !this.renderLines;
-      this.renderEnable = true;
-    }
+    if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
     // experts are shared between the orchestrator cars, replaying the last pass
     // puts back the activations of the brain we are about to draw
     if (network instanceof OrchestratorNetwork) network.replay();
 
-    if (this.renderEnable) this.#drawBrain(ctx, network);
-    else this.#rederHelp(ctx);
+    this.#drawBrain(ctx, network);
 
     if (this.renderStats) this.#drawStats(ctx, network);
   }
@@ -63,18 +264,12 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     );
   }
 
-  #getColor(value) {
-    return `hsla(56, 100%, ${Math.round((value + 1) * 100)}%, ${Math.abs(
-      value,
-    )})`;
-  }
-
-  #createCursor(ctx: CanvasRenderingContext2D, fontHeight = FH, width = 200) {
+  #createCursor(ctx: CanvasRenderingContext2D, width: number, fontHeight = FH) {
     return function print(text: string, height = fontHeight) {
       ctx.font = height + 'px Arial';
       ctx.fillText(text, 0, 0, width);
       ctx.translate(0, height);
-    }
+    };
   }
 
   /**
@@ -85,18 +280,38 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   #drawBrain(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     if (!(network instanceof OrchestratorNetwork)) {
       const width = ctx.canvas.width - MARGIN * 2;
-      return this.#drawNetwork(ctx, network, MARGIN, width, CONTROL_LABELS);
+      return this.#drawNetwork(
+        ctx,
+        network,
+        MARGIN,
+        width,
+        CONTROL_LABELS,
+        this.#mainLinks,
+      );
     }
 
     const half = (ctx.canvas.width - MARGIN * 3) / 2;
-    const expertLabels = network.experts.map((_expert, i) => `${i}`);
-    this.#drawNetwork(ctx, network, MARGIN, half, expertLabels);
+    const expertLabels = indexLabels(network.experts.length);
+    this.#drawNetwork(
+      ctx,
+      network,
+      MARGIN,
+      half,
+      expertLabels,
+      this.#mainLinks,
+    );
 
     const expert = network.activeExpert;
     if (expert) {
-      this.#drawNetwork(ctx, expert, MARGIN * 2 + half, half, CONTROL_LABELS);
+      this.#drawNetwork(
+        ctx,
+        expert,
+        MARGIN * 2 + half,
+        half,
+        CONTROL_LABELS,
+        this.#expertLinks,
+      );
     }
-
   }
 
   /**
@@ -114,7 +329,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     const left = width * -0.5;
 
     ctx.save();
-    ctx.setLineDash([]);
+    ctx.setLineDash(NO_DASH);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'hanging';
     ctx.font = `${RADIUS * 0.7}px Arial`;
@@ -153,7 +368,9 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
     if (orchestrator) {
       const expert = orchestrator.activeExpert;
-      lines.push(`Driving #${orchestrator.selectedIndex} of ${orchestrator.experts.length}`);
+      lines.push(
+        `Driving #${orchestrator.selectedIndex} of ${orchestrator.experts.length}`,
+      );
       const slot = orchestrator.expertIds[orchestrator.selectedIndex];
       lines.push(`Expert ${slot || '?'} ${expert ? expert.id : 'none'}`);
       lines.push(`Switches ${orchestrator.switches}`);
@@ -163,12 +380,14 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     // the two networks
     const barsHeight = orchestrator ? SELECTION_HEIGHT : 0;
     const pWidth = 200;
+    /** the lines are squeezed to the content box, not to the border */
+    const contentWidth = pWidth - MARGIN * 2;
     const levelColor = orchestrator
       ? this.#blendedColor(orchestrator)
       : this.#layerColor(network.levels.length);
-    const print = this.#createCursor(ctx);
+    const print = this.#createCursor(ctx, contentWidth);
     ctx.save();
-    ctx.setLineDash([]);
+    ctx.setLineDash(NO_DASH);
     ctx.translate(ctx.canvas.width * 0.5 + MARGIN, MARGIN * 2);
     ctx.strokeStyle = levelColor;
     ctx.fillStyle = 'rgba(32, 32, 32, .76)';
@@ -186,27 +405,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
     lines.forEach((line) => print(line));
-    if (orchestrator) this.#drawSelection(ctx, orchestrator, pWidth - MARGIN * 2);
-    ctx.restore()
-  }
-
-  #rederHelp(ctx: CanvasRenderingContext2D) {
-    const print = this.#createCursor(ctx);
-    const height = ctx.canvas.height - MARGIN * 2;
-    const pWidth = 250;
-    ctx.save();
-    ctx.translate(ctx.canvas.width * 0.5, height - FH * 3 - MARGIN * 2);
-    ctx.strokeStyle = 'gray';
-    ctx.fillStyle = 'rgba(32, 32, 32, .76)';
-    roundRect(ctx, pWidth * -0.5, 0, pWidth, FH * 3 + MARGIN * 2, MARGIN, true);
-    ctx.translate(0, MARGIN);
-    ctx.fillStyle = 'gray';
-    ctx.textBaseline = 'hanging';
-    ctx.textAlign = 'center';
-    print("Press [V] to toggle network");
-    print("Press [L] to toggle links");
-    print("Press [S] to toggle stats");
-    ctx.restore()
+    if (orchestrator) this.#drawSelection(ctx, orchestrator, contentWidth);
+    ctx.restore();
   }
 
   #drawNetwork(
@@ -215,108 +415,98 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     left: number,
     width: number,
     outputLabels: string[],
+    links: LinkLayer,
   ) {
+    const layouts = this.#layout(ctx, network, left, width, outputLabels);
+    if (this.renderLines) links.draw(ctx, network, layouts, left, width);
+    this.#drawNodes(ctx, layouts);
+  }
+
+  #layout(
+    ctx: CanvasRenderingContext2D,
+    network: NeuralNetwork,
+    left: number,
+    width: number,
+    outputLabels: string[],
+  ): LevelLayout[] {
     const top = MARGIN;
     const height = ctx.canvas.height - MARGIN * 2;
+    const count = network.levels.length;
+    const levelHeight = height / count;
+    const right = left + width;
+    const layouts: LevelLayout[] = [];
 
-    const levelHeight = height / network.levels.length;
-
-    for (let i = network.levels.length - 1; i >= 0; i--) {
+    for (let i = count - 1; i >= 0; i--) {
+      const level = network.levels[i];
       const levelTop =
-        top +
-        lerp(
-          height - levelHeight,
-          0,
-          network.levels.length == 1 ? 0.5 : i / (network.levels.length - 1),
-        );
+        top + lerp(height - levelHeight, 0, count == 1 ? 0.5 : i / (count - 1));
 
-      ctx.setLineDash([7, 3]);
-      this.#drawLevel(
-        ctx,
-        network.levels[i],
-        left,
-        levelTop,
-        width,
-        levelHeight,
-        i == network.levels.length - 1 ? outputLabels : [],
-      );
+      layouts.push({
+        level,
+        top: levelTop,
+        bottom: levelTop + levelHeight,
+        inputX: nodePositions(level.inputs.length, left, right),
+        outputX: nodePositions(level.outputs.length, left, right),
+        labels: i == count - 1 ? outputLabels : NO_LABELS,
+      });
     }
+
+    return layouts;
   }
 
-  #drawLevel(
-    ctx: CanvasRenderingContext2D,
-    level: Level,
-    left: number,
-    top: number,
-    width: number,
-    height: number,
-    outputLabels: string[],
-  ) {
-    const right = left + width;
-    const bottom = top + height;
+  /** the only part that has to be redrawn on every frame: the activations */
+  #drawNodes(ctx: CanvasRenderingContext2D, layouts: LevelLayout[]) {
+    ctx.setLineDash(NODE_DASH);
+    ctx.lineWidth = 3;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = RADIUS + 'px Arial';
 
-    const { inputs, outputs, weights } = level;
+    for (let i = 0; i < layouts.length; i++) {
+      const { level, top, bottom, inputX, outputX, labels } = layouts[i];
 
-    if (this.renderLines) {
-      for (let i = 0; i < inputs.length; i++) {
-        for (let j = 0; j < outputs.length; j++) {
-          ctx.beginPath();
-          ctx.setLineDash([3, 2]);
-          ctx.moveTo(this.#getNodeX(inputs, i, left, right), bottom);
-          ctx.lineTo(this.#getNodeX(outputs, j, left, right), top + RADIUS);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = this.#getColor(weights[i][j]);
-          this.#getColor(weights[i][j]);
-          ctx.stroke();
-        }
-      }
-    }
-
-    for (let i = 0; i < inputs.length; i++) {
-      const x = this.#getNodeX(inputs, i, left, right);
-      const value = inputs[i];
+      // a whole row of sockets shares one color, it goes down as a single fill
       ctx.beginPath();
-      ctx.setLineDash([5, 1]);
-      ctx.arc(x, bottom, RADIUS, 0, Math.PI * 2);
+      for (let n = 0; n < inputX.length; n++) {
+        traceCircle(ctx, inputX[n], bottom, RADIUS);
+      }
       ctx.fillStyle = 'black';
       ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x, bottom, RADIUS * 0.5, 0, Math.PI * 2 * Math.abs(value));
-      ctx.fillStyle = this.#getColor(inputs[i]);
-      ctx.strokeStyle = value > 0 ? 'orange' : 'green';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
 
-    for (let i = 0; i < outputs.length; i++) {
-      const x = this.#getNodeX(outputs, i, left, right);
-      const value = outputs[i];
+      strokeGauges(
+        ctx,
+        inputX,
+        bottom,
+        RADIUS * 0.5,
+        level.inputs,
+        'orange',
+        'green',
+        true,
+      );
+
       ctx.beginPath();
-      ctx.arc(x, top, RADIUS, 0, Math.PI * 2);
+      for (let n = 0; n < outputX.length; n++) {
+        traceCircle(ctx, outputX[n], top, RADIUS);
+      }
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.fill();
-      ctx.beginPath();
-      ctx.strokeStyle = value > 0 ? '#def' : '#86f';
-      ctx.lineWidth = 3;
-      ctx.arc(x, top, RADIUS * 0.8, 0, Math.PI * 2 * value);
-      ctx.fillStyle = this.#getColor(outputs[i]);
-      ctx.stroke();
 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      strokeGauges(
+        ctx,
+        outputX,
+        top,
+        RADIUS * 0.8,
+        level.outputs,
+        '#def',
+        '#86f',
+        false,
+      );
+
+      if (!labels.length) continue;
       ctx.fillStyle = 'white';
-      ctx.font = RADIUS + 'px Arial';
-      if (outputLabels[i]) {
-        ctx.fillText(outputLabels[i], x, top + RADIUS * 0.1);
+      for (let n = 0; n < outputX.length; n++) {
+        if (labels[n]) ctx.fillText(labels[n], outputX[n], top + RADIUS * 0.1);
       }
     }
-  }
-
-  #getNodeX(nodes: any[], index: number, left: number, right: number) {
-    return lerp(
-      left,
-      right,
-      nodes.length == 1 ? 0.5 : index / (nodes.length - 1),
-    );
   }
 }

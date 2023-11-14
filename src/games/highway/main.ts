@@ -1,5 +1,5 @@
 import { fileUtilities } from '../../ai/utils';
-import { createCanvas } from '../../utilities/dom';
+import { createCanvas, resizeCanvas } from '../../utilities/dom';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
@@ -213,9 +213,13 @@ export default async (state: typeof defaultState) => {
     state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
     state.livingCars = state.cars.filter((a) => !a.damaged);
 
-    carCanvas.height = window.innerHeight;
-    networkCanvas.height = window.innerHeight;
-    networkCanvas.width = window.innerWidth - carCanvas.width;
+    resizeCanvas(carCanvas, carCtx, carCanvas.width, window.innerHeight);
+    resizeCanvas(
+      networkCanvas,
+      networkCtx,
+      window.innerWidth - carCanvas.width,
+      window.innerHeight,
+    );
 
     carCtx.save();
     if (state.player && !state.player.damaged) {
