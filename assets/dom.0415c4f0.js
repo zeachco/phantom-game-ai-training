@@ -1,0 +1,1 @@
+function a(){const e=document.createElement("canvas");return document.body.appendChild(e),e}function o(e,r,n,t){return e.width!==n||e.height!==t?(e.width=n,e.height=t,!0):(r.save(),r.setTransform(1,0,0,1,0,0),r.clearRect(0,0,n,t),r.restore(),!1)}export{a as c,o as r};
