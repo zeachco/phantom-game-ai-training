@@ -11,7 +11,10 @@ export class Segment {
   public mesh: Mesh;
   private clock = new Clock();
 
-  constructor(public x: number, public y: number) {
+  constructor(
+    public x: number,
+    public y: number,
+  ) {
     this.mesh = new Mesh(geometry, material);
     this.mesh.scale.set(0.2, 0.2, 0.02);
     this.mesh.position.x = x;

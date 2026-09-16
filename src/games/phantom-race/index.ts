@@ -1,6 +1,6 @@
 export default (state: any) => {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
   document.body.appendChild(canvas);
 
   const matrix = `
@@ -19,8 +19,8 @@ export default (state: any) => {
 |  0  0  0 0|
 `
     .trim()
-    .split("\n")
-    .map((row) => row.split(""));
+    .split('\n')
+    .map((row) => row.split(''));
 
   const GW = 640;
   const GH = 480;
@@ -32,7 +32,7 @@ export default (state: any) => {
   const TH = GH / gridY;
   let shipTile = 0;
   let score = 0;
-  let highScore: number = +localStorage.getItem("highScore") || 0;
+  let highScore: number = +localStorage.getItem('highScore') || 0;
   let now = Date.now();
   let gameSpeed = 1000;
   let invinsibleRows = TH;
@@ -48,25 +48,25 @@ export default (state: any) => {
     for (var y = 0; y < gridY; y++) {
       for (var x = 0; x < gridX; x++) {
         switch (matrix[y][x]) {
-          case "0":
+          case '0':
             if (gridY - y < invinsibleRows) break;
-            ctx.fillStyle = "#330000";
+            ctx.fillStyle = '#330000';
             ctx.fillRect(x * TW, y * TH, TW, TH);
             break;
-          case "|":
-            ctx.fillStyle = "#000000";
+          case '|':
+            ctx.fillStyle = '#000000';
             ctx.fillRect(x * TW, y * TH, TW, TH);
             break;
-          case ".":
-            ctx.fillStyle = "#00ff0088";
+          case '.':
+            ctx.fillStyle = '#00ff0088';
             ctx.fillRect(x * TW, y * TH, TW, TH);
             break;
         }
       }
     }
-    ctx.fillStyle = "#FF0000";
+    ctx.fillStyle = '#FF0000';
     ctx.fillRect(shipTile * TW, (gridY - 1) * TH, TW, TH);
-    ctx.strokeStyle = "yellow";
+    ctx.strokeStyle = 'yellow';
     ctx.strokeText(`score: ${score}`, 0, TH);
     ctx.strokeText(`score: ${Math.max(highScore, score)}`, 0, TH * 2);
   }
@@ -89,13 +89,13 @@ export default (state: any) => {
   function checkPosition() {
     const lastRow = matrix[gridY - 1];
     switch (lastRow[shipTile]) {
-      case "0":
+      case '0':
         if (invinsibleRows <= 0) resetShip();
         break;
-      case ".":
+      case '.':
         score += 10;
         break;
-      case " ":
+      case ' ':
         score += 1;
         break;
     }
@@ -104,7 +104,7 @@ export default (state: any) => {
   function resetShip() {
     if (score > highScore) {
       highScore = score;
-      localStorage.setItem("highScore", highScore + "");
+      localStorage.setItem('highScore', highScore + '');
     }
     score = 0;
     invinsibleRows = TH;
@@ -113,9 +113,9 @@ export default (state: any) => {
 
   render();
 
-  document.body.addEventListener("keydown", (ev) => {
-    if (ev.key === "ArrowLeft") move(-1);
-    if (ev.key === "ArrowRight") move(1);
-    if (ev.key === "ArrowUp") moveForward();
+  document.body.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowLeft') move(-1);
+    if (ev.key === 'ArrowRight') move(1);
+    if (ev.key === 'ArrowUp') moveForward();
   });
 };

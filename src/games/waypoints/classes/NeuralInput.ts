@@ -12,7 +12,10 @@ export class NeuralInput {
   public mesh: Line;
   public brain = new NeuralNetwork(8, 2, [8, 4]);
 
-  constructor(public mob: Mob, public pad?: GamePad) {
+  constructor(
+    public mob: Mob,
+    public pad?: GamePad,
+  ) {
     this.material = new LineBasicMaterial({ color: pad ? 0xffdd22 : 0xffaa00 });
     const points = [];
     for (let index = 0; index < SHOW_WP_NB + 1; index++) {

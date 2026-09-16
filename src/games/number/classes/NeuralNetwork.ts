@@ -30,7 +30,6 @@ export class NeuralNetwork {
       // new Array(inputSize)
       //   .fill(0)
       //   .map(() => new Array(hiddenSize).fill(0).map(() => rand(-1, 1))),
-
       // // output
       // new Array(hiddenSize)
       //   .fill(0)

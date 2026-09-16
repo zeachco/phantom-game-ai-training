@@ -64,15 +64,15 @@ export default async (state: typeof defaultState) => {
 
       const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
 
-      const divider = (savedModel?.version > 10 ? savedModel?.version : 10) / 10;
-      const mutationTarget = lerp(
-        config.MIN_MUTATION_LVL,
-        config.MAX_MUTATION_LVL,
-        1 - scoreRatio,
-      ) / divider;
+      const divider =
+        (savedModel?.version > 10 ? savedModel?.version : 10) / 10;
+      const mutationTarget =
+        lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, 1 - scoreRatio) /
+        divider;
 
       console.debug(
-        `#${l} Gen-${savedModel?.version} Mutation ${Math.round(mutationTarget * 10000000) / 100000
+        `#${l} Gen-${savedModel?.version} Mutation ${
+          Math.round(mutationTarget * 10000000) / 100000
         }% | Score: ${Math.round(layerOriginScore)} `,
       );
 
@@ -143,7 +143,10 @@ export default async (state: typeof defaultState) => {
     const mutationTarget = config.ORCHESTRATOR_MAX_MUTATION_LVL / divider;
 
     console.debug(
-      `🧭 Gen-${savedModel?.version ?? 0} Mutation ${Math.round(mutationTarget * config.ORCHESTRATOR_MUTATION_BOOST * 10000) / 100
+      `🧭 Gen-${savedModel?.version ?? 0} Mutation ${
+        Math.round(
+          mutationTarget * config.ORCHESTRATOR_MUTATION_BOOST * 10000,
+        ) / 100
       }% | ${experts.length} experts: ${expertSlotIds(experts).join(', ')}`,
     );
 
@@ -168,7 +171,8 @@ export default async (state: typeof defaultState) => {
 
       if (savedModel && car.brain) {
         car.brain.mutationIndex = i;
-        car.brain.mutationFactor = (i / config.ORCHESTRATOR_CARS) * mutationTarget;
+        car.brain.mutationFactor =
+          (i / config.ORCHESTRATOR_CARS) * mutationTarget;
 
         try {
           if (isSaveCompatible) car.brain.mutate(savedModel);
@@ -250,6 +254,7 @@ export default async (state: typeof defaultState) => {
 
     networkCtx.lineDashOffset = -dt / 50;
     neuralVisualizer.render(networkCtx, state.sortedCars[0].brain!);
+
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';
@@ -260,6 +265,7 @@ export default async (state: typeof defaultState) => {
       carCtx.fillText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
       carCtx.strokeText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
     }
+
     if (!state.livingCars[0]) endExperiment();
   });
   function initialize() {

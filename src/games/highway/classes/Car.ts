@@ -36,7 +36,10 @@ export class Car {
     public color = getRandomColor(),
     public brainLayers = 1,
     /** lets the caller swap in another kind of brain, like an orchestrator */
-    public brainBuilder?: (inputCount: number, outputCount: number) => NeuralNetwork,
+    public brainBuilder?: (
+      inputCount: number,
+      outputCount: number,
+    ) => NeuralNetwork,
   ) {
     this.x = x;
     this.y = y;
@@ -108,7 +111,7 @@ export class Car {
       const outputs = this.brain.process(offsets);
 
       if (this.useAI) {
-        const [forward, left, right, reverse] = outputs
+        const [forward, left, right, reverse] = outputs;
         this.controls.forward = forward;
         this.controls.left = left;
         this.controls.right = right;

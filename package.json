@@ -11,6 +11,7 @@
     "three": "^0.139.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
     "@types/three": "^0.139.0",
     "prettier": "^2.6.1",
     "typescript": "^4.8.3",
@@ -20,6 +21,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "ci": "tsc && vite build --base=/phantom-game-ai-training",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "biome format --write .",
+    "lint": "biome check ."
   }
 }

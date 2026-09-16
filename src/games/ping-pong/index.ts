@@ -1,12 +1,12 @@
-import { Ball } from "./Ball";
-import { CollisionBox } from "./CollisionBox";
-import { Player } from "./Player";
-import { createCanvas } from '../../utilities/dom'
+import { Ball } from './Ball';
+import { CollisionBox } from './CollisionBox';
+import { Player } from './Player';
+import { createCanvas } from '../../utilities/dom';
 
 export default () => {
   const canvas = createCanvas();
-  const ctx = canvas.getContext("2d")!;
-  if (!ctx) throw new Error("no 2d context");
+  const ctx = canvas.getContext('2d')!;
+  if (!ctx) throw new Error('no 2d context');
 
   const GW = (canvas.width = 800);
   const GH = (canvas.height = 600);
@@ -31,7 +31,7 @@ export default () => {
   function renderGame() {
     requestAnimationFrame(renderGame);
     ctx.clearRect(0, 0, GW, GH);
-    ctx.fillStyle = "rgba(64, 64, 64, 0.15)";
+    ctx.fillStyle = 'rgba(64, 64, 64, 0.15)';
     ctx.fillRect(0, 0, GW, GH);
 
     // desiner les obstacles
@@ -46,7 +46,7 @@ export default () => {
           y,
           5 + area,
           5 + (150 - area),
-          Math.round(Math.min(360, Math.random() * allBalls.length * 10))
+          Math.round(Math.min(360, Math.random() * allBalls.length * 10)),
         );
         allBoxes.splice(index, 1, box);
       }
@@ -67,8 +67,8 @@ export default () => {
 
     allBalls.forEach((ball, index) => {
       allBoxes.forEach((box) => box.getCollitionNormal(ball, index));
-      playerA.board.getCollitionNormal(ball, "a");
-      playerB.board.getCollitionNormal(ball, "b");
+      playerA.board.getCollitionNormal(ball, 'a');
+      playerB.board.getCollitionNormal(ball, 'b');
       if (ball.y < 0 + ball.size / 2) ball.vy = Math.abs(ball.vy * ball.acc); // top
       if (ball.y > GH - ball.size / 2) ball.vy = -Math.abs(ball.vy * ball.acc); // bottom
       ball.render(ctx);
@@ -93,14 +93,14 @@ export default () => {
     playerA.board.render(ctx);
     playerB.board.render(ctx);
 
-    ctx.fillStyle = "yellow";
-    ctx.strokeStyle = "black";
-    ctx.font = "30px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
+    ctx.fillStyle = 'yellow';
+    ctx.strokeStyle = 'black';
+    ctx.font = '30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
     const text = `${playerA.score} - ${playerB.score}`;
     ctx.fillText(text, GW / 2, 20);
     ctx.strokeText(text, GW / 2, 20);
-    ctx.font = "10px Arial";
+    ctx.font = '10px Arial';
   }
 };

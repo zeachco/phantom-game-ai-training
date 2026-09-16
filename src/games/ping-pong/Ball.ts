@@ -7,7 +7,7 @@ export class Ball {
   constructor(
     public x: number,
     public y: number,
-    public size: number = Math.random() * 20 + 5
+    public size: number = Math.random() * 20 + 5,
   ) {
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 3 + 0.5;

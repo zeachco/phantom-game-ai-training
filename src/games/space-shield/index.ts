@@ -1,19 +1,19 @@
-import { MixOperation, Scene } from "three"
-import { randInt } from "../../utilities/math";
-import { Mob } from "./classes/Mob";
+import { MixOperation, Scene } from 'three';
+import { randInt } from '../../utilities/math';
+import { Mob } from './classes/Mob';
 
 export default async () => {
-  const { Cameraman } = await import("../../utilities/three/Cameraman.js");
-  const { GameLoop } = await import("../../utilities/three/GameLoop.js");
-  const { Central } = await import("./classes/Central.js");
-  const { GamePad } = await import("../../utilities/inputs/Gamepad.js");
+  const { Cameraman } = await import('../../utilities/three/Cameraman.js');
+  const { GameLoop } = await import('../../utilities/three/GameLoop.js');
+  const { Central } = await import('./classes/Central.js');
+  const { GamePad } = await import('../../utilities/inputs/Gamepad.js');
 
   const scene = new Scene();
   const cameraman = new Cameraman(scene, 0, 10, 0);
   const controls = new Map();
-  controls.set("KeyW", "KeyUp");
-  controls.set("KeyW", "KeyUp");
-  controls.set("KeyW", "KeyUp");
+  controls.set('KeyW', 'KeyUp');
+  controls.set('KeyW', 'KeyUp');
+  controls.set('KeyW', 'KeyUp');
   for (let n = 0; n < 10; n++) {
     controls.set(`spawn${n}`, `Digit${n}`);
   }

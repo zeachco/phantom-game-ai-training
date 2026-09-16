@@ -20,11 +20,18 @@ export class Sensor {
     this.#castRays();
     this.readings = [];
     for (let i = 0; i < this.rays.length; i++) {
-      this.readings.push(this.#getReading(this.rays[i], roadBorders, traffic, deathRays));
+      this.readings.push(
+        this.#getReading(this.rays[i], roadBorders, traffic, deathRays),
+      );
     }
   }
 
-  #getReading(ray: Vector[], roadBorders: Vector[][], traffic: Car[], deathRays: DeathRay[]) {
+  #getReading(
+    ray: Vector[],
+    roadBorders: Vector[][],
+    traffic: Car[],
+    deathRays: DeathRay[],
+  ) {
     let touches: any[] = [];
 
     for (let i = 0; i < roadBorders.length; i++) {

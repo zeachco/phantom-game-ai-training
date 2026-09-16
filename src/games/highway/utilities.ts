@@ -100,6 +100,7 @@ export function drawScores(
     state.livingCars.length / state.sortedCars.length,
   );
   ctx.font = `bold ${FH}px serif`;
+  ctx.textAlign = 'left';
   ctx.fillText(
     `${state.livingCars.length}/${state.sortedCars.length} cars`,
     TL,

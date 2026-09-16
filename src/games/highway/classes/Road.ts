@@ -6,7 +6,11 @@ export class Road {
   public top: number;
   public bottom: number;
   public borders: Vector[][] = [];
-  constructor(public x: number, public width: number, public laneCount = 3) {
+  constructor(
+    public x: number,
+    public width: number,
+    public laneCount = 3,
+  ) {
     this.x = x;
     this.width = width;
     this.laneCount = laneCount;

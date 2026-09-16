@@ -1,4 +1,4 @@
-import { Ball } from "./Ball";
+import { Ball } from './Ball';
 
 export class CollisionBox {
   private collided = {} as { [key: number]: boolean };
@@ -11,7 +11,7 @@ export class CollisionBox {
     public y: number,
     public width: number,
     public height: number,
-    public hp = 20 + Math.round(Math.random() * 190)
+    public hp = 20 + Math.round(Math.random() * 190),
   ) {}
 
   render(ctx: CanvasRenderingContext2D) {
@@ -21,7 +21,7 @@ export class CollisionBox {
     this.y += this.vy;
 
     const collisions = Object.keys(this.collided).filter(
-      (i) => this.collided[i]
+      (i) => this.collided[i],
     ).length;
     this.collidedBlur += collisions;
     this.collidedBlur *= 0.85;
@@ -29,14 +29,14 @@ export class CollisionBox {
     const h = this.height + this.collidedBlur * 4;
     ctx.fillStyle = this.collided
       ? `hsla(${this.hp / 3}, 50%, 50%, 90%)`
-      : "#0000ff66";
+      : '#0000ff66';
     ctx.fillRect(this.x - w / 2, this.y - h / 2, w, h);
-    ctx.fillStyle = "white";
-    ctx.strokeStyle = "#22222266";
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = '#22222266';
     ctx.strokeRect(this.x - w / 2, this.y - h / 2, w, h);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(this.hp + "", this.x, this.y);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.hp + '', this.x, this.y);
   }
 
   getCollitionNormal(ball: Ball, index) {

@@ -26,7 +26,10 @@ export class Mob {
   private material: MeshBasicMaterial;
   private _index = 0;
   public ctrl: NeuralInput;
-  constructor(public path: Path, public onCheckpoint: (mob: Mob) => void) {
+  constructor(
+    public path: Path,
+    public onCheckpoint: (mob: Mob) => void,
+  ) {
     this.material = new MeshBasicMaterial({ color: 0xff00ff });
     this.mesh = new Mesh(geometry, this.material);
     this.mesh.scale.set(1, 0.3, 0.1);

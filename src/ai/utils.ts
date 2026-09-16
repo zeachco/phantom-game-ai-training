@@ -8,9 +8,9 @@ import { DEFAULT_KIND, type NeuralNetwork } from './Network';
 
 export type ModelsByLayerCount = (
   | (Omit<NeuralNetwork, 'mutate'> & {
-    diff?: number;
-    date?: string;
-  })
+      diff?: number;
+      date?: string;
+    })
   | any
 )[];
 

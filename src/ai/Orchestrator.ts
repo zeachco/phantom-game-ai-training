@@ -60,7 +60,9 @@ export class OrchestratorNetwork extends NeuralNetwork {
     );
 
     if (!this.#experts.length) {
-      throw new Error(`No expert matching ${inputNb} inputs / ${outputNb} outputs`);
+      throw new Error(
+        `No expert matching ${inputNb} inputs / ${outputNb} outputs`,
+      );
     }
 
     const hiddenNodes = Math.max(
@@ -190,7 +192,9 @@ export class OrchestratorNetwork extends NeuralNetwork {
     }
     const savedIds = (network.expertIds || []).join();
     if (savedIds && savedIds !== this.expertIds.join()) {
-      throw new Error(`Expert library changed since the orchestrator was saved`);
+      throw new Error(
+        `Expert library changed since the orchestrator was saved`,
+      );
     }
   }
 }
