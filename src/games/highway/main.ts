@@ -55,6 +55,12 @@ export default async (state: typeof defaultState) => {
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
+  const presetBtn = document.createElement('button');
+  presetBtn.className = 'model-btn';
+  presetBtn.textContent = 'Load pre-trained';
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'model-btn';
+  clearBtn.textContent = 'Clear training';
   loadBtn.onclick = async () => {
     try {
       const archive = await pickModelArchive();
@@ -76,6 +82,40 @@ export default async (state: typeof defaultState) => {
     }
   };
   saveBtn.onclick = () => downloadModelArchive('highway');
+  presetBtn.onclick = async () => {
+    try {
+      presetBtn.disabled = true;
+      presetBtn.textContent = 'Loading preset…';
+      const res = await fetch(
+        new URL('./presets/highway_models_2026091612022.json', import.meta.url),
+      );
+      if (!res.ok) throw new Error(`Preset not found (${res.status})`);
+      const archive = await res.json();
+      if (archive.game && archive.game !== 'highway') {
+        alert(`This preset is for "${archive.game}", not "highway"`);
+        return;
+      }
+      const written = io.importModels(archive.models);
+      if (!written.length) {
+        alert('No compatible model in this preset');
+        return;
+      }
+      console.info(`Loaded pre-trained models: ${written.join(', ')}`);
+      initialize();
+    } catch (err) {
+      alert((err && err.message) || 'Unable to load pre-trained preset');
+    } finally {
+      presetBtn.disabled = false;
+      presetBtn.textContent = 'Load pre-trained';
+    }
+  };
+  clearBtn.onclick = () => {
+    if (!confirm('Clear the current training set? This empties local storage.'))
+      return;
+    io.discardModels();
+    console.info('Cleared training set (local storage emptied)');
+    initialize();
+  };
 
   const followKeys = document.createElement('div');
   followKeys.className = 'follow-keys';
@@ -115,7 +155,7 @@ export default async (state: typeof defaultState) => {
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(loadBtn, saveBtn, followKeys);
+  panelContent.append(loadBtn, saveBtn, presetBtn, clearBtn, followKeys);
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
