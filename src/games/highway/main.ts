@@ -77,11 +77,6 @@ export default async (state: typeof defaultState) => {
   };
   saveBtn.onclick = () => downloadModelArchive('highway');
 
-  const legend = document.createElement('p');
-  legend.className = 'follow-legend';
-  legend.textContent =
-    '1-9 follow best car of layer N | 0 follow best score | space follow orchestrator';
-
   const followKeys = document.createElement('div');
   followKeys.className = 'follow-keys';
   const followLabel = document.createElement('span');
@@ -97,17 +92,17 @@ export default async (state: typeof defaultState) => {
   followKeys.append(followLabel);
   (
     [
-      ['1', 1],
-      ['2', 2],
-      ['3', 3],
-      ['4', 4],
-      ['5', 5],
-      ['6', 6],
-      ['7', 7],
-      ['8', 8],
-      ['9', 9],
-      ['0', 0],
-      ['space', 'orchestrator'],
+      ['network 1', 1],
+      ['network 2', 2],
+      ['network 3', 3],
+      ['network 4', 4],
+      ['network 5', 5],
+      ['network 6', 6],
+      ['network 7', 7],
+      ['network 8', 8],
+      ['network 9', 9],
+      ['network 0', 0],
+      ['mixed experts', 'orchestrator'],
     ] as [string, number | 'orchestrator'][]
   ).forEach(([label, value]) => {
     const btn = document.createElement('button');
@@ -120,7 +115,7 @@ export default async (state: typeof defaultState) => {
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(loadBtn, saveBtn, followKeys, legend);
+  panelContent.append(loadBtn, saveBtn, followKeys);
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
@@ -136,6 +131,8 @@ export default async (state: typeof defaultState) => {
   const loop = new GameLoop();
   let ray: DeathRay;
   let carRay: DeathRay;
+  let deathRays: DeathRay[];
+  const noTraffic: Car[] = [];
 
   function setupAIs() {
     const cars: Car[] = [];
@@ -266,7 +263,7 @@ export default async (state: typeof defaultState) => {
         100,
         ControlType.AI,
         3,
-        `🧭 0 👶`,
+        `0 👶`,
         config.ORCHESTRATOR_COLOR,
         ORCHESTRATOR_LEVELS,
         (inputCount, outputCount) =>
@@ -291,7 +288,7 @@ export default async (state: typeof defaultState) => {
           );
         }
 
-        car.label = `🧭 ${i}`;
+        car.label = `${i}`;
       }
 
       cars.push(car);
@@ -310,23 +307,25 @@ export default async (state: typeof defaultState) => {
       if (followPad.once(`Digit${digit}`)) setFollow(digit);
     }
     ray.update();
-    const deathRays = [ray, carRay];
     for (let i = 0; i < state.traffic.length; i++) {
-      state.traffic[i].update(road.borders, [], deathRays);
+      state.traffic[i].update(road.borders, noTraffic, deathRays);
     }
     for (let i = 0; i < state.cars.length; i++) {
-      state.cars[i].update(road.borders, state.traffic, deathRays);
-      const brain = state.cars[i].brain;
+      const car = state.cars[i];
+      const alive = !car.damaged;
+      car.update(road.borders, state.traffic, deathRays);
+      const brain = car.brain;
       if (brain instanceof OrchestratorNetwork) {
-        state.cars[i].setColor(orchestratorColor(brain));
+        car.setColor(orchestratorColor(brain));
       }
-      const y = state.cars[i].y;
-      if (y > ray.y || y > carRay.y) {
-        state.cars[i].damaged = true;
+      if (car.y > ray.y || car.y > carRay.y) {
+        car.damaged = true;
+      }
+      if (alive && car.damaged) {
+        state.living--;
       }
     }
     state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
-    state.livingCars = state.cars.filter((a) => !a.damaged);
 
     resizeCanvas(carCanvas, carCtx, carCanvas.width, window.innerHeight);
     resizeCanvas(
@@ -336,10 +335,7 @@ export default async (state: typeof defaultState) => {
       window.innerHeight,
     );
 
-    const camTarget =
-      state.player && !state.player.damaged
-        ? state.player
-        : state.sortedCars[0];
+    const camTarget = followedCar();
     if (camTarget) {
       if (!camSet) {
         camY = camTarget.y;
@@ -361,17 +357,16 @@ export default async (state: typeof defaultState) => {
       state.traffic[i].draw(carCtx);
     }
     for (let i = 0; i < state.cars.length; i++) {
-      const isBest =
-        state.sortedCars[0] === state.cars[i] || !state.cars[i].useAI;
-      carCtx.globalAlpha = isBest ? 1 : 0.3;
-      state.cars[i].draw(carCtx, i === 0, i);
+      const car = state.cars[i];
+      carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
+      car.draw(carCtx, i === 0);
     }
 
     carCtx.restore();
 
     drawScores(state, carCtx);
 
-    const followed = followedBrain();
+    const followed = camTarget?.brain;
     if (followed) {
       networkCtx.lineDashOffset = -dt / 50;
       neuralVisualizer.render(networkCtx, followed);
@@ -388,7 +383,7 @@ export default async (state: typeof defaultState) => {
       carCtx.strokeText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
     }
 
-    if (!state.livingCars[0]) endExperiment();
+    if (!state.living) endExperiment();
   });
   function initialize() {
     Object.assign(state, defaultState);
@@ -403,6 +398,7 @@ export default async (state: typeof defaultState) => {
     // Game ender
     ray = new DeathRay();
     carRay = new DeathRay();
+    deathRays = [ray, carRay];
 
     // Obstacles
     state.traffic = config.trafficConfig.map(
@@ -436,31 +432,40 @@ export default async (state: typeof defaultState) => {
       console.log(`Death car is layer ${bestLayerNb}`);
       state.player.brain.mutationFactor = 0;
       state.player.brain.mutationIndex = 0;
-      state.player.brain.mutate(deathCarModel);
-      state.cars.push(state.player);
+      try {
+        state.player.brain.mutate(deathCarModel);
+        state.cars.push(state.player);
+      } catch (err) {
+        // an old save with a different sensor count would otherwise kill the run
+        console.error(
+          `Death car model does not fit the current sensors, skipping it.\nReset data with ${location.href}&clear=true`,
+          err.message,
+        );
+        state.player = undefined;
+      }
     }
+    state.living = state.cars.length;
   }
 
   /**
-   * Brain shown in the visualizer: 0 is the best car by score, 1-9 the best
-   * car driving a brain of that layer, space the best orchestrator car.
+   * Car the camera and the visualizer follow: the best alive car of the
+   * `follow` category (0 any car, 1-9 that layer, space an orchestrator).
+   * When the leader dies the next best alive car takes over, and a whole
+   * dead category falls back to the best alive car overall.
    */
-  function followedBrain() {
-    if (follow === 'orchestrator') {
-      return (
-        state.sortedCars.find((c) => c.brain instanceof OrchestratorNetwork)
-          ?.brain || undefined
-      );
-    }
-    const pool =
-      follow > 0
-        ? state.sortedCars.filter(
-            (c) =>
-              c.brainLayers === follow &&
-              !(c.brain instanceof OrchestratorNetwork),
-          )
-        : state.sortedCars;
-    return pool[0]?.brain;
+  function followedCar(): Car | undefined {
+    const inCategory = (car: Car) =>
+      !car.damaged &&
+      (follow === 'orchestrator'
+        ? car.brain instanceof OrchestratorNetwork
+        : follow > 0
+          ? car.brainLayers === follow &&
+            !(car.brain instanceof OrchestratorNetwork)
+          : true);
+    return (
+      state.sortedCars.find(inCategory) ??
+      state.sortedCars.find((car) => !car.damaged)
+    );
   }
 
   function endExperiment() {

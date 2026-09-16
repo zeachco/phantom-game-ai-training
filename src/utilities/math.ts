@@ -3,6 +3,13 @@ export interface Vector {
   y: number;
 }
 
+export interface AABB {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export function rand(min = -1, max = 1): number {
   return min + Math.random() * (max - min);
 }
@@ -33,6 +40,57 @@ export function getIntersection(A: Vector, B: Vector, C: Vector, D: Vector) {
   }
 
   return null;
+}
+
+/**
+ * Slab test of a segment against an axis-aligned box. A few comparisons,
+ * used to reject most ray/box pairs before any edge intersection is tried.
+ */
+export function segmentHitsAABB(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  box: AABB,
+) {
+  let tmin = 0;
+  let tmax = 1;
+  const dx = bx - ax;
+  const dy = by - ay;
+
+  if (dx === 0) {
+    if (ax < box.minX || ax > box.maxX) return false;
+  } else {
+    const inv = 1 / dx;
+    let t1 = (box.minX - ax) * inv;
+    let t2 = (box.maxX - ax) * inv;
+    if (t1 > t2) {
+      const t = t1;
+      t1 = t2;
+      t2 = t;
+    }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return false;
+  }
+
+  if (dy === 0) {
+    if (ay < box.minY || ay > box.maxY) return false;
+  } else {
+    const inv = 1 / dy;
+    let t1 = (box.minY - ay) * inv;
+    let t2 = (box.maxY - ay) * inv;
+    if (t1 > t2) {
+      const t = t1;
+      t1 = t2;
+      t2 = t;
+    }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return false;
+  }
+
+  return true;
 }
 
 export function polysIntersect(poly1: Vector[], poly2: Vector[]) {

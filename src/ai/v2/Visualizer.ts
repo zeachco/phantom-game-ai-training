@@ -15,7 +15,6 @@ const SELECTION_HEIGHT = FH * 4;
 const TAU = Math.PI * 2;
 /** dash patterns are reused instead of rebuilt, setLineDash copies them anyway */
 const LINK_DASH = [3, 2];
-const NODE_DASH = [5, 1];
 const NO_DASH: number[] = [];
 const NO_LABELS: string[] = [];
 
@@ -43,6 +42,8 @@ interface LevelLayout {
   level: Level;
   top: number;
   bottom: number;
+  /** shrinks on narrow canvases so a full row of nodes fits without touching */
+  radius: number;
   inputX: number[];
   outputX: number[];
   labels: string[];
@@ -128,8 +129,8 @@ function strokeGauges(
 
 /** one path per shade instead of one per link */
 function drawLinks(ctx: CanvasRenderingContext2D, layout: LevelLayout) {
-  const { level, inputX, outputX, bottom } = layout;
-  const top = layout.top + RADIUS;
+  const { level, inputX, outputX, bottom, radius } = layout;
+  const top = layout.top + radius;
   const weights = level.weights;
   const buckets: number[][] = [];
 
@@ -379,7 +380,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     // the usage bars live inside the panel, the canvas around it is taken by
     // the two networks
     const barsHeight = orchestrator ? SELECTION_HEIGHT : 0;
-    const pWidth = 200;
+    const pWidth = Math.min(200, ctx.canvas.width * 0.6);
     /** the lines are squeezed to the content box, not to the border */
     const contentWidth = pWidth - MARGIN * 2;
     const levelColor = orchestrator
@@ -440,11 +441,16 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       const level = network.levels[i];
       const levelTop =
         top + lerp(height - levelHeight, 0, count == 1 ? 0.5 : i / (count - 1));
+      const nodes = Math.max(level.inputs.length, level.outputs.length);
 
       layouts.push({
         level,
         top: levelTop,
         bottom: levelTop + levelHeight,
+        radius:
+          nodes > 1
+            ? Math.min(RADIUS, (width / (nodes - 1)) * 0.45)
+            : Math.min(RADIUS, width * 0.4),
         inputX: nodePositions(level.inputs.length, left, right),
         outputX: nodePositions(level.outputs.length, left, right),
         labels: i == count - 1 ? outputLabels : NO_LABELS,
@@ -454,30 +460,32 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     return layouts;
   }
 
-  /** the only part that has to be redrawn on every frame: the activations */
+  /**
+   * The only part that has to be redrawn on every frame: the activations.
+   * Each node is one thin socket ring, and the arc around it is the gauge,
+   * whole rows stroked in a single pass per sign.
+   */
   #drawNodes(ctx: CanvasRenderingContext2D, layouts: LevelLayout[]) {
-    ctx.setLineDash(NODE_DASH);
-    ctx.lineWidth = 3;
+    ctx.setLineDash(NO_DASH);
+    ctx.lineWidth = 2;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = RADIUS + 'px Arial';
 
     for (let i = 0; i < layouts.length; i++) {
-      const { level, top, bottom, inputX, outputX, labels } = layouts[i];
+      const { level, top, bottom, radius, inputX, outputX, labels } = layouts[i];
 
-      // a whole row of sockets shares one color, it goes down as a single fill
       ctx.beginPath();
       for (let n = 0; n < inputX.length; n++) {
-        traceCircle(ctx, inputX[n], bottom, RADIUS);
+        traceCircle(ctx, inputX[n], bottom, radius);
       }
-      ctx.fillStyle = 'black';
-      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
+      ctx.stroke();
 
       strokeGauges(
         ctx,
         inputX,
         bottom,
-        RADIUS * 0.5,
+        radius * 0.55,
         level.inputs,
         'orange',
         'green',
@@ -486,16 +494,16 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
       ctx.beginPath();
       for (let n = 0; n < outputX.length; n++) {
-        traceCircle(ctx, outputX[n], top, RADIUS);
+        traceCircle(ctx, outputX[n], top, radius);
       }
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.stroke();
 
       strokeGauges(
         ctx,
         outputX,
         top,
-        RADIUS * 0.8,
+        radius * 0.8,
         level.outputs,
         '#def',
         '#86f',
@@ -503,9 +511,12 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       );
 
       if (!labels.length) continue;
+      ctx.font = Math.max(9, Math.round(radius)) + 'px Arial';
       ctx.fillStyle = 'white';
       for (let n = 0; n < outputX.length; n++) {
-        if (labels[n]) ctx.fillText(labels[n], outputX[n], top + RADIUS * 0.1);
+        if (labels[n]) {
+          ctx.fillText(labels[n], outputX[n], top + radius * 0.1);
+        }
       }
     }
   }

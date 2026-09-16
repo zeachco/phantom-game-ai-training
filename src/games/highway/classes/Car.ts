@@ -3,7 +3,7 @@ import { NeuralNetwork } from '../../../ai/Network';
 import { Sensor } from './Sensor';
 import { ControlType } from '../types';
 import carImg from '../assets/car.png';
-import { polysIntersect, randInt, Vector } from '../../../utilities/math';
+import { AABB, polysIntersect, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
 import { config } from './Config';
 import { DeathRay } from './DeathRay';
@@ -18,7 +18,15 @@ export class Car {
   public sensor?: Sensor;
   public brain: NeuralNetwork;
   public controls: Controls;
-  public polygon: Vector[] = [];
+  /** corners are reused every frame, only their coordinates move */
+  public polygon: Vector[] = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+  ];
+  /** bounding box of the polygon, refreshed with it */
+  public aabb: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   public width = 30;
   public height = 50;
   private img: HTMLImageElement;
@@ -26,6 +34,9 @@ export class Car {
   /** color the mask currently holds, it is only repainted when that moves */
   private maskColor = '';
   private va = 0;
+  /** half diagonal and corner angle, both derived from the fixed size */
+  private rad = Math.hypot(this.width, this.height) / 2;
+  private alpha = Math.atan2(this.width, this.height);
 
   constructor(
     public x = 0,
@@ -100,7 +111,7 @@ export class Car {
     this.#move();
     if (this.brain) this.#updateScore();
 
-    this.polygon = this.#createPolygon();
+    this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
     if (this.sensor) {
       this.sensor.update(roadBorders, traffic, deathRays);
@@ -128,12 +139,27 @@ export class Car {
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {
+    const box = this.aabb;
     for (let i = 0; i < roadBorders.length; i++) {
-      if (polysIntersect(this.polygon, roadBorders[i])) {
+      const border = roadBorders[i];
+      // the road edges span the whole world vertically, straddling the line
+      // is the same as the convex polygon intersecting it
+      if (border[0].x === border[1].x) {
+        if (box.minX < border[0].x && box.maxX > border[0].x) return true;
+      } else if (polysIntersect(this.polygon, border)) {
         return true;
       }
     }
     for (let i = 0; i < traffic.length; i++) {
+      const other = traffic[i].aabb;
+      if (
+        box.maxX < other.minX ||
+        box.minX > other.maxX ||
+        box.maxY < other.minY ||
+        box.minY > other.maxY
+      ) {
+        continue;
+      }
       if (polysIntersect(this.polygon, traffic[i].polygon)) {
         return true;
       }
@@ -142,26 +168,42 @@ export class Car {
   }
 
   #createPolygon() {
-    const points: Vector[] = [];
-    const rad = Math.hypot(this.width, this.height) / 2;
-    const alpha = Math.atan2(this.width, this.height);
-    points.push({
-      x: this.x - Math.sin(this.angle - alpha) * rad,
-      y: this.y - Math.cos(this.angle - alpha) * rad,
-    });
-    points.push({
-      x: this.x - Math.sin(this.angle + alpha) * rad,
-      y: this.y - Math.cos(this.angle + alpha) * rad,
-    });
-    points.push({
-      x: this.x - Math.sin(Math.PI + this.angle - alpha) * rad,
-      y: this.y - Math.cos(Math.PI + this.angle - alpha) * rad,
-    });
-    points.push({
-      x: this.x - Math.sin(Math.PI + this.angle + alpha) * rad,
-      y: this.y - Math.cos(Math.PI + this.angle + alpha) * rad,
-    });
-    return points;
+    const points = this.polygon;
+    const rad = this.rad;
+    const alpha = this.alpha;
+    const a = this.angle;
+    const x = this.x;
+    const y = this.y;
+
+    const a0 = a - alpha;
+    points[0].x = x - Math.sin(a0) * rad;
+    points[0].y = y - Math.cos(a0) * rad;
+    const a1 = a + alpha;
+    points[1].x = x - Math.sin(a1) * rad;
+    points[1].y = y - Math.cos(a1) * rad;
+    const a2 = Math.PI + a - alpha;
+    points[2].x = x - Math.sin(a2) * rad;
+    points[2].y = y - Math.cos(a2) * rad;
+    const a3 = Math.PI + a + alpha;
+    points[3].x = x - Math.sin(a3) * rad;
+    points[3].y = y - Math.cos(a3) * rad;
+
+    const box = this.aabb;
+    let minX = points[0].x;
+    let maxX = points[0].x;
+    let minY = points[0].y;
+    let maxY = points[0].y;
+    for (let i = 1; i < 4; i++) {
+      const p = points[i];
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    box.minX = minX;
+    box.maxX = maxX;
+    box.minY = minY;
+    box.maxY = maxY;
   }
 
   #move() {
@@ -184,7 +226,7 @@ export class Car {
     this.y -= Math.cos(this.angle) * this.speed;
   }
 
-  draw(ctx: CanvasRenderingContext2D, drawSensor = false, index = 0) {
+  draw(ctx: CanvasRenderingContext2D, drawSensor = false) {
     if (this.sensor && drawSensor) {
       this.sensor.draw(ctx);
     }

@@ -45,6 +45,8 @@ export class OrchestratorNetwork extends NeuralNetwork {
   #lastInputs: number[] = [];
   /** controls the experts drive with, the selector outputs are experts instead */
   #outputNb = 0;
+  /** shares are read several times a frame, they only move when a pass runs */
+  #shares: number[] | null = null;
 
   constructor(
     inputNb: number,
@@ -102,8 +104,13 @@ export class OrchestratorNetwork extends NeuralNetwork {
 
   /** share of the run each expert has been driving, sums up to 1 */
   get selectionShares() {
-    const total = this.selectionCounts.reduce((sum, n) => sum + (n || 0), 0);
-    return this.selectionCounts.map((n) => (total ? (n || 0) / total : 0));
+    if (!this.#shares) {
+      const total = this.selectionCounts.reduce((sum, n) => sum + (n || 0), 0);
+      this.#shares = this.selectionCounts.map((n) =>
+        total ? (n || 0) / total : 0,
+      );
+    }
+    return this.#shares;
   }
 
   get id() {
@@ -122,6 +129,7 @@ export class OrchestratorNetwork extends NeuralNetwork {
     if (index !== this.selectedIndex) this.switches++;
     this.selectedIndex = index;
     this.selectionCounts[index] = (this.selectionCounts[index] || 0) + 1;
+    this.#shares = null;
 
     return outputs;
   }

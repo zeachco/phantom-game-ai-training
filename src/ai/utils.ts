@@ -73,6 +73,8 @@ export function fileUtilities(game = '') {
       const data = localStorage.getItem(namespace);
       if (!data) throw new Error(`not found`);
       models = JSON.parse(data);
+      // saves from before the multi-model era hold a single network object
+      if (models && !Array.isArray(models)) models = [models];
     } catch {
       console.debug(`Nothing for layer ${layers} of ${kind}`);
     }
