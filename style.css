@@ -59,3 +59,102 @@ ul:hover {
   opacity: 1;
   transform: translateY(0);
 }
+
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 240px;
+  z-index: 999;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  background: rgba(25, 52, 94, 0.85);
+  color: #fff;
+}
+
+.side-panel.open {
+  transform: translateX(0);
+}
+
+.side-panel-toggle {
+  position: absolute;
+  left: -2.4em;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.4em;
+  height: 4.5em;
+  border: none;
+  border-radius: 0.6em 0 0 0.6em;
+  background: rgba(25, 52, 94, 0.85);
+  color: #fff;
+  font-size: 1.1em;
+  cursor: pointer;
+}
+
+.side-panel-toggle:hover {
+  background: rgba(25, 52, 94, 1);
+}
+
+.side-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 1em;
+}
+
+.model-btn {
+  border: none;
+  border-radius: 0.5em;
+  padding: 0.25em 0.75em;
+  font: bold 0.8em Arial, sans-serif;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(25, 52, 94, 0.6);
+  cursor: pointer;
+}
+
+.model-btn:hover {
+  background: rgba(25, 52, 94, 0.9);
+}
+
+.follow-keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4em;
+}
+
+.follow-keys span {
+  grid-column: 1 / -1;
+  font: bold 0.7em Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.follow-keys button {
+  border: none;
+  border-radius: 0.4em;
+  padding: 0.4em 0;
+  font: bold 0.8em Arial, sans-serif;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+}
+
+.follow-keys button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.follow-keys button.active {
+  background: hsl(180, 100%, 45%);
+}
+
+.follow-legend {
+  margin-top: auto;
+  font: 0.8em Arial, sans-serif;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.8);
+}

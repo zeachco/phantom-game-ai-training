@@ -8,7 +8,9 @@ import { ControlType } from './types';
 import { DeathRay } from './classes/DeathRay';
 import { defaultState, drawScores, orchestratorColor } from './utilities';
 import { getColorScale } from '../../utilities/colors';
+import { GamePad } from '../../utilities/inputs/Gamepad';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import { lerp } from '../../utilities/math';
 import {
   expertSlotIds,
@@ -31,6 +33,102 @@ export default async (state: typeof defaultState) => {
   const networkCtx = networkCanvas.getContext('2d');
 
   carCanvas.width = 200;
+
+  const followPad = new GamePad(new Map());
+  /** 0 follows the best score overall, 1-9 the best car of that brain layer */
+  let follow: number | 'orchestrator' = 0;
+  /** world y mapped to the follow line, it lerps so target switches animate */
+  let camY = 0;
+  let camSet = false;
+
+  const panel = document.createElement('aside');
+  panel.className = 'side-panel';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'side-panel-toggle';
+  toggleBtn.textContent = '❮';
+  toggleBtn.setAttribute('aria-label', 'Toggle models panel');
+
+  const loadBtn = document.createElement('button');
+  loadBtn.className = 'model-btn';
+  loadBtn.textContent = 'Load models';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'model-btn';
+  saveBtn.textContent = 'Save models';
+  loadBtn.onclick = async () => {
+    try {
+      const archive = await pickModelArchive();
+      if (archive.game && archive.game !== 'highway') {
+        alert(`This archive is for "${archive.game}", not "highway"`);
+        return;
+      }
+      const written = io.importModels(archive.models);
+      if (!written.length) {
+        alert('No compatible model in this archive');
+        return;
+      }
+      console.info(`Loaded models: ${written.join(', ')}`);
+      initialize();
+    } catch (err) {
+      if (err && err.message !== 'No file selected') {
+        alert((err && err.message) || 'Unable to load models');
+      }
+    }
+  };
+  saveBtn.onclick = () => downloadModelArchive('highway');
+
+  const legend = document.createElement('p');
+  legend.className = 'follow-legend';
+  legend.textContent =
+    '1-9 follow best car of layer N | 0 follow best score | space follow orchestrator';
+
+  const followKeys = document.createElement('div');
+  followKeys.className = 'follow-keys';
+  const followLabel = document.createElement('span');
+  followLabel.textContent = 'Follow';
+
+  const setFollow = (value: number | 'orchestrator') => {
+    follow = value;
+    followKeys.querySelectorAll('button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.follow === String(value));
+    });
+  };
+
+  followKeys.append(followLabel);
+  (
+    [
+      ['1', 1],
+      ['2', 2],
+      ['3', 3],
+      ['4', 4],
+      ['5', 5],
+      ['6', 6],
+      ['7', 7],
+      ['8', 8],
+      ['9', 9],
+      ['0', 0],
+      ['space', 'orchestrator'],
+    ] as [string, number | 'orchestrator'][]
+  ).forEach(([label, value]) => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.dataset.follow = String(value);
+    btn.onclick = () => setFollow(value);
+    followKeys.append(btn);
+  });
+  setFollow(0);
+
+  const panelContent = document.createElement('div');
+  panelContent.className = 'side-panel-content';
+  panelContent.append(loadBtn, saveBtn, followKeys, legend);
+
+  panel.append(toggleBtn, panelContent);
+  document.body.appendChild(panel);
+
+  toggleBtn.onclick = () => {
+    const open = panel.classList.toggle('open');
+    toggleBtn.textContent = open ? '❯' : '❮';
+  };
 
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
@@ -55,6 +153,9 @@ export default async (state: typeof defaultState) => {
     const advantage = bestScore - worstScore;
 
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
+      const configuredCars = config.CARS_PER_LAYERS[l];
+      if (!configuredCars) continue;
+
       let savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
@@ -62,7 +163,10 @@ export default async (state: typeof defaultState) => {
       const scoreAdvantage = layerOriginScore - worstScore;
       const scoreRatio = scoreAdvantage / advantage;
 
-      const carsNbForThisLayer = config.CARS_PER_LAYERS[l];
+      const carsNbForThisLayer = Math.max(
+        configuredCars,
+        config.MIN_CARS_PER_LAYER,
+      );
 
       const divider =
         (savedModel?.version > 10 ? savedModel?.version : 10) / 10;
@@ -151,8 +255,12 @@ export default async (state: typeof defaultState) => {
     );
 
     let isSaveCompatible = true;
+    const carsNb = Math.max(
+      config.ORCHESTRATOR_CARS,
+      config.ORCHESTRATOR_MIN_CARS,
+    );
 
-    for (let i = 0; i <= config.ORCHESTRATOR_CARS; i++) {
+    for (let i = 0; i <= carsNb; i++) {
       const car = new Car(
         road.getLane(1),
         100,
@@ -171,8 +279,7 @@ export default async (state: typeof defaultState) => {
 
       if (savedModel && car.brain) {
         car.brain.mutationIndex = i;
-        car.brain.mutationFactor =
-          (i / config.ORCHESTRATOR_CARS) * mutationTarget;
+        car.brain.mutationFactor = (i / carsNb) * mutationTarget;
 
         try {
           if (isSaveCompatible) car.brain.mutate(savedModel);
@@ -198,6 +305,10 @@ export default async (state: typeof defaultState) => {
   }
 
   loop.play((_es, dt) => {
+    if (followPad.once('Space')) setFollow('orchestrator');
+    for (let digit = 0; digit <= 9; digit++) {
+      if (followPad.once(`Digit${digit}`)) setFollow(digit);
+    }
     ray.update();
     const deathRays = [ray, carRay];
     for (let i = 0; i < state.traffic.length; i++) {
@@ -225,12 +336,20 @@ export default async (state: typeof defaultState) => {
       window.innerHeight,
     );
 
-    carCtx.save();
-    if (state.player && !state.player.damaged) {
-      carCtx.translate(0, -state.player.y + carCanvas.height * 0.7);
-    } else {
-      carCtx.translate(0, -state.sortedCars[0].y + carCanvas.height * 0.7);
+    const camTarget =
+      state.player && !state.player.damaged
+        ? state.player
+        : state.sortedCars[0];
+    if (camTarget) {
+      if (!camSet) {
+        camY = camTarget.y;
+        camSet = true;
+      }
+      // lead the target by 2 frames of travel so the 10% lerp stays centered
+      camY += (camTarget.y - 2 * camTarget.speed * Math.cos(camTarget.angle) - camY) * 0.1;
     }
+    carCtx.save();
+    carCtx.translate(0, -camY + carCanvas.height * 0.7);
 
     road.draw(carCtx);
     ray.draw(carCtx);
@@ -252,8 +371,11 @@ export default async (state: typeof defaultState) => {
 
     drawScores(state, carCtx);
 
-    networkCtx.lineDashOffset = -dt / 50;
-    neuralVisualizer.render(networkCtx, state.sortedCars[0].brain!);
+    const followed = followedBrain();
+    if (followed) {
+      networkCtx.lineDashOffset = -dt / 50;
+      neuralVisualizer.render(networkCtx, followed);
+    }
 
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
@@ -271,6 +393,7 @@ export default async (state: typeof defaultState) => {
   function initialize() {
     Object.assign(state, defaultState);
     state.playing = true;
+    camSet = false;
     state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
     state.sortedOrchestrators = io.loadAllModelLayers(
       ORCHESTRATOR_LEVELS,
@@ -316,6 +439,28 @@ export default async (state: typeof defaultState) => {
       state.player.brain.mutate(deathCarModel);
       state.cars.push(state.player);
     }
+  }
+
+  /**
+   * Brain shown in the visualizer: 0 is the best car by score, 1-9 the best
+   * car driving a brain of that layer, space the best orchestrator car.
+   */
+  function followedBrain() {
+    if (follow === 'orchestrator') {
+      return (
+        state.sortedCars.find((c) => c.brain instanceof OrchestratorNetwork)
+          ?.brain || undefined
+      );
+    }
+    const pool =
+      follow > 0
+        ? state.sortedCars.filter(
+            (c) =>
+              c.brainLayers === follow &&
+              !(c.brain instanceof OrchestratorNetwork),
+          )
+        : state.sortedCars;
+    return pool[0]?.brain;
   }
 
   function endExperiment() {

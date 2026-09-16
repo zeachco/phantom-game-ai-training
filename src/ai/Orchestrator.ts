@@ -30,7 +30,7 @@ export class OrchestratorNetwork extends NeuralNetwork {
   public kind = ORCHESTRATOR_KIND;
   /** stable slot of each expert, stored to detect a library change between runs */
   public expertIds: string[] = [];
-  public mutationBoost = 3;
+  public mutationBoost = 5;
   public resetChance = 0.15;
   /** expert currently driving */
   public selectedIndex = 0;
@@ -187,7 +187,9 @@ export class OrchestratorNetwork extends NeuralNetwork {
     const saved = levels[levels.length - 1].weights[0].length;
     if (saved !== this.#experts.length) {
       throw new Error(
-        `Orchestrator save targets ${saved} experts, ${this.#experts.length} are loaded`,
+        `Orchestrator save targets ${saved} experts, ${
+          this.#experts.length
+        } are loaded`,
       );
     }
     const savedIds = (network.expertIds || []).join();

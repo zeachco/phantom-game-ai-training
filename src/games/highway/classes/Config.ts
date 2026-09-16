@@ -1,7 +1,9 @@
 import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 100;
+  public CAR_NB = 200;
+  /** floor of cars per brain type (network layer), so every layer keeps breeding */
+  public MIN_CARS_PER_LAYER = 3;
   public AUTO_DISTRIBUTE_LAYERS = false;
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = 0.0001;
@@ -23,6 +25,8 @@ class Config {
   // orchestrator: a brain that picks which trained brain drives
   public ORCHESTRATOR_ENABLED = true;
   public ORCHESTRATOR_CARS = 12;
+  /** floor on the mutating orchestrator cars, the run needs a spread to arbitrate */
+  public ORCHESTRATOR_MIN_CARS = 50;
   /** below that there is nothing to arbitrate, the run is skipped */
   public ORCHESTRATOR_MIN_EXPERTS = 2;
   /** how many saved brains per layer become selectable experts */
@@ -42,8 +46,8 @@ class Config {
   // env
   public SENSORS = 17;
   public SENSOR_ANGLE = (Math.PI / 2) * 3.5;
-  public SENSORS_MAX_DEPTH = 120;
-  public SENSORS_MAX_WIDTH = 120;
+  public SENSORS_MAX_DEPTH = 160;
+  public SENSORS_MAX_WIDTH = 160;
   public DEATH_SPEED = 0.0018;
 
   // car

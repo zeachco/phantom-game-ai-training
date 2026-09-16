@@ -23,6 +23,8 @@ export function fileUtilities(game = '') {
     saveBestModels,
     loadAllModelLayers,
     discardModels,
+    exportModels,
+    importModels,
   };
   function saveModels(
     layers: number,
@@ -117,5 +119,34 @@ export function fileUtilities(game = '') {
 
   function discardModels() {
     localStorage.clear();
+  }
+
+  /** all stored models of this game, keyed by their storage key */
+  function exportModels(): Record<string, ModelsByLayerCount[number][]> {
+    const models: Record<string, ModelsByLayerCount[number][]> = {};
+    Object.keys(localStorage).forEach((key) => {
+      if (!key.startsWith(`${game}_`)) return;
+      try {
+        const data = JSON.parse(localStorage.getItem(key) || '');
+        if (Array.isArray(data)) models[key] = data;
+      } catch {
+        console.warn(`Skipping unreadable save ${key}`);
+      }
+    });
+    return models;
+  }
+
+  /** replaces the saves of this game with the given storage key -> models map */
+  function importModels(models: Record<string, unknown> | null): string[] {
+    const written: string[] = [];
+    Object.entries(models || {}).forEach(([key, data]) => {
+      if (!key.startsWith(`${game}_`) || !Array.isArray(data)) {
+        console.warn(`Skipping incompatible model entry ${key}`);
+        return;
+      }
+      localStorage.setItem(key, JSON.stringify(data));
+      written.push(key);
+    });
+    return written;
   }
 }
