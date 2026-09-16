@@ -26,6 +26,9 @@ export class Sensor {
   readings: (Reading | null)[];
   /** touched by the current ray, reused across rays and frames */
   #touches: Reading[] = [];
+  /** each ray's fixed offset from the car angle, with its sin/cos precomputed */
+  #cosOff: number[] = [];
+  #sinOff: number[] = [];
 
   constructor(car: Car) {
     this.car = car;
@@ -34,6 +37,14 @@ export class Sensor {
     this.rays = [];
     this.readings = new Array(this.rayCount);
     for (let i = 0; i < this.rayCount; i++) {
+      const offset =
+        lerp(
+          config.SENSOR_ANGLE / 2,
+          -config.SENSOR_ANGLE / 2,
+          this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
+        );
+      this.#cosOff.push(Math.cos(offset));
+      this.#sinOff.push(Math.sin(offset));
       this.rays.push([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
     }
   }
@@ -115,42 +126,43 @@ export class Sensor {
   }
 
   #castRays() {
-    const car = this.car;
-    const half = config.SENSOR_ANGLE / 2;
+    // two trig calls for the car angle, then a sum formula per ray
+    const sinA = Math.sin(this.car.angle);
+    const cosA = Math.cos(this.car.angle);
     for (let i = 0; i < this.rayCount; i++) {
-      const rayAngle =
-        lerp(half, -half, this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1)) +
-        car.angle;
-
       const start = this.rays[i][0];
       const end = this.rays[i][1];
-      start.x = car.x;
-      start.y = car.y;
-      end.x = car.x - Math.sin(rayAngle) * config.SENSORS_MAX_WIDTH;
-      end.y = car.y - Math.cos(rayAngle) * config.SENSORS_MAX_DEPTH;
+      start.x = this.car.x;
+      start.y = this.car.y;
+      const sinR = sinA * this.#cosOff[i] - cosA * this.#sinOff[i];
+      const cosR = cosA * this.#cosOff[i] + sinA * this.#sinOff[i];
+      end.x = this.car.x - sinR * config.SENSORS_MAX_WIDTH;
+      end.y = this.car.y - cosR * config.SENSORS_MAX_DEPTH;
     }
   }
 
+  /** the whole fan of rays stroked in two passes, one per color */
   draw(ctx: CanvasRenderingContext2D) {
-    for (let i = 0; i < this.rays.length; i++) {
-      let end: any = this.rays[i][1];
-      if (this.readings[i]) {
-        end = this.readings[i];
-      }
+    ctx.save();
+    ctx.lineWidth = 2;
 
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'yellow';
+    ctx.beginPath();
+    ctx.strokeStyle = 'yellow';
+    for (let i = 0; i < this.rays.length; i++) {
+      const end = this.readings[i] || this.rays[i][1];
       ctx.moveTo(this.rays[i][0].x, this.rays[i][0].y);
       ctx.lineTo(end.x, end.y);
-      ctx.stroke();
+    }
+    ctx.stroke();
 
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'black';
+    ctx.beginPath();
+    ctx.strokeStyle = 'black';
+    for (let i = 0; i < this.rays.length; i++) {
+      const end = this.readings[i] || this.rays[i][1];
       ctx.moveTo(this.rays[i][1].x, this.rays[i][1].y);
       ctx.lineTo(end.x, end.y);
-      ctx.stroke();
     }
+    ctx.stroke();
+    ctx.restore();
   }
 }

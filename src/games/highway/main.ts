@@ -357,7 +357,7 @@ export default async (state: typeof defaultState) => {
     throw err;
   }
 
-  loop.play((_es, dt) => {
+  loop.play((_es, _dt) => {
     if (followPad.once('Space')) setFollow('orchestrator');
     for (let digit = 0; digit <= 9; digit++) {
       if (followPad.once(`Digit${digit}`)) setFollow(digit);
@@ -402,6 +402,7 @@ export default async (state: typeof defaultState) => {
         (camTarget.y - 2 * camTarget.speed * Math.cos(camTarget.angle) - camY) *
         0.1;
     }
+    state.camY = camY;
     carCtx.save();
     carCtx.translate(0, -camY + carCanvas.height * 0.7);
 
@@ -426,7 +427,6 @@ export default async (state: typeof defaultState) => {
 
     const followed = camTarget?.brain;
     if (followed) {
-      networkCtx.lineDashOffset = -dt / 50;
       neuralVisualizer.render(networkCtx, followed);
     }
     // the KeyS shortcut toggles the stats too, keep the button in sync

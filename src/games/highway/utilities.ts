@@ -9,6 +9,8 @@ export const defaultState = {
   sortedCars: [] as Car[],
   /** number of undamaged cars, cars only die, so it only goes down */
   living: 0,
+  /** world y at the follow line, exposed for debugging the camera */
+  camY: 0,
   traffic: [] as Car[],
   /** the human driven car, only exists when a compatible death car model loads */
   player: undefined as Car | undefined,

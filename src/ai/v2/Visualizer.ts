@@ -234,6 +234,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   /** the selector half and the expert half go stale on their own */
   #mainLinks = new LinkLayer();
   #expertLinks = new LinkLayer();
+  /** a layout only depends on the network shape and the canvas size */
+  #layoutCache = new WeakMap<NeuralNetwork, Map<string, LevelLayout[]>>();
 
   constructor(public config: T) {}
 
@@ -430,8 +432,29 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     width: number,
     outputLabels: string[],
   ): LevelLayout[] {
-    const top = MARGIN;
     const height = ctx.canvas.height - MARGIN * 2;
+    const key = `${left}|${width}|${height}|${outputLabels.length}`;
+    let byKey = this.#layoutCache.get(network);
+    if (!byKey) {
+      byKey = new Map();
+      this.#layoutCache.set(network, byKey);
+    }
+    const cached = byKey.get(key);
+    if (cached) return cached;
+
+    const layouts = this.#buildLayout(network, left, width, height, outputLabels);
+    byKey.set(key, layouts);
+    return layouts;
+  }
+
+  #buildLayout(
+    network: NeuralNetwork,
+    left: number,
+    width: number,
+    height: number,
+    outputLabels: string[],
+  ): LevelLayout[] {
+    const top = MARGIN;
     const count = network.levels.length;
     const levelHeight = height / count;
     const right = left + width;
