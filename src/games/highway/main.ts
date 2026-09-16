@@ -28,6 +28,7 @@ if (config.CLEAR_STORAGE) io.discardModels();
 export default async (state: typeof defaultState) => {
   const carCanvas = createCanvas();
   const networkCanvas = createCanvas();
+  networkCanvas.className = 'neural-canvas';
 
   const carCtx = carCanvas.getContext('2d');
   const networkCtx = networkCanvas.getContext('2d');
@@ -141,7 +142,7 @@ export default async (state: typeof defaultState) => {
       ['network 7', 7],
       ['network 8', 8],
       ['network 9', 9],
-      ['network 0', 0],
+      ['all', 0],
       ['mixed experts', 'orchestrator'],
     ] as [string, number | 'orchestrator'][]
   ).forEach(([label, value]) => {
@@ -153,9 +154,24 @@ export default async (state: typeof defaultState) => {
   });
   setFollow(0);
 
+  const statsBtn = document.createElement('button');
+  statsBtn.className = 'model-btn';
+  statsBtn.textContent = 'Stats';
+  statsBtn.setAttribute('aria-pressed', 'true');
+  statsBtn.onclick = () => {
+    neuralVisualizer.renderStats = !neuralVisualizer.renderStats;
+  };
+
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(loadBtn, saveBtn, presetBtn, clearBtn, followKeys);
+  panelContent.append(
+    loadBtn,
+    saveBtn,
+    presetBtn,
+    clearBtn,
+    followKeys,
+    statsBtn,
+  );
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
@@ -382,7 +398,9 @@ export default async (state: typeof defaultState) => {
         camSet = true;
       }
       // lead the target by 2 frames of travel so the 10% lerp stays centered
-      camY += (camTarget.y - 2 * camTarget.speed * Math.cos(camTarget.angle) - camY) * 0.1;
+      camY +=
+        (camTarget.y - 2 * camTarget.speed * Math.cos(camTarget.angle) - camY) *
+        0.1;
     }
     carCtx.save();
     carCtx.translate(0, -camY + carCanvas.height * 0.7);
@@ -410,6 +428,13 @@ export default async (state: typeof defaultState) => {
     if (followed) {
       networkCtx.lineDashOffset = -dt / 50;
       neuralVisualizer.render(networkCtx, followed);
+    }
+    // the KeyS shortcut toggles the stats too, keep the button in sync
+    const statsOn = neuralVisualizer.renderStats;
+    if (statsBtn.dataset.on !== String(statsOn)) {
+      statsBtn.dataset.on = String(statsOn);
+      statsBtn.classList.toggle('active', statsOn);
+      statsBtn.setAttribute('aria-pressed', String(statsOn));
     }
 
     if (!state.playing) {
@@ -499,9 +524,9 @@ export default async (state: typeof defaultState) => {
       (follow === 'orchestrator'
         ? car.brain instanceof OrchestratorNetwork
         : follow > 0
-          ? car.brainLayers === follow &&
-            !(car.brain instanceof OrchestratorNetwork)
-          : true);
+        ? car.brainLayers === follow &&
+          !(car.brain instanceof OrchestratorNetwork)
+        : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)

@@ -120,6 +120,15 @@ ul:hover {
   background: rgba(25, 52, 94, 0.9);
 }
 
+.model-btn.active {
+  background: hsl(180, 100%, 45%);
+}
+
+/* the network canvas is transparent, this only paints behind the brain */
+.neural-canvas {
+  background: #949494;
+}
+
 .follow-keys {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
