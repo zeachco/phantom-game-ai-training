@@ -109,7 +109,9 @@ ul:hover {
   border: none;
   border-radius: 0.5em;
   padding: 0.25em 0.75em;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
   text-transform: uppercase;
   color: #fff;
   background: rgba(25, 52, 94, 0.6);
@@ -137,17 +139,21 @@ ul:hover {
 
 .follow-keys span {
   grid-column: 1 / -1;
-  font: bold 0.7em Arial, sans-serif;
+  font:
+    bold 0.7em Arial,
+    sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.6);
 }
 
 .follow-keys button {
-  border: none;
+  border: 2px solid transparent;
   border-radius: 0.4em;
   padding: 0.4em 0;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
   color: #fff;
   background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
@@ -157,10 +163,55 @@ ul:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* --btn-color is the car color of the button's category, set in main.ts */
+.follow-keys button.dead {
+  background: transparent;
+  border-color: var(--btn-color, hsl(180, 100%, 45%));
+  color: var(--btn-color, hsl(180, 100%, 45%));
+}
+
+.follow-keys button.running {
+  background: var(--btn-color, hsl(180, 100%, 45%));
+  border-color: var(--btn-color, hsl(180, 100%, 45%));
+  /* --btn-text is set in main.ts, black or white on the button's color */
+  color: var(--btn-text, #000);
+}
+
+/* the followed category gets a white ring, filled or outlined */
 .follow-keys button.active {
-  background: hsl(180, 100%, 45%);
+  outline: 2px solid #fff;
+  outline-offset: 1px;
 }
 
 .follow-keys button:last-child {
   grid-column: 1 / -1;
+}
+
+.side-panel-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  padding: 0.5em 0.7em;
+  border-radius: 0.4em;
+  background: rgba(255, 255, 255, 0.08);
+  font:
+    0.72em Arial,
+    sans-serif;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.side-panel-legend .legend-title {
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.side-panel-footer {
+  margin-top: auto;
+  font:
+    0.7em Arial,
+    sans-serif;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
 }

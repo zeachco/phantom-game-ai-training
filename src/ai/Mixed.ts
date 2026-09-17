@@ -2,13 +2,13 @@ import { rand } from '../utilities/math';
 import { Level, NeuralNetwork } from './Network';
 import type { ModelsByLayerCount } from './utils';
 
-/** storage namespace, orchestrators never mix with the regular brains */
-export const ORCHESTRATOR_KIND = 'orchestrator';
+/** storage namespace, mixed brains stay apart from the regular ones */
+export const MIXED_KIND = 'mixed';
 
 /** input -> hidden -> experts, picking a brain does not deserve more depth */
-export const ORCHESTRATOR_LEVELS = 2;
+export const MIXED_LEVELS = 2;
 
-export interface OrchestratorOptions {
+export interface MixedOptions {
   /** nodes of the single hidden layer of the selector */
   hiddenNodes?: number;
   /** multiplier applied on the mutation factor, every expert is good at something */
@@ -26,8 +26,8 @@ export interface OrchestratorOptions {
  * the run can switch between an evasion specialist and a distance maximizer
  * depending on what the sensors see.
  */
-export class OrchestratorNetwork extends NeuralNetwork {
-  public kind = ORCHESTRATOR_KIND;
+export class MixedNetwork extends NeuralNetwork {
+  public kind = MIXED_KIND;
   /** stable slot of each expert, stored to detect a library change between runs */
   public expertIds: string[] = [];
   public mutationBoost = 5;
@@ -52,7 +52,7 @@ export class OrchestratorNetwork extends NeuralNetwork {
     inputNb: number,
     outputNb: number,
     experts: NeuralNetwork[] = [],
-    options: OrchestratorOptions = {},
+    options: MixedOptions = {},
   ) {
     // levels are built here instead of being interpolated by the base class
     super(1, 1, 0);
@@ -114,7 +114,7 @@ export class OrchestratorNetwork extends NeuralNetwork {
   }
 
   get id() {
-    return [ORCHESTRATOR_KIND, this.version, this.mutationIndex].join('-');
+    return [MIXED_KIND, this.version, this.mutationIndex].join('-');
   }
 
   /** the last level picks an expert, the controls come out of that expert */
@@ -135,7 +135,7 @@ export class OrchestratorNetwork extends NeuralNetwork {
   }
 
   /**
-   * Replays the last pass. Experts are shared between every orchestrator car so
+   * Replays the last pass. Experts are shared between every mixed car so
    * their activations belong to whoever ran last, the visualizer calls this to
    * get the ones of the brain it is about to draw.
    */
@@ -189,22 +189,20 @@ export class OrchestratorNetwork extends NeuralNetwork {
     const levels = network?.levels || [];
     if (levels.length !== this.levels.length) {
       throw new Error(
-        `Orchestrator save has ${levels.length} levels, expected ${this.levels.length}`,
+        `Mixed save has ${levels.length} levels, expected ${this.levels.length}`,
       );
     }
     const saved = levels[levels.length - 1].weights[0].length;
     if (saved !== this.#experts.length) {
       throw new Error(
-        `Orchestrator save targets ${saved} experts, ${
+        `Mixed save targets ${saved} experts, ${
           this.#experts.length
         } are loaded`,
       );
     }
     const savedIds = (network.expertIds || []).join();
     if (savedIds && savedIds !== this.expertIds.join()) {
-      throw new Error(
-        `Expert library changed since the orchestrator was saved`,
-      );
+      throw new Error(`Expert library changed since the mixed brain was saved`);
     }
   }
 }
@@ -241,8 +239,8 @@ export function hydrateExperts(
   saves.forEach((models) => {
     if (!models || !models.length) return;
     models.slice(0, perLayer).forEach((saved) => {
-      // an orchestrator picking an orchestrator would only add indirection
-      if (!saved || !saved.levels?.length || saved.kind === ORCHESTRATOR_KIND) {
+      // a mixed brain picking a mixed brain would only add indirection
+      if (!saved || !saved.levels?.length || saved.kind === MIXED_KIND) {
         return;
       }
       const expert = NeuralNetwork.hydrate(saved);

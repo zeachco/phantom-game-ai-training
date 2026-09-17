@@ -1,4 +1,4 @@
-import { ORCHESTRATOR_KIND, OrchestratorNetwork } from '../../ai/Orchestrator';
+import { MIXED_KIND, MixedNetwork } from '../../ai/Mixed';
 import { ModelsByLayerCount } from '../../ai/utils';
 import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
@@ -15,21 +15,19 @@ export const defaultState = {
   /** the human driven car, only exists when a compatible death car model loads */
   player: undefined as Car | undefined,
   sortedModels: [] as ModelsByLayerCount[],
-  sortedOrchestrators: [] as ModelsByLayerCount[],
+  sortedMixed: [] as ModelsByLayerCount[],
   playing: false,
 };
 
-const isOrchestrator = (model: ModelsByLayerCount[number]) =>
-  model.kind === ORCHESTRATOR_KIND;
+const isMixed = (model: ModelsByLayerCount[number]) =>
+  model.kind === MIXED_KIND;
 
 /** previous best save a model is competing against, kinds have their own saves */
 function previousSave(
   state: typeof defaultState,
   model: ModelsByLayerCount[number],
 ) {
-  const saves = isOrchestrator(model)
-    ? state.sortedOrchestrators
-    : state.sortedModels;
+  const saves = isMixed(model) ? state.sortedMixed : state.sortedModels;
   const models = saves[model.levels.length];
   return (models && models[0]) || undefined;
 }
@@ -39,48 +37,44 @@ const layerColor = (layer: number) =>
   getColorScale(layer / config.MAX_NETWORK_LAYERS);
 
 /**
- * Accent of an orchestrator: the colors of the brains it drives with, weighted
+ * Accent of a mixed brain: the colors of the brains it drives with, weighted
  * by how much of the run each of them has been driving. The shares drift a
  * frame at a time while the blend takes trig, so they are quantized and the
  * color cached per car.
  */
-const orchestratorColors = new Map<string, string>();
-export function orchestratorColor(brain: OrchestratorNetwork) {
+const mixedColors = new Map<string, string>();
+export function mixedColor(brain: MixedNetwork) {
   const shares = brain.selectionShares;
   const layers = brain.expertLayers;
   const key =
-    layers.join() +
-    ':' +
-    shares.map((s) => Math.round(s * 20)).join();
-  let color = orchestratorColors.get(key);
+    layers.join() + ':' + shares.map((s) => Math.round(s * 20)).join();
+  let color = mixedColors.get(key);
   if (!color) {
     color = blendColorScale(
       layers.map((layer, i) => ({
         ratio: layer / config.MAX_NETWORK_LAYERS,
         weight: shares[i],
       })),
-      config.ORCHESTRATOR_COLOR,
+      config.MIXED_COLOR,
     );
-    if (orchestratorColors.size > 512) orchestratorColors.clear();
-    orchestratorColors.set(key, color);
+    if (mixedColors.size > 512) mixedColors.clear();
+    mixedColors.set(key, color);
   }
   return color;
 }
 
 /** same blend for a save, where the experts are only kept as `layer.rank` slots */
-const savedOrchestratorColor = (model: ModelsByLayerCount[number]) =>
+const savedMixedColor = (model: ModelsByLayerCount[number]) =>
   blendColorScale(
     (model.expertIds || []).map((slot: string, i: number) => ({
       ratio: parseInt(slot, 10) / config.MAX_NETWORK_LAYERS,
       weight: (model.selectionCounts && model.selectionCounts[i]) || 0,
     })),
-    config.ORCHESTRATOR_COLOR,
+    config.MIXED_COLOR,
   );
 
 const modelColor = (model: ModelsByLayerCount[number]) =>
-  isOrchestrator(model)
-    ? savedOrchestratorColor(model)
-    : layerColor(model.levels.length);
+  isMixed(model) ? savedMixedColor(model) : layerColor(model.levels.length);
 
 const FH = 12;
 const TL = 0;
@@ -102,10 +96,8 @@ export function drawScores(
 ) {
   const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
     ...state.sortedModels.map((m) => m[0]).filter(Boolean),
-    ...state.sortedOrchestrators.map((m) => m[0]).filter(Boolean),
-    ...state.sortedCars.filter(
-      (c, i) => i < config.SCORES_NB || c === state.player,
-    ),
+    ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
+    ...state.sortedCars.slice(0, config.SCORES_NB),
   ].sort((a, b) => {
     const scoreA = a instanceof Car ? a.brain.score : a.score;
     const scoreB = b instanceof Car ? b.brain.score : b.score;
@@ -117,11 +109,7 @@ export function drawScores(
   ctx.fillStyle = getColorScale(state.living / state.sortedCars.length);
   ctx.font = `bold ${FH}px serif`;
   ctx.textAlign = 'left';
-  ctx.fillText(
-    `${state.living}/${state.sortedCars.length} cars`,
-    TL,
-    FH * 3,
-  );
+  ctx.fillText(`${state.living}/${state.sortedCars.length} cars`, TL, FH * 3);
 
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
@@ -147,8 +135,8 @@ export function drawScores(
       ctx.fillStyle = modelColor(ref);
 
       const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
-      const emoji = isOrchestrator(ref) ? '🧭' : '👻';
-      const name = isOrchestrator(ref)
+      const emoji = isMixed(ref) ? '🧭' : '👻';
+      const name = isMixed(ref)
         ? `${ref.version}-${ref.mutationIndex}`
         : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
       ctx.fillText(

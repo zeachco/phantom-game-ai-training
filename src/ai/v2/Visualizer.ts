@@ -3,7 +3,7 @@ import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { Level, NeuralNetwork } from '../Network';
-import { OrchestratorNetwork } from '../Orchestrator';
+import { MixedNetwork } from '../Mixed';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
@@ -68,7 +68,7 @@ function nodePositions(count: number, left: number, right: number) {
   return positions;
 }
 
-/** `0`, `1`, ... reused across frames, an orchestrator relabels its experts on each one */
+/** `0`, `1`, ... reused across frames, a mixed brain relabels its experts on each one */
 const indexLabelsCache: string[][] = [];
 function indexLabels(count: number) {
   if (!indexLabelsCache[count]) {
@@ -243,9 +243,9 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
-    // experts are shared between the orchestrator cars, replaying the last pass
+    // experts are shared between the mixed cars, replaying the last pass
     // puts back the activations of the brain we are about to draw
-    if (network instanceof OrchestratorNetwork) network.replay();
+    if (network instanceof MixedNetwork) network.replay();
 
     this.#drawBrain(ctx, network);
 
@@ -256,8 +256,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     return getColorScale(layer / this.config.MAX_NETWORK_LAYERS);
   }
 
-  /** the accent an orchestrator car wears: its brains weighted by usage */
-  #blendedColor(network: OrchestratorNetwork) {
+  /** the accent a mixed car wears: its brains weighted by usage */
+  #blendedColor(network: MixedNetwork) {
     const shares = network.selectionShares;
     return blendColorScale(
       network.expertLayers.map((layer, i) => ({
@@ -276,12 +276,12 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   }
 
   /**
-   * A regular brain fills the canvas. An orchestrator shows both halves of its
+   * A regular brain fills the canvas. A mixed brain shows both halves of its
    * decision: the selector that reads the sensors on the left, the expert it
    * routed those same sensors to on the right.
    */
   #drawBrain(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    if (!(network instanceof OrchestratorNetwork)) {
+    if (!(network instanceof MixedNetwork)) {
       const width = ctx.canvas.width - MARGIN * 2;
       return this.#drawNetwork(
         ctx,
@@ -323,7 +323,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
    */
   #drawSelection(
     ctx: CanvasRenderingContext2D,
-    network: OrchestratorNetwork,
+    network: MixedNetwork,
     width: number,
   ) {
     const shares = network.selectionShares;
@@ -357,8 +357,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   }
 
   #drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    const orchestrator =
-      network instanceof OrchestratorNetwork ? network : undefined;
+    const mixed = network instanceof MixedNetwork ? network : undefined;
     const lines = [`Network ${network.id}`];
 
     if (network.mutationIndex === 0) {
@@ -369,24 +368,22 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     }
     lines.push(`Score ${Math.round(network.score)}`);
 
-    if (orchestrator) {
-      const expert = orchestrator.activeExpert;
-      lines.push(
-        `Driving #${orchestrator.selectedIndex} of ${orchestrator.experts.length}`,
-      );
-      const slot = orchestrator.expertIds[orchestrator.selectedIndex];
+    if (mixed) {
+      const expert = mixed.activeExpert;
+      lines.push(`Driving #${mixed.selectedIndex} of ${mixed.experts.length}`);
+      const slot = mixed.expertIds[mixed.selectedIndex];
       lines.push(`Expert ${slot || '?'} ${expert ? expert.id : 'none'}`);
-      lines.push(`Switches ${orchestrator.switches}`);
+      lines.push(`Switches ${mixed.switches}`);
     }
 
     // the usage bars live inside the panel, the canvas around it is taken by
     // the two networks
-    const barsHeight = orchestrator ? SELECTION_HEIGHT : 0;
+    const barsHeight = mixed ? SELECTION_HEIGHT : 0;
     const pWidth = Math.min(200, ctx.canvas.width * 0.6);
     /** the lines are squeezed to the content box, not to the border */
     const contentWidth = pWidth - MARGIN * 2;
-    const levelColor = orchestrator
-      ? this.#blendedColor(orchestrator)
+    const levelColor = mixed
+      ? this.#blendedColor(mixed)
       : this.#layerColor(network.levels.length);
     const print = this.#createCursor(ctx, contentWidth);
     ctx.save();
@@ -408,7 +405,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
     lines.forEach((line) => print(line));
-    if (orchestrator) this.#drawSelection(ctx, orchestrator, contentWidth);
+    if (mixed) this.#drawSelection(ctx, mixed, contentWidth);
     ctx.restore();
   }
 
@@ -442,7 +439,13 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     const cached = byKey.get(key);
     if (cached) return cached;
 
-    const layouts = this.#buildLayout(network, left, width, height, outputLabels);
+    const layouts = this.#buildLayout(
+      network,
+      left,
+      width,
+      height,
+      outputLabels,
+    );
     byKey.set(key, layouts);
     return layouts;
   }
@@ -495,7 +498,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.textBaseline = 'middle';
 
     for (let i = 0; i < layouts.length; i++) {
-      const { level, top, bottom, radius, inputX, outputX, labels } = layouts[i];
+      const { level, top, bottom, radius, inputX, outputX, labels } =
+        layouts[i];
 
       ctx.beginPath();
       for (let n = 0; n < inputX.length; n++) {

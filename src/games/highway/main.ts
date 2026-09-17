@@ -1,24 +1,24 @@
-import { fileUtilities } from '../../ai/utils';
-import { createCanvas, resizeCanvas } from '../../utilities/dom';
-import { GameLoop } from '../../utilities/three/GameLoop';
-import { Car } from './classes/Car';
-import { config } from './classes/Config';
-import { Road } from './classes/Road';
-import { ControlType } from './types';
-import { DeathRay } from './classes/DeathRay';
-import { defaultState, drawScores, orchestratorColor } from './utilities';
-import { getColorScale } from '../../utilities/colors';
-import { GamePad } from '../../utilities/inputs/Gamepad';
-import { Visualizer } from '../../ai/v2/Visualizer';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
-import { lerp } from '../../utilities/math';
 import {
   expertSlotIds,
   hydrateExperts,
-  ORCHESTRATOR_KIND,
-  ORCHESTRATOR_LEVELS,
-  OrchestratorNetwork,
-} from '../../ai/Orchestrator';
+  MIXED_KIND,
+  MIXED_LEVELS,
+  MixedNetwork,
+} from '../../ai/Mixed';
+import { fileUtilities } from '../../ai/utils';
+import { Visualizer } from '../../ai/v2/Visualizer';
+import { contrastText, getColorScale } from '../../utilities/colors';
+import { createCanvas, resizeCanvas } from '../../utilities/dom';
+import { GamePad } from '../../utilities/inputs/Gamepad';
+import { lerp } from '../../utilities/math';
+import { GameLoop } from '../../utilities/three/GameLoop';
+import { Car } from './classes/Car';
+import { config } from './classes/Config';
+import { DeathRay } from './classes/DeathRay';
+import { Road } from './classes/Road';
+import { ControlType } from './types';
+import { defaultState, drawScores, mixedColor } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -37,17 +37,17 @@ export default async (state: typeof defaultState) => {
 
   const followPad = new GamePad(new Map());
   /** 0 follows the best score overall, 1-9 the best car of that brain layer */
-  let follow: number | 'orchestrator' = 0;
+  let follow: number | 'mixed' = 0;
   /** world y mapped to the follow line, it lerps so target switches animate */
   let camY = 0;
   let camSet = false;
 
   const panel = document.createElement('aside');
-  panel.className = 'side-panel';
+  panel.className = 'side-panel open';
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❮';
+  toggleBtn.textContent = '❯';
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
   const loadBtn = document.createElement('button');
@@ -66,7 +66,7 @@ export default async (state: typeof defaultState) => {
     try {
       const archive = await pickModelArchive();
       if (archive.game && archive.game !== 'highway') {
-        alert(`This archive is for "${archive.game}", not "highway"`);
+        alert(`This archive is for \`${archive.game}\`, not "highway"`);
         return;
       }
       const written = io.importModels(archive.models);
@@ -123,34 +123,113 @@ export default async (state: typeof defaultState) => {
   const followLabel = document.createElement('span');
   followLabel.textContent = 'Follow';
 
-  const setFollow = (value: number | 'orchestrator') => {
+  const setFollow = (value: number | 'mixed') => {
     follow = value;
     followKeys.querySelectorAll('button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.follow === String(value));
     });
   };
 
+  /** car buttons: key 0 any car, 1-9 that brain layer, 'mixed' the mix,
+   *  running stays undefined until the first pass so the classes always paint */
+  const followBtns = new Map<
+    HTMLButtonElement,
+    { key: string; running?: boolean }
+  >();
+
+  const resetBrainSaves = (value: number | 'mixed') => {
+    if (value === 'mixed') {
+      if (!confirm('Reset the saved mixed brain weights?')) return;
+      io.discardModel(MIXED_LEVELS, MIXED_KIND);
+    } else if (value === 0) {
+      if (!confirm('Reset all the saved highway weights?')) return;
+      io.discardGameModels();
+    } else {
+      if (!confirm(`Reset the saved weights of brain ${value}?`)) return;
+      io.discardModel(value);
+    }
+    console.info(
+      `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
+    );
+    initialize();
+  };
+
+  /** long press (or right click) a car button to reset its saved weights */
+  const armReset = (
+    btn: HTMLButtonElement,
+    value: number | 'mixed',
+    onClick: () => void,
+  ) => {
+    let timer = 0;
+    let swallowClick = false;
+
+    // registered before the follow click, so the click released after a
+    // long press never also switches the camera
+    btn.addEventListener('click', (e) => {
+      if (swallowClick) {
+        swallowClick = false;
+        e.stopImmediatePropagation();
+        return;
+      }
+      onClick();
+    });
+
+    const cancelHold = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = 0;
+    };
+    btn.addEventListener('pointerdown', () => {
+      timer = window.setTimeout(() => {
+        timer = 0;
+        swallowClick = true;
+        resetBrainSaves(value);
+      }, 650);
+    });
+    btn.addEventListener('pointerup', cancelHold);
+    btn.addEventListener('pointerleave', cancelHold);
+    btn.addEventListener('pointercancel', cancelHold);
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      cancelHold();
+      if (swallowClick) swallowClick = false;
+      else resetBrainSaves(value);
+    });
+  };
+
   followKeys.append(followLabel);
   (
     [
-      ['network 1', 1],
-      ['network 2', 2],
-      ['network 3', 3],
-      ['network 4', 4],
-      ['network 5', 5],
-      ['network 6', 6],
-      ['network 7', 7],
-      ['network 8', 8],
-      ['network 9', 9],
+      ['brain 1', 1],
+      ['brain 2', 2],
+      ['brain 3', 3],
+      ['brain 4', 4],
+      ['brain 5', 5],
+      ['brain 6', 6],
+      ['brain 7', 7],
+      ['brain 8', 8],
+      ['brain 9', 9],
       ['all', 0],
-      ['mixed experts', 'orchestrator'],
-    ] as [string, number | 'orchestrator'][]
+      ['mixed experts', 'mixed'],
+    ] as [string, number | 'mixed'][]
   ).forEach(([label, value]) => {
     const btn = document.createElement('button');
     btn.textContent = label;
     btn.dataset.follow = String(value);
-    btn.onclick = () => setFollow(value);
+    btn.title = 'Click to follow, long press or right-click to reset';
+    const color =
+      value === 'mixed'
+        ? config.MIXED_COLOR
+        : value === 0
+          ? undefined
+          : getColorScale(value / config.MAX_NETWORK_LAYERS);
+    if (color) {
+      btn.style.setProperty('--btn-color', color);
+      // black or white, whichever keeps the higher contrast on the car color
+      btn.style.setProperty('--btn-text', contrastText(color));
+    }
     followKeys.append(btn);
+    followBtns.set(btn, { key: String(value) });
+    armReset(btn, value, () => setFollow(value));
   });
   setFollow(0);
 
@@ -162,6 +241,27 @@ export default async (state: typeof defaultState) => {
     neuralVisualizer.renderStats = !neuralVisualizer.renderStats;
   };
 
+  const legend = document.createElement('div');
+  legend.className = 'side-panel-legend';
+  [
+    'Score board',
+    '👶 first generation',
+    '💀 car has crashed',
+    '🏆 car has crashed with a higher score',
+    '💜 car is racing',
+    '💚 car is besting the best score',
+    '👻 ghost car from a previous generation',
+  ].forEach((line, i) => {
+    const el = document.createElement('span');
+    el.textContent = line;
+    if (i === 0) el.className = 'legend-title';
+    legend.append(el);
+  });
+
+  const footer = document.createElement('div');
+  footer.className = 'side-panel-footer';
+  footer.textContent = 'Long press for reset (right-click also works)';
+
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
   panelContent.append(
@@ -171,6 +271,8 @@ export default async (state: typeof defaultState) => {
     clearBtn,
     followKeys,
     statsBtn,
+    legend,
+    footer,
   );
 
   panel.append(toggleBtn, panelContent);
@@ -209,7 +311,7 @@ export default async (state: typeof defaultState) => {
       const configuredCars = config.CARS_PER_LAYERS[l];
       if (!configuredCars) continue;
 
-      let savedModel =
+      const savedModel =
         (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
 
       const layerOriginScore = savedModel?.score || 0;
@@ -255,7 +357,7 @@ export default async (state: typeof defaultState) => {
           } catch (err) {
             isSaveCompatible = false;
             console.error(
-              `Unable to mutate existing network #${car.brain.id}.\nReset data with ${location.href}&clear=true`,
+              `Unable to mutate existing brain #${car.brain.id}.\nReset data with ${location.href}&clear=true`,
               err.message,
             );
           }
@@ -266,18 +368,18 @@ export default async (state: typeof defaultState) => {
       }
     }
 
-    setupOrchestrators(cars);
+    setupMixed(cars);
 
     return cars;
   }
 
   /**
-   * Spawns the cars driven by an orchestrator: a shallow selector that reads the
+   * Spawns the cars driven by a mixed brain: a shallow selector that reads the
    * same sensors and answers with one of the trained brains, which then drives
    * with those very inputs. Experts stay frozen, only the routing is trained.
    */
-  function setupOrchestrators(cars: Car[]) {
-    if (!config.ORCHESTRATOR_ENABLED) return;
+  function setupMixed(cars: Car[]) {
+    if (!config.MIXED_ENABLED) return;
 
     const inputNb = config.SENSORS + 1;
     const outputNb = 4;
@@ -285,33 +387,28 @@ export default async (state: typeof defaultState) => {
       state.sortedModels,
       inputNb,
       outputNb,
-      config.ORCHESTRATOR_EXPERTS_PER_LAYER,
+      config.MIXED_EXPERTS_PER_LAYER,
     );
 
-    if (experts.length < config.ORCHESTRATOR_MIN_EXPERTS) {
+    if (experts.length < config.MIXED_MIN_EXPERTS) {
       console.debug(
-        `🧭 Orchestrator needs ${config.ORCHESTRATOR_MIN_EXPERTS} trained brains, ${experts.length} available`,
+        `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${experts.length} available`,
       );
       return;
     }
 
-    const savedModel = state.sortedOrchestrators[ORCHESTRATOR_LEVELS]?.[0];
+    const savedModel = state.sortedMixed[MIXED_LEVELS]?.[0];
     const divider = (savedModel?.version > 10 ? savedModel.version : 10) / 10;
-    const mutationTarget = config.ORCHESTRATOR_MAX_MUTATION_LVL / divider;
+    const mutationTarget = config.MIXED_MAX_MUTATION_LVL / divider;
 
     console.debug(
       `🧭 Gen-${savedModel?.version ?? 0} Mutation ${
-        Math.round(
-          mutationTarget * config.ORCHESTRATOR_MUTATION_BOOST * 10000,
-        ) / 100
+        Math.round(mutationTarget * config.MIXED_MUTATION_BOOST * 10000) / 100
       }% | ${experts.length} experts: ${expertSlotIds(experts).join(', ')}`,
     );
 
     let isSaveCompatible = true;
-    const carsNb = Math.max(
-      config.ORCHESTRATOR_CARS,
-      config.ORCHESTRATOR_MIN_CARS,
-    );
+    const carsNb = Math.max(config.MIXED_CARS, config.MIXED_MIN_CARS);
 
     for (let i = 0; i <= carsNb; i++) {
       const car = new Car(
@@ -320,13 +417,13 @@ export default async (state: typeof defaultState) => {
         ControlType.AI,
         3,
         `0 👶`,
-        config.ORCHESTRATOR_COLOR,
-        ORCHESTRATOR_LEVELS,
+        config.MIXED_COLOR,
+        MIXED_LEVELS,
         (inputCount, outputCount) =>
-          new OrchestratorNetwork(inputCount, outputCount, experts, {
-            hiddenNodes: config.ORCHESTRATOR_HIDDEN_NODES,
-            mutationBoost: config.ORCHESTRATOR_MUTATION_BOOST,
-            resetChance: config.ORCHESTRATOR_RESET_CHANCE,
+          new MixedNetwork(inputCount, outputCount, experts, {
+            hiddenNodes: config.MIXED_HIDDEN_NODES,
+            mutationBoost: config.MIXED_MUTATION_BOOST,
+            resetChance: config.MIXED_RESET_CHANCE,
           }),
       );
 
@@ -339,7 +436,7 @@ export default async (state: typeof defaultState) => {
         } catch (err) {
           isSaveCompatible = false;
           console.error(
-            `Unable to mutate existing orchestrator #${car.brain.id}, starting over.`,
+            `Unable to mutate existing mixed brain #${car.brain.id}, starting over.`,
             err.message,
           );
         }
@@ -356,9 +453,11 @@ export default async (state: typeof defaultState) => {
   } catch (err) {
     throw err;
   }
+  // paint the button states before the first frame, they load with their colors
+  updateFollowButtons();
 
   loop.play((_es, _dt) => {
-    if (followPad.once('Space')) setFollow('orchestrator');
+    if (followPad.once('Space')) setFollow('mixed');
     for (let digit = 0; digit <= 9; digit++) {
       if (followPad.once(`Digit${digit}`)) setFollow(digit);
     }
@@ -371,8 +470,8 @@ export default async (state: typeof defaultState) => {
       const alive = !car.damaged;
       car.update(road.borders, state.traffic, deathRays);
       const brain = car.brain;
-      if (brain instanceof OrchestratorNetwork) {
-        car.setColor(orchestratorColor(brain));
+      if (brain instanceof MixedNetwork) {
+        car.setColor(mixedColor(brain));
       }
       if (car.y > ray.y || car.y > carRay.y) {
         car.damaged = true;
@@ -382,6 +481,7 @@ export default async (state: typeof defaultState) => {
       }
     }
     state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
+    updateFollowButtons();
 
     resizeCanvas(carCanvas, carCtx, carCanvas.width, window.innerHeight);
     resizeCanvas(
@@ -455,10 +555,7 @@ export default async (state: typeof defaultState) => {
     state.playing = true;
     camSet = false;
     state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
-    state.sortedOrchestrators = io.loadAllModelLayers(
-      ORCHESTRATOR_LEVELS,
-      ORCHESTRATOR_KIND,
-    );
+    state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
 
     // Game ender
     ray = new DeathRay();
@@ -514,19 +611,40 @@ export default async (state: typeof defaultState) => {
 
   /**
    * Car the camera and the visualizer follow: the best alive car of the
-   * `follow` category (0 any car, 1-9 that layer, space an orchestrator).
+   * `follow` category (0 any car, 1-9 that layer, space a mixed brain).
    * When the leader dies the next best alive car takes over, and a whole
    * dead category falls back to the best alive car overall.
    */
+  /** car buttons stay filled with their car color while the category
+   *  races, and turn to an outline once its last car is dead */
+  function updateFollowButtons() {
+    followBtns.forEach((info, btn) => {
+      const running =
+        info.key === '0'
+          ? state.living > 0
+          : state.cars.some(
+              (car) =>
+                !car.damaged &&
+                (info.key === 'mixed'
+                  ? car.brain instanceof MixedNetwork
+                  : car.brainLayers === Number(info.key) &&
+                    !(car.brain instanceof MixedNetwork)),
+            );
+      if (running === info.running) return;
+      info.running = running;
+      btn.classList.toggle('running', running);
+      btn.classList.toggle('dead', !running);
+    });
+  }
+
   function followedCar(): Car | undefined {
     const inCategory = (car: Car) =>
       !car.damaged &&
-      (follow === 'orchestrator'
-        ? car.brain instanceof OrchestratorNetwork
+      (follow === 'mixed'
+        ? car.brain instanceof MixedNetwork
         : follow > 0
-        ? car.brainLayers === follow &&
-          !(car.brain instanceof OrchestratorNetwork)
-        : true);
+          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+          : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)

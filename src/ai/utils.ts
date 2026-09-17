@@ -23,6 +23,8 @@ export function fileUtilities(game = '') {
     saveBestModels,
     loadAllModelLayers,
     discardModels,
+    discardModel,
+    discardGameModels,
     exportModels,
     importModels,
   };
@@ -84,7 +86,7 @@ export function fileUtilities(game = '') {
   /**
    * Receives all neural networks with a score and determine how to same them
    * stored by compatibility (neural networks are easier to mutate from similar neural network complexity AKA same amount of levels)
-   * Kinds are kept apart, an orchestrator and a regular brain of the same depth
+   * Kinds are kept apart, a mixed brain and a regular brain of the same depth
    * are not interchangeable.
    */
   function saveBestModels(models: NeuralNetwork[], amountPerComplexity = 1) {
@@ -107,7 +109,7 @@ export function fileUtilities(game = '') {
   }
 
   function loadAllModelLayers(maxLayer = 1, kind: string = DEFAULT_KIND) {
-    const load: ModelsByLayerCount[] = new Array();
+    const load: ModelsByLayerCount[] = [];
     try {
       for (let i = 1; i <= maxLayer; i++) {
         const model = loadModels(i, kind);
@@ -121,6 +123,18 @@ export function fileUtilities(game = '') {
 
   function discardModels() {
     localStorage.clear();
+  }
+
+  /** drops the saved weights of one brain, by layer depth and kind */
+  function discardModel(layers: number, kind: string = DEFAULT_KIND) {
+    localStorage.removeItem(name(layers, kind));
+  }
+
+  /** drops every saved brain of this game, other games keep their saves */
+  function discardGameModels() {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(`${game}_`)) localStorage.removeItem(key);
+    }
   }
 
   /** all stored models of this game, keyed by their storage key */

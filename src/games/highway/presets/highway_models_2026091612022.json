@@ -20247,7 +20247,7 @@
         ]
       }
     ],
-    "highway_orchestrator_2": [
+    "highway_mixed_2": [
       {
         "version": 22,
         "score": 10753.302505790365,
@@ -20255,7 +20255,7 @@
         "mutationIndex": 0,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [
@@ -20758,7 +20758,7 @@
         "mutationIndex": 1,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [
@@ -21261,7 +21261,7 @@
         "mutationIndex": 4,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [
@@ -21764,7 +21764,7 @@
         "mutationIndex": 2,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [
@@ -22267,7 +22267,7 @@
         "mutationIndex": 7,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [
@@ -22770,7 +22770,7 @@
         "mutationIndex": 8,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [
@@ -23273,7 +23273,7 @@
         "mutationIndex": 14,
         "diff": -13.837341177193593,
         "date": "2026-09-16T12:02:24.691Z",
-        "kind": "orchestrator",
+        "kind": "mixed",
         "levels": [
           {
             "inputs": [

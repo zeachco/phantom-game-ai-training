@@ -22,23 +22,23 @@ class Config {
   ];
   public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
 
-  // orchestrator: a brain that picks which trained brain drives
-  public ORCHESTRATOR_ENABLED = true;
-  public ORCHESTRATOR_CARS = 12;
-  /** floor on the mutating orchestrator cars, the run needs a spread to arbitrate */
-  public ORCHESTRATOR_MIN_CARS = 50;
+  // mixed: a brain that picks which trained brain drives
+  public MIXED_ENABLED = true;
+  public MIXED_CARS = 12;
+  /** floor on the mutating mixed cars, the run needs a spread to arbitrate */
+  public MIXED_MIN_CARS = 50;
   /** below that there is nothing to arbitrate, the run is skipped */
-  public ORCHESTRATOR_MIN_EXPERTS = 2;
+  public MIXED_MIN_EXPERTS = 2;
   /** how many saved brains per layer become selectable experts */
-  public ORCHESTRATOR_EXPERTS_PER_LAYER = 1;
+  public MIXED_EXPERTS_PER_LAYER = 1;
   /** single hidden layer, it only has to route the inputs to the right brain */
-  public ORCHESTRATOR_HIDDEN_NODES = 12;
+  public MIXED_HIDDEN_NODES = 12;
   /** mutations are boosted, every expert is good at something worth trying */
-  public ORCHESTRATOR_MUTATION_BOOST = 3;
+  public MIXED_MUTATION_BOOST = 3;
   /** odds of rerolling every weight leading to one expert, scaled by the factor */
-  public ORCHESTRATOR_RESET_CHANCE = 0.15;
-  public ORCHESTRATOR_MAX_MUTATION_LVL = 0.3;
-  public ORCHESTRATOR_COLOR = 'hsl(180, 100%, 65%)';
+  public MIXED_RESET_CHANCE = 0.15;
+  public MIXED_MAX_MUTATION_LVL = 0.3;
+  public MIXED_COLOR = '#ff69b4';
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;

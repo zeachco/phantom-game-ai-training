@@ -46,7 +46,7 @@ export class Car {
     public label = '',
     public color = getRandomColor(),
     public brainLayers = 1,
-    /** lets the caller swap in another kind of brain, like an orchestrator */
+    /** lets the caller swap in another kind of brain, like a mixed brain */
     public brainBuilder?: (
       inputCount: number,
       outputCount: number,
@@ -85,7 +85,7 @@ export class Car {
     this.img.onload = () => this.#paintMask();
   }
 
-  /** the accent can move at runtime, an orchestrator blends the brains it uses */
+  /** the accent can move at runtime, a mixed brain blends the brains it uses */
   setColor(color: string) {
     if (color === this.color) return;
     this.color = color;
