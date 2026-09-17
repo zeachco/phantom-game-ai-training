@@ -3,12 +3,12 @@ const urlParams = new URLSearchParams(queryString);
 
 const apps = new Map<string, Function>([
   ['highway', () => import(`./games/highway/main.js`)],
-  ['phatom-race', () => import(`./games/phantom-race/index.js`)],
+  // ['phatom-race', () => import(`./games/phantom-race/index.js`)],
   ['ping-pong', () => import(`./games/ping-pong/index.js`)],
   ['space-shield', () => import(`./games/space-shield/index.js`)],
   ['waypoints', () => import(`./games/waypoints/main.js`)],
   ['cells', () => import(`./games/cells/main.js`)],
-  ['number', () => import(`./games/number/main.js`)],
+  // ['number', () => import(`./games/number/main.js`)],
 ]);
 
 const ul = document.createElement('ul');
