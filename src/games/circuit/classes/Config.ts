@@ -9,9 +9,10 @@ class Config {
   public AUTO_DISTRIBUTE_LAYERS = false;
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = 0.0001;
-  /** 18 per layer x 10 layers, the rest of the cap goes to the mixed cars */
-  public CARS_PER_LAYERS = [0, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18];
-  public MAX_NETWORK_LAYERS = 10;
+  /** 18 per layer x 9 layers, the rest of the cap goes to the mixed cars */
+  public CARS_PER_LAYERS = [0, 18, 18, 18, 18, 18, 18, 18, 18];
+  /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
+  public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */
   public SPAWN_OFFSET = 150;
   /** corpses stay on the map that long after the crash, then get deleted */

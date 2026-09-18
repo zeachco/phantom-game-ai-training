@@ -17,10 +17,9 @@ class Config {
     this.CAR_NB / 10,
     this.CAR_NB / 10,
     this.CAR_NB / 10,
-    this.CAR_NB / 10,
-    this.CAR_NB / 10,
   ];
-  public MAX_NETWORK_LAYERS = this.CARS_PER_LAYERS.length;
+  /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
+  public MAX_NETWORK_LAYERS = 9;
 
   // mixed: a brain that picks which trained brain drives
   public MIXED_ENABLED = true;
