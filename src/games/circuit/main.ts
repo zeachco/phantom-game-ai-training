@@ -724,7 +724,7 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
       carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
-      car.draw(carCtx, i === 0);
+      car.draw(carCtx, car === camTarget);
     }
     carCtx.globalAlpha = 1;
 

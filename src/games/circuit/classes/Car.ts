@@ -279,9 +279,10 @@ export class Car {
     this.y -= Math.cos(this.angle) * this.speed;
   }
 
-  draw(ctx: CanvasRenderingContext2D, drawSensor = false) {
-    if (!this.damaged) {
-      // the gate line in world space, white when aligned, red when turned away
+  draw(ctx: CanvasRenderingContext2D, focused = false) {
+    if (!this.damaged && focused) {
+      // the gate line in world space, only the focused car renders it,
+      // white when aligned, red when turned away
       const dx = this.gateX - this.x;
       const dy = this.gateY - this.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -297,7 +298,7 @@ export class Car {
       ctx.stroke();
     }
 
-    if (this.sensor && drawSensor) {
+    if (this.sensor && focused) {
       this.sensor.draw(ctx);
     }
 
