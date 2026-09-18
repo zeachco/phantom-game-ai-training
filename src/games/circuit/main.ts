@@ -632,9 +632,10 @@ export default async (state: typeof defaultState) => {
   updateFollowButtons();
 
   loop.play((_es, _dt) => {
-    if (followPad.once('Space')) setFollow('mixed');
+    if (followPad.once('Space')) setFollow(0);
     for (let digit = 0; digit <= 9; digit++) {
-      if (followPad.once(`Digit${digit}`)) setFollow(digit);
+      if (followPad.once(`Digit${digit}`))
+        setFollow(digit === 0 ? 'mixed' : digit);
     }
 
     if (state.playing) {
@@ -823,7 +824,7 @@ export default async (state: typeof defaultState) => {
 
   /**
    * Car the camera and the visualizer follow: the best alive car of the
-   * `follow` category (0 any car, 1-9 that layer, space a mixed brain).
+   * `follow` category (space any car, 0 a mixed brain, 1-9 that layer).
    * When the leader dies the next best alive car takes over, and a whole
    * dead category falls back to the best alive car overall.
    */
