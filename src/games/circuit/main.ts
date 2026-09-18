@@ -99,10 +99,12 @@ export default async (state: typeof defaultState) => {
   };
   saveBtn.onclick = () => downloadModelArchive('circuit');
   clearBtn.onclick = () => {
-    if (!confirm('Clear the current training set? This empties local storage.'))
+    if (
+      !confirm('Clear the current training set? This removes the saved models of this game.')
+    )
       return;
-    io.discardModels();
-    console.info('Cleared training set (local storage emptied)');
+    io.discardGameModels();
+    console.info('Cleared the training set of this game');
     initialize();
   };
 
