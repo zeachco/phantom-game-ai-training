@@ -9,11 +9,16 @@ import { config } from './Config';
 import { Circuit } from './Circuit';
 import { Obstacle } from './Obstacle';
 
+/** the gate line shades by misalignment, quantized so no string is built per frame */
+const GATE_COLORS = new Array(21).fill(0).map((_s, i) => {
+  const v = Math.round(255 * (1 - i / 20));
+  return `rgb(255, ${v}, ${v})`;
+});
+
 export class Car {
   public speed: number;
   public acceleration: number;
   public friction: number;
-  public angle: number;
   public damaged: boolean;
   public useAI: boolean;
   public sensor?: Sensor;
@@ -34,6 +39,10 @@ export class Car {
   public nextCheckpoint = 0;
   /** gate the car is currently inside, -1 in none, charges out-of-order entries */
   public insideGate = -1;
+  /** position of the next gate and the signed delta, refreshed for the viz */
+  public gateX = 0;
+  public gateY = 0;
+  public gateDelta = 0;
   /** performance.now() of the crash, corpses are deleted after DEAD_LIFETIME */
   public deathTime = 0;
   private img: HTMLImageElement;
@@ -48,6 +57,7 @@ export class Car {
   constructor(
     public x = 0,
     public y = 0,
+    public angle = 0,
     controlType = ControlType.DUMMY,
     public maxSpeed = config.CAR_MAX_SPEED,
     public label = '',
@@ -66,7 +76,7 @@ export class Car {
     this.acceleration = config.CAR_ACCELERATION;
     this.maxSpeed = maxSpeed;
     this.friction = config.CAR_FRICTION;
-    this.angle = 0;
+    this.angle = angle;
     this.damaged = false;
 
     this.useAI = controlType == ControlType.AI;
@@ -75,7 +85,8 @@ export class Car {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      const inputCount = this.sensor.rayCount + 1;
+      // one input per ray, then the speed, then the angle to the next gate
+      const inputCount = this.sensor.rayCount + 2;
       const outputCount = Object.keys(this.controls).length;
       this.brain = brainBuilder
         ? brainBuilder(inputCount, outputCount)
@@ -126,6 +137,7 @@ export class Car {
         s == null ? 0 : 1 - s.offset,
       );
       offsets.push(this.speed / this.maxSpeed);
+      offsets.push(this.gateDelta);
       const outputs = this.brain.process(offsets);
 
       if (this.useAI) {
@@ -157,17 +169,34 @@ export class Car {
       }
     }
 
-    if (gate === -1) {
+    if (gate !== -1) {
+      if (gate === this.nextCheckpoint) {
+        this.brain.score += config.CHECKPOINT_SCORE;
+        this.nextCheckpoint = (this.nextCheckpoint + 1) % n;
+      } else if (gate !== this.insideGate) {
+        this.brain.score -= config.CHECKPOINT_SCORE;
+      }
+      this.insideGate = gate;
+    } else {
       this.insideGate = -1;
-      return;
     }
-    if (gate === this.nextCheckpoint) {
-      this.brain.score += config.CHECKPOINT_SCORE;
-      this.nextCheckpoint = (this.nextCheckpoint + 1) % n;
-    } else if (gate !== this.insideGate) {
-      this.brain.score -= config.CHECKPOINT_SCORE;
-    }
-    this.insideGate = gate;
+
+    // the viz line reads these, the brain reads the same delta as an input
+    const next = checkpoints[this.nextCheckpoint];
+    this.gateX = next.x;
+    this.gateY = next.y;
+    this.gateDelta = this.#gateDelta(circuit);
+  }
+
+  /** signed angle between the heading and the next gate, in [-1, 1] */
+  #gateDelta(circuit: Circuit) {
+    const gate = circuit.checkpoints[this.nextCheckpoint];
+    const dx = gate.x - this.x;
+    const dy = gate.y - this.y;
+    const hx = -Math.sin(this.angle);
+    const hy = -Math.cos(this.angle);
+    // cross over dot, atan2 gives the signed angle from the heading to the gate
+    return Math.atan2(hx * dy - hy * dx, hx * dx + hy * dy) / Math.PI;
   }
 
   #assessDamage(obstacles: Obstacle[], circuit: Circuit) {
@@ -251,6 +280,23 @@ export class Car {
   }
 
   draw(ctx: CanvasRenderingContext2D, drawSensor = false) {
+    if (!this.damaged) {
+      // the gate line in world space, white when aligned, red when turned away
+      const dx = this.gateX - this.x;
+      const dy = this.gateY - this.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const t = Math.min(20, Math.round(Math.abs(this.gateDelta) * 20));
+      ctx.strokeStyle = GATE_COLORS[t];
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(
+        this.x + (dx / d) * config.GATE_LINE_LENGTH,
+        this.y + (dy / d) * config.GATE_LINE_LENGTH,
+      );
+      ctx.stroke();
+    }
+
     if (this.sensor && drawSensor) {
       this.sensor.draw(ctx);
     }

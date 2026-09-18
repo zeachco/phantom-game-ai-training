@@ -117,6 +117,7 @@ export class Circuit {
           this.points[idx].y,
           this.left[idx],
           this.right[idx],
+          i,
         ),
       );
     }
@@ -178,12 +179,12 @@ export class Circuit {
   getSpawn() {
     const idx = this.#indexAtArc(-config.SPAWN_OFFSET);
     const p = this.points[idx];
-    const t = this.tangents[idx];
+    const gate = this.checkpoints[0];
     return {
       x: p.x,
       y: p.y,
-      // the car's angle points along the travel direction
-      angle: Math.atan2(-t.x, -t.y),
+      // face the first gate, that is where the score starts
+      angle: Math.atan2(p.x - gate.x, p.y - gate.y),
     };
   }
 

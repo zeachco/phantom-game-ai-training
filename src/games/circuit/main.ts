@@ -365,6 +365,7 @@ export default async (state: typeof defaultState) => {
         const car = new Car(
           spawn.x,
           spawn.y,
+          spawn.angle,
           ControlType.AI,
           3,
           `${l} - 0 👶`,
@@ -406,7 +407,8 @@ export default async (state: typeof defaultState) => {
   function setupMixed(cars: Car[]) {
     if (!config.MIXED_ENABLED) return;
 
-    const inputNb = config.SENSORS + 1;
+    // same observation as the regular brains: rays, speed, gate angle
+    const inputNb = config.SENSORS + 2;
     const outputNb = 4;
     const hydrated = hydrateExperts(
       state.sortedModels,
@@ -441,6 +443,7 @@ export default async (state: typeof defaultState) => {
       const car = new Car(
         spawn.x,
         spawn.y,
+        spawn.angle,
         ControlType.AI,
         3,
         `0 👶`,
@@ -518,6 +521,7 @@ export default async (state: typeof defaultState) => {
     const replacement = new Car(
       spawn.x,
       spawn.y,
+      spawn.angle,
       ControlType.AI,
       3,
       isMixed ? '🧭' : `${layer}`,
@@ -595,6 +599,7 @@ export default async (state: typeof defaultState) => {
     const player = new Car(
       spawn.x,
       spawn.y,
+      spawn.angle,
       ControlType.KEYS,
       3,
       '🎥 Camera',
@@ -787,6 +792,7 @@ export default async (state: typeof defaultState) => {
       const player = new Car(
         spawn.x,
         spawn.y,
+        spawn.angle,
         ControlType.KEYS,
         3,
         '🎥 Camera',

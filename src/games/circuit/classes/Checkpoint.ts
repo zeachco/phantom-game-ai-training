@@ -11,6 +11,7 @@ export class Checkpoint {
     public y: number,
     public a: Vector,
     public b: Vector,
+    public index: number,
   ) {}
 
   /** the followed car's next gate pulses, the rest stay faint */
@@ -27,5 +28,14 @@ export class Checkpoint {
       ctx.lineWidth = 2;
     }
     ctx.stroke();
+
+    if (next) {
+      // the gate's number, small and unbacked, only for the focused car
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${this.index}`, this.x, this.y - 14);
+    }
   }
 }

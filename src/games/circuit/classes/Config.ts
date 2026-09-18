@@ -37,6 +37,8 @@ class Config {
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
+  /** length of the line from a car to its next gate */
+  public GATE_LINE_LENGTH = 70;
   public PLANE_COLOR = '#11150f';
   public ROAD_COLOR = '#1e2124';
   public LANE_COLOR = 'rgba(255, 255, 255, 0.4)';
