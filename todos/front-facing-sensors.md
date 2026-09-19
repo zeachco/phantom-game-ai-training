@@ -86,9 +86,9 @@ Written as intent + rules, not an implementation plan.
 
 ## 5. Removed / replaced (checklist for the implementing pass)
 
-- [ ] Symmetric ~315° fan → front-centered arc.
-- [ ] Box-shaped ray endpoints (width/depth scaled) → smooth length profile
+- [x] Symmetric ~315° fan → front-centered arc.
+- [x] Box-shaped ray endpoints (width/depth scaled) → smooth length profile
       over the fan.
 - [ ] Short all-around reach (160) → center ray ~240 (+50%), edge rays ~144
       (−10%).
-- [ ] Ray count, reading semantics, and brain input count: **unchanged**.
+- [x] Ray count, reading semantics, and brain input count: **unchanged** (verified).
