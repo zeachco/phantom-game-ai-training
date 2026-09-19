@@ -255,8 +255,10 @@ ul:hover {
   right: 0;
   bottom: 0;
   display: flex;
-  justify-content: space-between;
+  /* one left-side cluster, the right stays clear for the map */
+  justify-content: flex-start;
   align-items: flex-end;
+  gap: 28px;
   padding: 12px 24px;
   pointer-events: none;
   z-index: 500;
@@ -290,4 +292,21 @@ ul:hover {
   height: 28px;
   background: rgba(255, 255, 255, 0.85);
   border-radius: 4px;
+}
+.speedo {
+  display: flex;
+  align-items: baseline;
+  padding-bottom: 10px;
+}
+.speedo-value {
+  font-family: monospace;
+  font-size: 28px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.9);
+}
+.speedo-unit {
+  font-family: monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-left: 6px;
 }
