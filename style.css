@@ -259,10 +259,6 @@ ul:hover {
   width: 110px;
   height: 110px;
 }
-.pedal-group {
-  display: flex;
-  gap: 14px;
-}
 .pedal {
   position: relative;
   width: 44px;

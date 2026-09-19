@@ -89,8 +89,8 @@ class Config {
   // steering ui, the wheel and pedals mimic the followed car's outputs
   /** wheel rotation at full steer, radians */
   public STEER_UI_WHEEL_MAX_ANGLE = 2.2;
-  /** max pedal depression, px — the full stroke (90 pedal - 28 cap - 8 pads) */
-  public STEER_UI_PEDAL_TRAVEL = 54;
+  /** half the pill stroke, px: the cap rests centered, gas lifts it, reverse drops it */
+  public STEER_UI_PEDAL_TRAVEL = 27;
   /** display lerp for the wheel, the brain outputs are noisy per frame */
   public STEER_UI_SMOOTH = 0.35;
 

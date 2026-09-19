@@ -152,11 +152,11 @@ export class Car {
         offsets.push(this.speed / this.maxSpeed);
         offsets.push(this.gateDelta);
         const outputs = this.brain.process(offsets);
-        const [forward, left, right, reverse] = outputs;
-        this.controls.forward = forward;
+        const [throttle, left, right] = outputs;
+        // one signed float: gas positive, brake / reverse negative
+        this.controls.throttle = Math.max(-1, Math.min(1, throttle));
         this.controls.left = left;
         this.controls.right = right;
-        this.controls.reverse = reverse;
       }
     }
   }
@@ -289,11 +289,13 @@ export class Car {
     let vf = this.vx * hx + this.vy * hy;
     let vl = this.vx * px + this.vy * py;
 
-    // 3. apply forward/reverse force
-    if (this.controls.forward > 0) vf += config.CAR_ACCELERATION * this.controls.forward;
-    if (this.controls.reverse > 0) {
-      if (vf > 0) vf = Math.max(0, vf - config.CAR_BRAKE_DECEL * this.controls.reverse);
-      else vf -= config.CAR_REVERSE_ACCEL * this.controls.reverse;
+    // 3. apply the throttle: positive drives, negative brakes or reverses
+    if (this.controls.throttle > 0)
+      vf += config.CAR_ACCELERATION * this.controls.throttle;
+    if (this.controls.throttle < 0) {
+      const t = -this.controls.throttle;
+      if (vf > 0) vf = Math.max(0, vf - config.CAR_BRAKE_DECEL * t);
+      else vf -= config.CAR_REVERSE_ACCEL * t;
     }
 
     // 4. tire grip: lateral acceleration demands exceed grip limit, the lateral component persists

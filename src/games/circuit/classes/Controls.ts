@@ -1,10 +1,10 @@
 import { ControlType } from '../types';
 
 export class Controls {
-  public forward: number = 0;
+  /** signed throttle: > 0 gas, < 0 brake / reverse, 0 neutral — floats welcome */
+  public throttle: number = 0;
   public left: number = 0;
   public right: number = 0;
-  public reverse: number = 0;
   /** the bound handlers, kept so dispose() can remove them again */
   private keydown: ((e: KeyboardEvent) => void) | undefined;
   private keyup: ((e: KeyboardEvent) => void) | undefined;
@@ -16,30 +16,32 @@ export class Controls {
         this.#addKeyboardListeners();
         break;
       case ControlType.DUMMY:
-        this.forward = 1;
+        this.throttle = 1;
         break;
     }
   }
 
-  /** the output a key maps to, undefined for every unbound key */
-  #keyToOutput(key: string): 'forward' | 'left' | 'right' | 'reverse' | undefined {
+  /** what a key sets: throttle keys carry their sign, undefined when unbound */
+  #keyToOutput(
+    key: string,
+  ): { field: 'throttle' | 'left' | 'right'; value: number } | undefined {
     switch (key) {
       case 'ArrowUp':
       case 'w':
       case 'W':
-        return 'forward';
+        return { field: 'throttle', value: 1 };
       case 'ArrowDown':
       case 's':
       case 'S':
-        return 'reverse';
+        return { field: 'throttle', value: -1 };
       case 'ArrowLeft':
       case 'a':
       case 'A':
-        return 'left';
+        return { field: 'left', value: 1 };
       case 'ArrowRight':
       case 'd':
       case 'D':
-        return 'right';
+        return { field: 'right', value: 1 };
     }
   }
 
@@ -56,15 +58,20 @@ export class Controls {
           t.isContentEditable)
       )
         return;
-      const output = this.#keyToOutput(e.key);
-      if (output === undefined) return;
+      const map = this.#keyToOutput(e.key);
+      if (map === undefined) return;
       e.preventDefault();
-      this[output] = 1;
+      this[map.field] = map.value;
     };
     const up = (e: KeyboardEvent) => {
-      const output = this.#keyToOutput(e.key);
-      if (output === undefined) return;
-      this[output] = 0;
+      const map = this.#keyToOutput(e.key);
+      if (map === undefined) return;
+      if (map.field === 'throttle') {
+        // releasing a key only clears the direction that key drives
+        if (this.throttle * map.value > 0) this.throttle = 0;
+      } else {
+        this[map.field] = 0;
+      }
     };
     this.keydown = down;
     this.keyup = up;

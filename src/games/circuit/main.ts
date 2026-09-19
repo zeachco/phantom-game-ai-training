@@ -347,21 +347,13 @@ export default async (state: typeof defaultState) => {
   wheelCanvas.width = 110;
   wheelCanvas.height = 110;
   const wheelCtx = wheelCanvas.getContext('2d');
-  const pedalGroup = document.createElement('div');
-  pedalGroup.className = 'pedal-group';
-  const brakePedal = document.createElement('div');
-  brakePedal.className = 'pedal';
-  brakePedal.title = 'brake / reverse';
-  const brakeCap = document.createElement('div');
-  brakeCap.className = 'pedal-cap';
-  const gasPedal = document.createElement('div');
-  gasPedal.className = 'pedal';
-  gasPedal.title = 'gas';
-  const gasCap = document.createElement('div');
-  gasCap.className = 'pedal-cap';
-  brakePedal.append(brakeCap);
-  gasPedal.append(gasCap);
-  pedalGroup.append(brakePedal, gasPedal);
+  // one pill for the signed throttle: centered neutral, up = gas, down = reverse
+  const pedal = document.createElement('div');
+  pedal.className = 'pedal';
+  pedal.title = 'throttle: up = gas, down = brake / reverse';
+  const pedalCap = document.createElement('div');
+  pedalCap.className = 'pedal-cap';
+  pedal.append(pedalCap);
   // the speed reads the followed car's velocity magnitude, raw
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
@@ -373,7 +365,7 @@ export default async (state: typeof defaultState) => {
   speedoUnit.className = 'speedo-unit';
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
-  steerOverlay.append(wheelCanvas, pedalGroup, speedo);
+  steerOverlay.append(wheelCanvas, pedal, speedo);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
@@ -806,8 +798,8 @@ export default async (state: typeof defaultState) => {
       wheelAngle +=
         (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) * config.STEER_UI_SMOOTH;
       drawWheel();
-      brakeCap.style.transform = `translateY(${Math.max(0, Math.min(1, c.reverse)) * config.STEER_UI_PEDAL_TRAVEL}px)`;
-      gasCap.style.transform = `translateY(${Math.max(0, Math.min(1, c.forward)) * config.STEER_UI_PEDAL_TRAVEL}px)`;
+      const throttle = Math.max(-1, Math.min(1, c.throttle));
+      pedalCap.style.transform = `translateY(${(1 - throttle) * config.STEER_UI_PEDAL_TRAVEL}px)`;
       speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(1);
     }
     lastFollowed = camTarget;
