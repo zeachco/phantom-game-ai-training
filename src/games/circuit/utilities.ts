@@ -1,10 +1,36 @@
-import { MIXED_KIND, MixedNetwork } from '../../ai/Mixed';
+import { MixedNetwork } from '../../ai/Mixed';
 import { ModelsByLayerCount } from '../../ai/utils';
+import type { NeuralNetwork } from '../../ai/Network';
 import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
 import { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
 import { Obstacle } from './classes/Obstacle';
+
+/** summarized score per group: the total is the promotion bar, the seed
+ *  entry is the live high score on the map the group is driving */
+export interface GroupScores {
+  /** the seed of the map the group is scoring on now */
+  current: number;
+  /** the summarized overall score: each finished map halves the running total */
+  total: number;
+  /** live high score on the current seed */
+  seed: number;
+  /** one frozen high score per finished seed, keyed by the seed number */
+  history: Record<string, number>;
+}
+
+export interface Group {
+  key: string; // '1'..'9' or 'mixed'
+  layer: number;
+  isMixed: boolean;
+  pool: Car[];
+  /** snapshot of the champion brain + the score that promoted it */
+  best: { brain: NeuralNetwork; score: number } | null;
+  /** the brain that set the current map's high score, kept for progress */
+  seedBest: { brain: NeuralNetwork; score: number } | null;
+  scores: GroupScores;
+}
 
 export const defaultState = {
   /** alive cars and the corpses still on the map, both draw and score */
@@ -24,31 +50,14 @@ export const defaultState = {
   sortedModels: [] as ModelsByLayerCount[],
   sortedMixed: [] as ModelsByLayerCount[],
   playing: false,
+  /** the live groups (pools + bests + scores), rebuilt on every map change */
+  groups: [] as Group[],
 };
-
-const isMixed = (model: ModelsByLayerCount[number]) =>
-  model.kind === MIXED_KIND;
-
-/** previous best save a model is competing against, kinds have their own saves */
-function previousSave(
-  state: typeof defaultState,
-  model: ModelsByLayerCount[number],
-) {
-  const saves = isMixed(model) ? state.sortedMixed : state.sortedModels;
-  const models = saves[model.levels.length];
-  return (models && models[0]) || undefined;
-}
 
 /** color a layer depth gets on the scale shared by every brain of the game */
 const layerColor = (layer: number) =>
   getColorScale(layer / config.MAX_NETWORK_LAYERS);
 
-/**
- * Accent of a mixed brain: the colors of the brains it drives with, weighted
- * by how much of the run each of them has been driving. The shares drift a
- * frame at a time while the blend takes trig, so they are quantized and the
- * color cached per car.
- */
 const mixedColors = new Map<string, string>();
 export function mixedColor(brain: MixedNetwork) {
   const shares = brain.selectionShares;
@@ -70,19 +79,6 @@ export function mixedColor(brain: MixedNetwork) {
   return color;
 }
 
-/** same blend for a save, where the experts are only kept as `layer.rank` slots */
-const savedMixedColor = (model: ModelsByLayerCount[number]) =>
-  blendColorScale(
-    (model.expertIds || []).map((slot: string, i: number) => ({
-      ratio: parseInt(slot, 10) / config.MAX_NETWORK_LAYERS,
-      weight: (model.selectionCounts && model.selectionCounts[i]) || 0,
-    })),
-    config.MIXED_COLOR,
-  );
-
-const modelColor = (model: ModelsByLayerCount[number]) =>
-  isMixed(model) ? savedMixedColor(model) : layerColor(model.levels.length);
-
 const FH = 12;
 const TL = 0;
 let gradient;
@@ -101,13 +97,12 @@ export function drawScores(
   state: typeof defaultState,
   ctx: CanvasRenderingContext2D,
 ) {
-  const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
-    ...state.sortedModels.map((m) => m[0]).filter(Boolean),
-    ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
+  const displayedScoreCars: (Car | Group)[] = [
+    ...state.groups,
     ...state.sortedCars.slice(0, config.SCORES_NB),
   ].sort((a, b) => {
-    const scoreA = a instanceof Car ? a.brain.score : a.score;
-    const scoreB = b instanceof Car ? b.brain.score : b.score;
+    const scoreA = a instanceof Car ? a.brain.score : a.scores.total;
+    const scoreB = b instanceof Car ? b.brain.score : b.scores.total;
     return scoreB - scoreA;
   });
 
@@ -122,8 +117,10 @@ export function drawScores(
 
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
-      const previous = previousSave(state, ref.brain);
-      const previousScore = (previous && previous.score) || 0;
+      const group = state.groups.find(
+        (g) => g.key === (ref.brain instanceof MixedNetwork ? 'mixed' : String(ref.brainLayers)),
+      );
+      const previousScore = group ? group.scores.total : 0;
       const diff = ref.brain.score - previousScore;
       let emoji = '';
       let add = '';
@@ -141,15 +138,14 @@ export function drawScores(
         FH * 4 + index * FH,
       );
     } else {
-      ctx.fillStyle = modelColor(ref);
+      ctx.fillStyle = ref.isMixed
+        ? blendColorScale([], config.MIXED_COLOR)
+        : layerColor(ref.layer);
 
-      const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
-      const emoji = isMixed(ref) ? '🧭' : '👻';
-      const name = isMixed(ref)
-        ? `${ref.version}-${ref.mutationIndex}`
-        : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
+      const emoji = ref.isMixed ? '🧭' : '👻';
+      const name = ref.isMixed ? 'mixed' : `brain ${ref.layer}`;
       ctx.fillText(
-        `${emoji} ${name} ${Math.round(ref.score)} ${symb}`,
+        `${emoji} ${name} Σ ${Math.round(ref.scores.total)} · map ${Math.round(ref.scores.seed)}`,
         TL,
         FH * 4 + index * FH,
       );

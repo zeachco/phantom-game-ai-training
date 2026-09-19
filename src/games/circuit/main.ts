@@ -18,7 +18,50 @@ import { Car } from './classes/Car';
 import { config } from './classes/Config';
 import { Circuit } from './classes/Circuit';
 import { ControlType } from './types';
-import { defaultState, drawScores, mixedColor } from './utilities';
+import { defaultState, drawScores, mixedColor, Group, GroupScores } from './utilities';
+
+/** scores live under their own key per group, still inside the game prefix */
+function scoreKey(group: Group) {
+  return group.isMixed
+    ? `circuit_score_${MIXED_KIND}_${MIXED_LEVELS}`
+    : `circuit_score_${group.layer}`;
+}
+
+let groupDirty = false;
+let lastScoresSave = 0;
+
+function loadScores(group: Group, seed: number) {
+  let scores: GroupScores | null = null;
+  try {
+    scores = JSON.parse(localStorage.getItem(scoreKey(group)) || 'null');
+  } catch {
+    scores = null;
+  }
+  if (!scores || typeof scores.total !== 'number') {
+    scores = { current: seed, total: 0, seed: 0, history: {} };
+    return scores;
+  }
+  // a reload on a different seed folds what the previous page left pending
+  if (scores.current !== seed) {
+    foldScores(scores, seed);
+    localStorage.setItem(scoreKey(group), JSON.stringify(scores));
+  }
+  return scores;
+}
+
+function saveScores(group: Group) {
+  localStorage.setItem(scoreKey(group), JSON.stringify(group.scores));
+}
+
+/** a new seed finalizes the old one's high score and halves the running
+ *  total, so recent maps dominate and the bar self-calibrates */
+function foldScores(scores: GroupScores, newSeed: number) {
+  const finished = String(scores.current);
+  scores.history[finished] = Math.max(scores.history[finished] || 0, scores.seed);
+  scores.total = (scores.total + scores.seed) / 2;
+  scores.current = newSeed;
+  scores.seed = 0;
+}
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -248,8 +291,8 @@ export default async (state: typeof defaultState) => {
     '💀 crashed, deleted after 20s',
     '🏆 crashed with a higher score',
     '💜 car is racing',
-    '💚 car is besting the best score',
-    '👻 saved best brain of the line',
+    '💚 car is besting the total score',
+    '👻 line total (the bar) + map high',
     '🧭 mixed brain',
     '🏁 next checkpoint glows',
     '🚧 solid obstacle',
@@ -305,16 +348,6 @@ export default async (state: typeof defaultState) => {
   writeSeed(seed);
   let laps = 0;
   let circuit = new Circuit(seed);
-
-  /** one entry per brain category: the pool (slot = index) and the live best */
-  interface Group {
-    key: string; // '1'..'9' or 'mixed'
-    layer: number;
-    isMixed: boolean;
-    pool: Car[];
-    /** snapshot of the champion brain + the bar it set, null until one scores */
-    best: { brain: NeuralNetwork; score: number } | null;
-  }
   const groups: Group[] = [];
 
   /** a dead car respawns as a fresh player car, using deathCarModel */
@@ -419,7 +452,7 @@ export default async (state: typeof defaultState) => {
         );
       } else {
         experts = hydrated;
-        groups.push({
+        const mixedGroup: Group = {
           key: 'mixed',
           layer: MIXED_LEVELS,
           isMixed: true,
@@ -430,12 +463,15 @@ export default async (state: typeof defaultState) => {
                 score: state.sortedMixed[MIXED_LEVELS][0].score || 0,
               }
             : null,
-        });
+          seedBest: null,
+          scores: { current: seed, total: 0, seed: 0, history: {} },
+        };
+        groups.push(mixedGroup);
       }
     }
 
     for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
-      groups.push({
+      const layerGroup: Group = {
         key: String(l),
         layer: l,
         isMixed: false,
@@ -446,7 +482,14 @@ export default async (state: typeof defaultState) => {
               score: state.sortedModels[l][0].score || 0,
             }
           : null,
-      });
+        seedBest: null,
+        scores: { current: seed, total: 0, seed: 0, history: {} },
+      };
+      groups.push(layerGroup);
+    }
+
+    for (const group of groups) {
+      group.scores = loadScores(group, seed);
     }
 
     for (const group of groups) {
@@ -455,6 +498,8 @@ export default async (state: typeof defaultState) => {
         group.pool[i] = spawnCar(group, i);
       }
     }
+
+    state.groups = groups;
   }
 
   /** the moment a car beats the bar, its brain becomes the new best */
@@ -515,7 +560,9 @@ export default async (state: typeof defaultState) => {
     buildPools();
     if (state.player) respawnPlayer();
     for (const group of groups) {
-      if (group.best) group.best.score = 0;
+      foldScores(group.scores, seed);
+      group.seedBest = null;
+      saveScores(group);
     }
     state.cars = groups.flatMap((g) => g.pool);
     if (state.player) state.cars.push(state.player);
@@ -600,13 +647,20 @@ export default async (state: typeof defaultState) => {
         }
       }
 
-      // live promotion check
+      // the map high score is the max over the pool; the bar is the total
       for (const car of state.cars) {
         if (car.damaged || !car.useAI) continue;
         const group = groupOf(car);
         if (!group) continue;
-        if (!group.best || car.brain.score > group.best.score)
-          promote(group, car);
+        if (car.brain.score > group.scores.seed) {
+          group.scores.seed = car.brain.score;
+          group.seedBest = {
+            brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
+            score: car.brain.score,
+          };
+          groupDirty = true;
+        }
+        if (!group.best || car.brain.score > group.scores.total) promote(group, car);
       }
 
       // the first full lap on this seed advances the map, the spec's only auto change
@@ -620,6 +674,13 @@ export default async (state: typeof defaultState) => {
       state.sortedCars = state.cars.sort(
         (a, b) => b.brain.score - a.brain.score,
       );
+
+      // the seed high changes often, saving is throttled to once a second
+      if (groupDirty && now - lastScoresSave > 1000) {
+        lastScoresSave = now;
+        groupDirty = false;
+        for (const group of groups) saveScores(group);
+      }
     }
     updateFollowButtons();
 
@@ -794,6 +855,7 @@ export default async (state: typeof defaultState) => {
   window.addEventListener('beforeunload', () => {
     for (const group of groups) {
       if (group.best) io.saveBestModels([group.best.brain], 1);
+      saveScores(group);
     }
   });
 };
