@@ -703,6 +703,10 @@ export default async (state: typeof defaultState) => {
         const car = state.cars[i];
         const alive = !car.damaged;
         car.update(state.obstacles, circuit);
+        if (alive && performance.now() - car.bornAt > config.CAR_LIFETIME_CAP) {
+          car.damaged = true;
+          car.deathTime = performance.now();
+        }
         const brain = car.brain;
         if (brain instanceof MixedNetwork) {
           car.setColor(mixedColor(brain));

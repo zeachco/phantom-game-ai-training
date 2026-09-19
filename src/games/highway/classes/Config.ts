@@ -53,6 +53,8 @@ class Config {
   public CAR_ACCELERATION = 0.03;
   public CAR_FRICTION = 0.005;
   public CAR_MAX_SPEED = 5;
+  /** per-car lifetime cap in ms: a car that neither moves nor crashes is killed at this age so it can never keep an experiment alive forever */
+  public CAR_LIFETIME_CAP = 120000;
   public CLEAR_STORAGE = /clear/.test(window.location.href);
 
   // road

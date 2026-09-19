@@ -50,6 +50,7 @@ export class Car {
   public gateDelta = 0;
   /** performance.now() of the crash, corpses are deleted after DEAD_LIFETIME */
   public deathTime = 0;
+  public bornAt: number;
   private img: HTMLImageElement;
   private mask: HTMLCanvasElement;
   /** color the mask currently holds, it is only repainted when that moves */
@@ -86,6 +87,7 @@ export class Car {
     this.friction = config.CAR_FRICTION;
     this.angle = angle;
     this.damaged = false;
+    this.bornAt = performance.now();
 
     this.useAI = controlType == ControlType.AI;
 
@@ -103,6 +105,8 @@ export class Car {
 
     this.img = new Image();
     this.img.src = carImg;
+
+    this.img.onload = () => this.#paintMask();
 
     this.mask = document.createElement('canvas');
     this.mask.width = this.width;

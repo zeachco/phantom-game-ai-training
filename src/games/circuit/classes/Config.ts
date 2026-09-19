@@ -16,6 +16,8 @@ class Config {
   public SPAWN_OFFSET = 150;
   /** corpses stay on the map that long after the crash, then get deleted */
   public DEAD_LIFETIME = 20000;
+  /** per-car lifetime cap in ms: a car that neither moves nor crashes is killed at this age so it can never keep an experiment alive forever */
+  public CAR_LIFETIME_CAP = 120000;
 
   // mixed: a brain that picks which trained brain drives
   public MIXED_ENABLED = true;

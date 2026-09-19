@@ -15,6 +15,7 @@ export class Car {
   public angle: number;
   public damaged: boolean;
   public useAI: boolean;
+  public bornAt: number;
   public sensor?: Sensor;
   public brain: NeuralNetwork;
   public controls: Controls;
@@ -61,6 +62,7 @@ export class Car {
     this.friction = config.CAR_FRICTION;
     this.angle = 0;
     this.damaged = false;
+    this.bornAt = performance.now();
 
     this.useAI = controlType == ControlType.AI;
 
