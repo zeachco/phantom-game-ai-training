@@ -5,9 +5,10 @@ export class Controls {
   public throttle: number = 0;
   public left: number = 0;
   public right: number = 0;
-  /** the bound handlers, kept so dispose() can remove them again */
-  private keydown: ((e: KeyboardEvent) => void) | undefined;
-  private keyup: ((e: KeyboardEvent) => void) | undefined;
+  /** the bound handlers, kept so dispose() can remove them again — real
+   *  privates so Object.keys(controls) counts only the drive outputs */
+  #keydown: ((e: KeyboardEvent) => void) | undefined;
+  #keyup: ((e: KeyboardEvent) => void) | undefined;
 
   constructor(type: ControlType) {
     switch (type) {
@@ -21,27 +22,40 @@ export class Controls {
     }
   }
 
+  /** held throttle directions: releasing one key must not clear the other */
+  #gasHeld = false;
+  #reverseHeld = false;
+
+  #syncThrottle() {
+    this.throttle = this.#gasHeld ? 1 : this.#reverseHeld ? -1 : 0;
+  }
+
   /** what a key sets: throttle keys carry their sign, undefined when unbound */
   #keyToOutput(
     key: string,
-  ): { field: 'throttle' | 'left' | 'right'; value: number } | undefined {
+  ):
+    | 'throttle+'
+    | 'throttle-'
+    | 'left'
+    | 'right'
+    | undefined {
     switch (key) {
       case 'ArrowUp':
       case 'w':
       case 'W':
-        return { field: 'throttle', value: 1 };
+        return 'throttle+';
       case 'ArrowDown':
       case 's':
       case 'S':
-        return { field: 'throttle', value: -1 };
+        return 'throttle-';
       case 'ArrowLeft':
       case 'a':
       case 'A':
-        return { field: 'left', value: 1 };
+        return 'left';
       case 'ArrowRight':
       case 'd':
       case 'D':
-        return { field: 'right', value: 1 };
+        return 'right';
     }
   }
 
@@ -61,28 +75,29 @@ export class Controls {
       const map = this.#keyToOutput(e.key);
       if (map === undefined) return;
       e.preventDefault();
-      this[map.field] = map.value;
+      if (map === 'throttle+') this.#gasHeld = true;
+      else if (map === 'throttle-') this.#reverseHeld = true;
+      else this[map] = 1;
+      if (map === 'throttle+' || map === 'throttle-') this.#syncThrottle();
     };
     const up = (e: KeyboardEvent) => {
       const map = this.#keyToOutput(e.key);
       if (map === undefined) return;
-      if (map.field === 'throttle') {
-        // releasing a key only clears the direction that key drives
-        if (this.throttle * map.value > 0) this.throttle = 0;
-      } else {
-        this[map.field] = 0;
-      }
+      if (map === 'throttle+') this.#gasHeld = false;
+      else if (map === 'throttle-') this.#reverseHeld = false;
+      else this[map] = 0;
+      if (map === 'throttle+' || map === 'throttle-') this.#syncThrottle();
     };
-    this.keydown = down;
-    this.keyup = up;
+    this.#keydown = down;
+    this.#keyup = up;
     document.addEventListener('keydown', down);
     document.addEventListener('keyup', up);
   }
 
   public dispose() {
-    if (this.keydown) document.removeEventListener('keydown', this.keydown);
-    if (this.keyup) document.removeEventListener('keyup', this.keyup);
-    this.keydown = undefined;
-    this.keyup = undefined;
+    if (this.#keydown) document.removeEventListener('keydown', this.#keydown);
+    if (this.#keyup) document.removeEventListener('keyup', this.#keyup);
+    this.#keydown = undefined;
+    this.#keyup = undefined;
   }
 }
