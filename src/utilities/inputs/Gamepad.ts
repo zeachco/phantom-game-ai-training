@@ -1,6 +1,8 @@
 export class GamePad {
   private inputs: Map<string, number> = new Map();
   private strokes: Map<string, number> = new Map();
+  /** the codes the game actually reads, only those are captured */
+  private bound = new Set<string>();
 
   constructor(
     public aliases: Map<string, string> = new Map(),
@@ -32,21 +34,22 @@ export class GamePad {
   }
 
   public remove() {
-    this.container.addEventListener('keydown', this.register);
-    this.container.addEventListener('keyup', this.unregister);
-    this.container.addEventListener('keypress', this.onkey);
+    this.container.removeEventListener('keydown', this.register);
+    this.container.removeEventListener('keyup', this.unregister);
+    this.container.removeEventListener('keypress', this.onkey);
     if (this.useMouse) {
-      this.container.addEventListener('mousedown', this.register);
-      this.container.addEventListener('mouseup', this.unregister);
-      this.container.addEventListener('mouseclick', this.onkey);
-      this.container.addEventListener('contextmenu', this.cancel);
-      this.container.addEventListener('mousemove', this.handleMouveMovement);
-      this.container.addEventListener('wheel', this.handleMouveMovement);
+      this.container.removeEventListener('mousedown', this.register);
+      this.container.removeEventListener('mouseup', this.unregister);
+      this.container.removeEventListener('mouseclick', this.onkey);
+      this.container.removeEventListener('contextmenu', this.cancel);
+      this.container.removeEventListener('mousemove', this.handleMouveMovement);
+      this.container.removeEventListener('wheel', this.handleMouveMovement);
     }
   }
 
   public get(code: string): number {
     const key = this.aliases.get(code) || code;
+    this.bound.add(key);
     return this.inputs.get(key) || 0;
   }
 
@@ -59,25 +62,52 @@ export class GamePad {
 
   public once(code: string) {
     const key = this.aliases.get(code) || code;
+    this.bound.add(key);
     const val = this.inputs.get(key);
     if (val) this.inputs.delete(key);
     return Boolean(val);
   }
 
+  /** the browser keeps its own keys: modifier combos, the function keys,
+   *  and anything typed into a form field */
+  private isBrowserKey(ev: KeyboardEvent): boolean {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return true;
+    if (/^F\d{1,2}$/.test(ev.code)) return true;
+    const target = ev.target as HTMLElement | null;
+    return (
+      !!target &&
+      (target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target.isContentEditable)
+    );
+  }
+
   private register(ev: KeyboardEvent | MouseEvent) {
-    ev.preventDefault();
-    const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
-    this.set(key, 1);
+    if (ev instanceof KeyboardEvent) {
+      if (this.isBrowserKey(ev)) return;
+      const key = ev.code;
+      // only the keys the game reads are captured, the rest pass through
+      if (this.bound.has(key)) ev.preventDefault();
+      this.set(key, 1);
+    } else {
+      this.set(`Mouse${ev.button}`, 1);
+    }
   }
   private unregister(ev: KeyboardEvent | MouseEvent) {
-    ev.preventDefault();
+    // always cleared, even for browser keys, so nothing ever gets stuck
     const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
     this.set(key, 0);
   }
   private onkey(ev: KeyboardEvent | MouseEvent) {
-    ev.preventDefault();
-    const key = ev instanceof MouseEvent ? `Mouse${ev.button}` : ev.code;
-    this.set(key, 1, true);
+    if (ev instanceof KeyboardEvent) {
+      if (this.isBrowserKey(ev)) return;
+      const key = ev.code;
+      if (this.bound.has(key)) ev.preventDefault();
+      this.set(key, 1, true);
+    } else {
+      this.set(`Mouse${ev.button}`, 1, true);
+    }
   }
   private handleMouveMovement(ev: MouseEvent | WheelEvent) {
     if (ev instanceof WheelEvent) {
