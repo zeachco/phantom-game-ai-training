@@ -668,6 +668,7 @@ export default async (state: typeof defaultState) => {
     }
   });
   seedWrap.append(seedLabel, seedInput);
+  panelContent.insertBefore(seedWrap, followKeys);
 
   try {
     initialize();
@@ -884,6 +885,7 @@ export default async (state: typeof defaultState) => {
     deathCarModel = undefined;
 
     buildPools();
+    state.cars = groups.flatMap((g) => g.pool);
 
     // the human driven car rides the worst brain of the best line
     const bestModel = [...state.sortedModels].sort(
