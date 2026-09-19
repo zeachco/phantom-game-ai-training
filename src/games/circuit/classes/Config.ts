@@ -80,7 +80,8 @@ class Config {
   /** tripled on purpose: the car needs the speed to actually drift */
   public CAR_ACCELERATION = 0.09;
   public CAR_FRICTION = 0.005;
-  public CAR_MAX_SPEED = 5;
+  /** top speed in u/f */
+  public CAR_MAX_SPEED = 10;
   public CLEAR_STORAGE = /clear/.test(window.location.href);
   /** leaving the road kills, the trickle only exists to reward moving on it */
   public DISTANCE_SCORE_RATE = 1 / 30;

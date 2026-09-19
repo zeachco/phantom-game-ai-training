@@ -102,7 +102,7 @@ export default async (state: typeof defaultState) => {
       spawn.y,
       spawn.angle,
       ControlType.HUMAN,
-      3,
+      config.CAR_MAX_SPEED,
       '🕹',
       'white',
       1,
@@ -113,15 +113,6 @@ export default async (state: typeof defaultState) => {
     state.population++;
   }
 
-  function removeHuman() {
-    if (!state.human) return;
-    const idx = state.cars.indexOf(state.human);
-    if (idx >= 0) state.cars.splice(idx, 1);
-    state.human.controls.dispose();
-    state.human = undefined;
-    state.living = Math.max(0, state.living - 1);
-    state.population = Math.max(0, state.population - 1);
-  }
 
   const panel = document.createElement('aside');
   panel.className = 'side-panel open';
@@ -298,14 +289,6 @@ export default async (state: typeof defaultState) => {
     neuralVisualizer.renderStats = !neuralVisualizer.renderStats;
   };
 
-  // the human play toggle: one brainless car driven by the keyboard
-  const humanWrap = document.createElement('label');
-  humanWrap.className = 'human-toggle';
-  const humanCheckbox = document.createElement('input');
-  humanCheckbox.type = 'checkbox';
-  humanCheckbox.title = 'Drive a car with the arrows or WASD';
-  humanWrap.append(humanCheckbox, document.createTextNode(' Human play'));
-
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
   netWrap.style.flex = '1';
@@ -347,7 +330,6 @@ export default async (state: typeof defaultState) => {
     saveBtn,
     clearBtn,
     statsBtn,
-    humanWrap,
     followKeys,
     netWrap,
     legend,
@@ -357,12 +339,7 @@ export default async (state: typeof defaultState) => {
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
 
-  // the wheel and pedals mimic the followed car's live outputs, display only
-  humanCheckbox.onchange = () => {
-    if (humanCheckbox.checked) spawnHuman();
-    else removeHuman();
-  };
-
+  // the wheel, pedals and speed mimic the followed car, display only
   const steerOverlay = document.createElement('div');
   steerOverlay.className = 'steer-overlay hidden';
   const wheelCanvas = document.createElement('canvas');
@@ -479,7 +456,7 @@ export default async (state: typeof defaultState) => {
       spawn.y,
       spawn.angle,
       ControlType.AI,
-      3,
+      config.CAR_MAX_SPEED,
       isMixed ? '🧭' : `${group.layer}-${slot}`,
       isMixed
         ? config.MIXED_COLOR
@@ -861,10 +838,16 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < circuit.obstacles.length; i++) {
       circuit.obstacles[i].draw(carCtx);
     }
+    // the human car draws last, above every other car, no sensor fan
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
+      if (car === state.human) continue;
       carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
       car.draw(carCtx, car === camTarget);
+    }
+    if (state.human) {
+      carCtx.globalAlpha = 1;
+      state.human.draw(carCtx, false);
     }
     carCtx.globalAlpha = 1;
 
@@ -936,6 +919,8 @@ export default async (state: typeof defaultState) => {
 
     state.population = state.cars.length;
     state.living = state.cars.length;
+    // the human car is always in the race, the keys are always its brain
+    spawnHuman();
   }
 
   // a reload never loses more than the most recent promotions

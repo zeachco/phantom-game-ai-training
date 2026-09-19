@@ -235,19 +235,6 @@ ul:hover {
 }
 
 /* the human play toggle in the panel */
-.human-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #ccc;
-  font-size: 12px;
-  cursor: pointer;
-}
-.human-toggle input {
-  accent-color: #7df;
-  cursor: pointer;
-}
-
 /* steering wheel + pedals: a fixed cockpit overlay mimicking the followed car */
 .steer-overlay {
   position: fixed;
