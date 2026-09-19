@@ -215,3 +215,21 @@ ul:hover {
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
 }
+
+/* the seed field: a label plus a compact numeric input in the panel */
+.seed-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ccc;
+  font-size: 12px;
+}
+.seed-input {
+  width: 110px;
+  padding: 4px 8px;
+  background: #111;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font: inherit;
+}

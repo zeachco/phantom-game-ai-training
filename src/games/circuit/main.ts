@@ -1,6 +1,5 @@
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import {
-  expertSlotIds,
   hydrateExperts,
   MIXED_KIND,
   MIXED_LEVELS,
@@ -13,12 +12,11 @@ import { Visualizer } from '../../ai/v2/Visualizer';
 import { contrastText, getColorScale } from '../../utilities/colors';
 import { createCanvas, resizeCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
-import { lerp, rand } from '../../utilities/math';
+import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
 import { Circuit } from './classes/Circuit';
-import { Obstacle } from './classes/Obstacle';
 import { ControlType } from './types';
 import { defaultState, drawScores, mixedColor } from './utilities';
 
@@ -100,7 +98,9 @@ export default async (state: typeof defaultState) => {
   saveBtn.onclick = () => downloadModelArchive('circuit');
   clearBtn.onclick = () => {
     if (
-      !confirm('Clear the current training set? This removes the saved models of this game.')
+      !confirm(
+        'Clear the current training set? This removes the saved models of this game.',
+      )
     )
       return;
     io.discardGameModels();
@@ -245,12 +245,11 @@ export default async (state: typeof defaultState) => {
   legend.className = 'side-panel-legend';
   [
     'Score board',
-    '👶 first generation',
     '💀 crashed, deleted after 20s',
     '🏆 crashed with a higher score',
     '💜 car is racing',
     '💚 car is besting the best score',
-    '👻 ghost car from a previous generation',
+    '👻 saved best brain of the line',
     '🧭 mixed brain',
     '🏁 next checkpoint glows',
     '🚧 solid obstacle',
@@ -288,310 +287,37 @@ export default async (state: typeof defaultState) => {
 
   const loop = new GameLoop();
 
-  const circuit = new Circuit();
-  // every car starts at the same point, the obstacles keep clear of it
-  const obstacles = spawnObstacles(circuit, config.SPAWN_OFFSET);
-
-  function spawnObstacles(circuit: Circuit, startOffset: number): Obstacle[] {
-    const n = circuit.points.length;
-    const per = circuit.length / n;
-    const first = Math.round((startOffset + 250) / per) + 1;
-    const last = n - 4;
-    const span = Math.max(1, last - first);
-    const step = span / config.OBSTACLES;
-    const list: Obstacle[] = [];
-    for (let i = 0; i < config.OBSTACLES; i++) {
-      const base = first + (i + 0.5) * step;
-      const idx = Math.round(base + rand(-0.35, 0.35) * step) % n;
-      const p = circuit.points[idx];
-      const t = circuit.tangents[idx];
-      const off = rand(-60, 60);
-      list.push(
-        new Obstacle(
-          p.x + circuit.normals[idx].x * off,
-          p.y + circuit.normals[idx].y * off,
-          Math.atan2(-t.x, -t.y),
-        ),
-      );
-    }
-    return list;
+  /** the seed is the only map state, it is always mirrored in the URL hash */
+  function readSeed(): number | undefined {
+    const m = location.hash.match(/circuit=(\d+)/);
+    return m ? parseInt(m[1], 10) : undefined;
   }
 
-  function setupAIs() {
-    const cars: Car[] = [];
-    config.autoDistributeByScores(state.sortedModels);
-
-    const scores = state.sortedModels
-      .map(([firstModel]) => Math.round(firstModel?.score) || 0)
-      .sort((a, b) => b - a)
-      .filter(Boolean);
-
-    const [bestScore = 1, worstScore = 0] = [
-      scores[0],
-      scores[scores.length - 1],
-    ];
-    const advantage = bestScore - worstScore;
-
-    for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
-      const configuredCars = config.CARS_PER_LAYERS[l];
-      if (!configuredCars) continue;
-
-      const savedModel =
-        (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
-
-      const layerOriginScore = savedModel?.score || 0;
-      const scoreAdvantage = layerOriginScore - worstScore;
-      const scoreRatio = advantage ? scoreAdvantage / advantage : 0;
-
-      const carsNbForThisLayer = Math.max(
-        configuredCars,
-        config.MIN_CARS_PER_LAYER,
-      );
-
-      const divider =
-        (savedModel?.version > 10 ? savedModel?.version : 10) / 10;
-      const mutationTarget =
-        lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, 1 - scoreRatio) /
-        divider;
-
-      console.debug(
-        `#${l} Gen-${savedModel?.version} Mutation ${
-          Math.round(mutationTarget * 10000000) / 100000
-        }% | Score: ${Math.round(layerOriginScore)} `,
-      );
-
-      let isSaveCompatible = true;
-
-      for (let i = 0; i < carsNbForThisLayer; i++) {
-        const spawn = circuit.getSpawn();
-        const car = new Car(
-          spawn.x,
-          spawn.y,
-          spawn.angle,
-          ControlType.AI,
-          3,
-          `${l} - 0 👶`,
-          getColorScale(l / config.MAX_NETWORK_LAYERS),
-          l,
-        );
-        if (savedModel && car.brain) {
-          car.brain.mutationIndex = i;
-
-          car.brain.mutationFactor =
-            (i / Math.max(1, carsNbForThisLayer - 1)) * mutationTarget;
-
-          try {
-            if (isSaveCompatible) car.brain.mutate(savedModel);
-          } catch (err) {
-            isSaveCompatible = false;
-            console.error(
-              `Unable to mutate existing brain #${car.brain.id}.\nReset data with ${location.href}&clear=true`,
-              err.message,
-            );
-          }
-
-          car.label = [l, i].join('-');
-        }
-        cars.push(car);
-      }
-    }
-
-    setupMixed(cars);
-
-    return cars;
-  }
-
-  /**
-   * Spawns the cars driven by a mixed brain: a shallow selector that reads the
-   * same sensors and answers with one of the trained brains, which then drives
-   * with those very inputs. Experts stay frozen, only the routing is trained.
-   */
-  function setupMixed(cars: Car[]) {
-    if (!config.MIXED_ENABLED) return;
-
-    // same observation as the regular brains: rays, speed, gate angle
-    const inputNb = config.SENSORS + 2;
-    const outputNb = 4;
-    const hydrated = hydrateExperts(
-      state.sortedModels,
-      inputNb,
-      outputNb,
-      config.MIXED_EXPERTS_PER_LAYER,
-    );
-
-    if (hydrated.length < config.MIXED_MIN_EXPERTS) {
-      console.debug(
-        `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${hydrated.length} available`,
-      );
-      return;
-    }
-    experts = hydrated;
-
-    const savedModel = state.sortedMixed[MIXED_LEVELS]?.[0];
-    const divider = (savedModel?.version > 10 ? savedModel.version : 10) / 10;
-    const mutationTarget = config.MIXED_MAX_MUTATION_LVL / divider;
-
-    console.debug(
-      `🧭 Gen-${savedModel?.version ?? 0} Mutation ${
-        Math.round(mutationTarget * config.MIXED_MUTATION_BOOST * 10000) / 100
-      }% | ${hydrated.length} experts: ${expertSlotIds(hydrated).join(', ')}`,
-    );
-
-    let isSaveCompatible = true;
-    const carsNb = Math.max(config.MIXED_CARS, config.MIXED_MIN_CARS);
-
-    for (let i = 0; i < carsNb; i++) {
-      const spawn = circuit.getSpawn();
-      const car = new Car(
-        spawn.x,
-        spawn.y,
-        spawn.angle,
-        ControlType.AI,
-        3,
-        `0 👶`,
-        config.MIXED_COLOR,
-        MIXED_LEVELS,
-        (inputCount, outputCount) =>
-          new MixedNetwork(inputCount, outputCount, experts, {
-            hiddenNodes: config.MIXED_HIDDEN_NODES,
-            mutationBoost: config.MIXED_MUTATION_BOOST,
-            resetChance: config.MIXED_RESET_CHANCE,
-          }),
-      );
-
-      if (savedModel && car.brain) {
-        car.brain.mutationIndex = i;
-        car.brain.mutationFactor = (i / carsNb) * mutationTarget;
-
-        try {
-          if (isSaveCompatible) car.brain.mutate(savedModel);
-        } catch (err) {
-          isSaveCompatible = false;
-          console.error(
-            `Unable to mutate existing mixed brain #${car.brain.id}, starting over.`,
-            err.message,
-          );
-        }
-
-        car.label = `${i}`;
-      }
-
-      cars.push(car);
-    }
-  }
-
-  /** the spread a replacement of `layer` rolls its mutation in */
-  function mutationTargetFor(layer: number, isMixed: boolean) {
-    const saves = isMixed ? state.sortedMixed : state.sortedModels;
-    const saved = saves[layer] && saves[layer][0];
-    const divider = (saved?.version > 10 ? saved?.version : 10) / 10;
-
-    if (isMixed) return config.MIXED_MAX_MUTATION_LVL / divider;
-
-    const scores = state.sortedModels
-      .map(([firstModel]) => Math.round(firstModel?.score) || 0)
-      .sort((a, b) => b - a)
-      .filter(Boolean);
-    const [bestScore = 1, worstScore = 0] = [
-      scores[0],
-      scores[scores.length - 1],
-    ];
-    const advantage = bestScore - worstScore;
-    const ratio = advantage
-      ? ((saved?.score || 0) - worstScore) / advantage
-      : 0;
-    return (
-      lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, 1 - ratio) /
-      divider
+  function writeSeed(seed: number) {
+    history.replaceState(
+      null,
+      '',
+      `${location.pathname}${location.search}#circuit=${seed}`,
     );
   }
 
-  /**
-   * Rolls a replacement for a crashed car from the saved best of its line. The
-   * factor is a fresh random draw inside the line's spread, so a line keeps
-   * exploring instead of converging on a single brain.
-   */
-  function replace(car: Car) {
-    const isMixed = car.brain instanceof MixedNetwork;
-    if (isMixed && !experts.length) return;
+  let seed = readSeed() ?? 1 + Math.floor(Math.random() * 0xffffff);
+  writeSeed(seed);
+  let laps = 0;
+  let circuit = new Circuit(seed);
 
-    const layer = isMixed ? MIXED_LEVELS : car.brainLayers;
-    const saves = isMixed ? state.sortedMixed : state.sortedModels;
-    const saved = saves[layer] && saves[layer][0];
-
-    const spawn = circuit.getSpawn();
-    const replacement = new Car(
-      spawn.x,
-      spawn.y,
-      spawn.angle,
-      ControlType.AI,
-      3,
-      isMixed ? '🧭' : `${layer}`,
-      isMixed
-        ? config.MIXED_COLOR
-        : getColorScale(layer / config.MAX_NETWORK_LAYERS),
-      layer,
-      isMixed
-        ? (inputCount, outputCount) =>
-            new MixedNetwork(inputCount, outputCount, experts, {
-              hiddenNodes: config.MIXED_HIDDEN_NODES,
-              mutationBoost: config.MIXED_MUTATION_BOOST,
-              resetChance: config.MIXED_RESET_CHANCE,
-            })
-        : undefined,
-    );
-
-    if (saved && replacement.brain) {
-      replacement.brain.mutationIndex = 0;
-      replacement.brain.mutationFactor =
-        Math.random() * mutationTargetFor(layer, isMixed);
-      try {
-        replacement.brain.mutate(saved);
-      } catch (err) {
-        // a save from a different sensor layout would otherwise kill the line
-        console.error(
-          `Replacement brain of line ${layer} does not fit its save, starting fresh.\nReset data with ${location.href}&clear=true`,
-          err.message,
-        );
-      }
-    }
-
-    state.cars.push(replacement);
+  /** one entry per brain category: the pool (slot = index) and the live best */
+  interface Group {
+    key: string; // '1'..'9' or 'mixed'
+    layer: number;
+    isMixed: boolean;
+    pool: Car[];
+    /** snapshot of the champion brain + the bar it set, null until one scores */
+    best: { brain: NeuralNetwork; score: number } | null;
   }
+  const groups: Group[] = [];
 
-  /** a crashed brain only overwrites its line's save when it beats it */
-  function recordBrain(car: Car) {
-    const brain = car.brain;
-    const isMixed = brain instanceof MixedNetwork;
-    const saves = isMixed ? state.sortedMixed : state.sortedModels;
-    const layer = isMixed ? MIXED_LEVELS : car.brainLayers;
-    const best = saves[layer] && saves[layer][0];
-    if (best && brain.score <= best.score) return;
-
-    io.saveBestModels([brain], 1);
-    if (isMixed) {
-      state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
-    } else {
-      state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
-    }
-  }
-
-  /** a dead car becomes a corpse for DEAD_LIFETIME, and its line rolls on */
-  function onDeath(car: Car) {
-    state.living--;
-    car.deathTime = performance.now();
-
-    if (car.useAI) {
-      recordBrain(car);
-      state.passed++;
-      replace(car);
-      state.living++;
-    } else if (state.player && car === state.player) {
-      respawnPlayer();
-      state.living++;
-    }
-  }
-
+  /** a dead car respawns as a fresh player car, using deathCarModel */
   function respawnPlayer() {
     if (!deathCarModel) {
       state.player = undefined;
@@ -623,6 +349,222 @@ export default async (state: typeof defaultState) => {
     state.cars.push(player);
   }
 
+  /** the ladder's top: shrinks with session progress (laps completed) */
+  function maxMutation() {
+    return lerp(
+      config.MAX_MUTATION_LVL,
+      config.MIN_MUTATION_LVL,
+      Math.min(1, laps / config.MUTATION_LAP_DECAY),
+    );
+  }
+
+  /** slot 0 clones the best untouched, slot k mutates (k/19) of the way */
+  function spawnCar(group: Group, slot: number): Car {
+    const spawn = circuit.getSpawn();
+    const isMixed = group.isMixed;
+    const car = new Car(
+      spawn.x,
+      spawn.y,
+      spawn.angle,
+      ControlType.AI,
+      3,
+      isMixed ? '🧭' : `${group.layer}-${slot}`,
+      isMixed
+        ? config.MIXED_COLOR
+        : getColorScale(group.layer / config.MAX_NETWORK_LAYERS),
+      group.layer,
+      isMixed
+        ? (inputCount, outputCount) =>
+            new MixedNetwork(inputCount, outputCount, experts, {
+              hiddenNodes: config.MIXED_HIDDEN_NODES,
+              mutationBoost: config.MIXED_MUTATION_BOOST,
+              resetChance: config.MIXED_RESET_CHANCE,
+            })
+        : undefined,
+    );
+    if (group.best && car.brain) {
+      car.brain.mutationIndex = slot;
+      car.brain.mutationFactor =
+        slot === 0 ? 0 : (slot / (config.CARS_PER_GROUP - 1)) * maxMutation();
+      try {
+        car.brain.mutate(group.best.brain);
+      } catch (err) {
+        // a save from a different sensor layout would otherwise kill the line
+        console.error(
+          `Line ${group.layer} save does not fit the current sensors, starting fresh.\nReset data with ${location.href}&clear=true`,
+          err.message,
+        );
+      }
+    }
+    return car;
+  }
+
+  /** the mixed pool only exists once there are experts to route to */
+  function buildPools() {
+    groups.length = 0;
+    const inputNb = config.SENSORS + 2;
+    const outputNb = 4;
+
+    // the mixed pool only exists once there are experts to route to
+    if (config.MIXED_ENABLED) {
+      const hydrated = hydrateExperts(
+        state.sortedModels,
+        inputNb,
+        outputNb,
+        config.MIXED_EXPERTS_PER_LAYER,
+      );
+      if (hydrated.length < config.MIXED_MIN_EXPERTS) {
+        console.debug(
+          `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${hydrated.length} available`,
+        );
+      } else {
+        experts = hydrated;
+        groups.push({
+          key: 'mixed',
+          layer: MIXED_LEVELS,
+          isMixed: true,
+          pool: [],
+          best: state.sortedMixed[MIXED_LEVELS]?.[0]
+            ? {
+                brain: state.sortedMixed[MIXED_LEVELS][0],
+                score: state.sortedMixed[MIXED_LEVELS][0].score || 0,
+              }
+            : null,
+        });
+      }
+    }
+
+    for (let l = 1; l <= config.MAX_NETWORK_LAYERS; l++) {
+      groups.push({
+        key: String(l),
+        layer: l,
+        isMixed: false,
+        pool: [],
+        best: state.sortedModels[l]?.[0]
+          ? {
+              brain: state.sortedModels[l][0],
+              score: state.sortedModels[l][0].score || 0,
+            }
+          : null,
+      });
+    }
+
+    for (const group of groups) {
+      group.pool = new Array(config.CARS_PER_GROUP);
+      for (let i = 0; i < config.CARS_PER_GROUP; i++) {
+        group.pool[i] = spawnCar(group, i);
+      }
+    }
+  }
+
+  /** the moment a car beats the bar, its brain becomes the new best */
+  function promote(group: Group, car: Car) {
+    // a snapshot: later changes to the promoting car cannot alter the best
+    const brain = JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork;
+    group.best = { brain, score: car.brain.score };
+    io.saveBestModels([car.brain], 1);
+    // keep the in-memory saves in sync: the board shows them, and the mixed
+    // brain's experts are re-hydrated from them when the mixed pool next spawns
+    const saves = group.isMixed ? state.sortedMixed : state.sortedModels;
+    saves[group.layer] = [brain];
+    if (group.isMixed) {
+      // future mixed spawns route to the fresh champions
+      experts = hydrateExperts(
+        state.sortedModels,
+        config.SENSORS + 2,
+        4,
+        config.MIXED_EXPERTS_PER_LAYER,
+      );
+    }
+  }
+
+  function groupOf(car: Car): Group | undefined {
+    const key =
+      car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers);
+    return groups.find((g) => g.key === key);
+  }
+
+  /** a dead car stays a corpse for DEAD_LIFETIME, its slot respawns at once */
+  function onDeath(car: Car) {
+    state.living--;
+    car.deathTime = performance.now();
+
+    if (car.useAI) {
+      const group = groupOf(car);
+      if (group) {
+        const slot = group.pool.indexOf(car);
+        if (slot >= 0) {
+          group.pool[slot] = spawnCar(group, slot);
+          state.cars.push(group.pool[slot]);
+        }
+      }
+      state.living++;
+    } else if (state.player && car === state.player) {
+      respawnPlayer();
+      state.living++;
+    }
+  }
+
+  /** a new seed replaces the map: every pool respawns from its ladder,
+   *  each group keeps its best brain but the score bar restarts at zero */
+  function regenerateMap() {
+    writeSeed(seed);
+    circuit = new Circuit(seed);
+    state.circuit = circuit;
+    state.obstacles = circuit.obstacles;
+    buildPools();
+    if (state.player) respawnPlayer();
+    for (const group of groups) {
+      if (group.best) group.best.score = 0;
+    }
+    state.cars = groups.flatMap((g) => g.pool);
+    if (state.player) state.cars.push(state.player);
+    state.population = state.cars.length;
+    state.living = state.cars.length;
+    camSet = false;
+    if (document.activeElement !== seedInput) seedInput.value = String(seed);
+  }
+
+  /** a full lap: +1, the lap count is the session progress */
+  function advanceSeed() {
+    laps++;
+    seed++;
+    regenerateMap();
+  }
+
+  /** the user applied a seed in the input: new session on that seed */
+  function applyUserSeed(value: number) {
+    seed = value;
+    laps = 0;
+    regenerateMap();
+  }
+
+  const seedWrap = document.createElement('label');
+  seedWrap.className = 'seed-wrap';
+  const seedLabel = document.createElement('span');
+  seedLabel.textContent = 'map seed';
+  const seedInput = document.createElement('input');
+  seedInput.className = 'seed-input';
+  seedInput.inputMode = 'numeric';
+  seedInput.value = String(seed);
+  seedInput.title = 'Apply a new seed (enter or blur)';
+  const applySeedInput = () => {
+    const value = parseInt(seedInput.value, 10);
+    if (!Number.isFinite(value) || value <= 0 || value === seed) {
+      seedInput.value = String(seed);
+      return;
+    }
+    applyUserSeed(value);
+  };
+  seedInput.addEventListener('change', applySeedInput);
+  seedInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      seedInput.blur();
+    }
+  });
+  seedWrap.append(seedLabel, seedInput);
+
   try {
     initialize();
   } catch (err) {
@@ -643,7 +585,7 @@ export default async (state: typeof defaultState) => {
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         const alive = !car.damaged;
-        car.update(obstacles, circuit);
+        car.update(state.obstacles, circuit);
         const brain = car.brain;
         if (brain instanceof MixedNetwork) {
           car.setColor(mixedColor(brain));
@@ -657,11 +599,27 @@ export default async (state: typeof defaultState) => {
           state.cars.splice(i, 1);
         }
       }
+
+      // live promotion check
+      for (const car of state.cars) {
+        if (car.damaged || !car.useAI) continue;
+        const group = groupOf(car);
+        if (!group) continue;
+        if (!group.best || car.brain.score > group.best.score)
+          promote(group, car);
+      }
+
+      // the first full lap on this seed advances the map, the spec's only auto change
+      for (const car of state.cars) {
+        if (!car.completedLap) continue;
+        car.completedLap = false;
+        advanceSeed();
+        break; // the map just changed, the loop restarts on the new one
+      }
+
       state.sortedCars = state.cars.sort(
         (a, b) => b.brain.score - a.brain.score,
       );
-      const aiCount = state.population - (state.player ? 1 : 0);
-      if (aiCount > 0 && state.passed >= aiCount) endExperiment();
     }
     updateFollowButtons();
 
@@ -721,8 +679,8 @@ export default async (state: typeof defaultState) => {
         circuit.checkpoints[i] === nextCheckpoint,
       );
     }
-    for (let i = 0; i < obstacles.length; i++) {
-      obstacles[i].draw(carCtx);
+    for (let i = 0; i < circuit.obstacles.length; i++) {
+      circuit.obstacles[i].draw(carCtx);
     }
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
@@ -746,88 +704,8 @@ export default async (state: typeof defaultState) => {
       statsBtn.classList.toggle('active', statsOn);
       statsBtn.setAttribute('aria-pressed', String(statsOn));
     }
-
-    if (!state.playing) {
-      carCtx.font = 'bold 24px Arial';
-      carCtx.textBaseline = 'middle';
-      carCtx.textAlign = 'center';
-      carCtx.fillStyle = 'red';
-      carCtx.strokeStyle = '#800';
-      carCtx.lineWidth = 1;
-      carCtx.fillText(
-        `NEXT GENERATION`,
-        carCanvas.width / 2,
-        carCanvas.height / 2,
-      );
-      carCtx.strokeText(
-        `NEXT GENERATION`,
-        carCanvas.width / 2,
-        carCanvas.height / 2,
-      );
-    }
   });
 
-  function initialize() {
-    Object.assign(state, defaultState);
-    state.playing = true;
-    camSet = false;
-    state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
-    state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
-    state.circuit = circuit;
-    state.obstacles = obstacles;
-
-    deathCarModel = undefined;
-
-    // Experiments
-    state.cars = setupAIs();
-
-    // Game ender of the old layout, the worst brain of the best line
-    const bestModel = [...state.sortedModels].sort(
-      (a, b) => (b && b[0] ? b[0].score : 0) - (a && a[0] ? a[0].score : 0),
-    )[0];
-    deathCarModel =
-      bestModel && bestModel[bestModel.length - 1]
-        ? bestModel[bestModel.length - 1]
-        : undefined;
-    if (deathCarModel && deathCarModel.levels?.length) {
-      deathCarLayer = deathCarModel.levels.length;
-      const spawn = circuit.getSpawn();
-      const player = new Car(
-        spawn.x,
-        spawn.y,
-        spawn.angle,
-        ControlType.KEYS,
-        3,
-        '🎥 Camera',
-        getColorScale(deathCarLayer / config.MAX_NETWORK_LAYERS),
-        deathCarLayer,
-      );
-      console.log(`Death car is layer ${deathCarLayer}`);
-      player.brain.mutationFactor = 0;
-      player.brain.mutationIndex = 0;
-      try {
-        player.brain.mutate(deathCarModel);
-        state.cars.push(player);
-        state.player = player;
-      } catch (err) {
-        // an old save with a different sensor count would otherwise kill the run
-        console.error(
-          `Death car model does not fit the current sensors, skipping it.\nReset data with ${location.href}&clear=true`,
-          err.message,
-        );
-      }
-    }
-
-    state.population = state.cars.length;
-    state.living = state.cars.length;
-  }
-
-  /**
-   * Car the camera and the visualizer follow: the best alive car of the
-   * `follow` category (space any car, 0 a mixed brain, 1-9 that layer).
-   * When the leader dies the next best alive car takes over, and a whole
-   * dead category falls back to the best alive car overall.
-   */
   /** car buttons stay filled with their car color while the category
    *  races, and turn to an outline once its last car is dead */
   function updateFollowButtons() {
@@ -864,15 +742,58 @@ export default async (state: typeof defaultState) => {
     );
   }
 
-  function endExperiment() {
-    if (state.playing) {
-      const finalSort = state.sortedCars.filter((c) => c.useAI);
-      io.saveBestModels(
-        finalSort.map((c) => c.brain),
-        7,
+  function initialize() {
+    Object.assign(state, defaultState);
+    state.playing = true;
+    camSet = false;
+    state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
+    state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
+    state.circuit = circuit;
+    state.obstacles = circuit.obstacles;
+
+    deathCarModel = undefined;
+
+    buildPools();
+
+    // the human driven car rides the worst brain of the best line
+    const bestModel = [...state.sortedModels].sort(
+      (a, b) => (b && b[0] ? b[0].score : 0) - (a && a[0] ? a[0].score : 0),
+    )[0];
+    deathCarModel = bestModel?.[0] ?? undefined;
+    if (deathCarModel && deathCarModel.levels?.length) {
+      deathCarLayer = deathCarModel.levels.length;
+      const player = new Car(
+        circuit.getSpawn().x,
+        circuit.getSpawn().y,
+        circuit.getSpawn().angle,
+        ControlType.KEYS,
+        3,
+        '🎥 Camera',
+        getColorScale(deathCarLayer / config.MAX_NETWORK_LAYERS),
+        deathCarLayer,
       );
-      state.playing = false;
-      setTimeout(initialize, 1500);
+      player.brain.mutationFactor = 0;
+      player.brain.mutationIndex = 0;
+      try {
+        player.brain.mutate(deathCarModel);
+        state.cars.push(player);
+        state.player = player;
+      } catch (err) {
+        console.error(
+          `Death car model does not fit the current sensors, skipping it.\nReset data with ${location.href}&clear=true`,
+          err.message,
+        );
+      }
     }
+
+    state.population = state.cars.length;
+    state.living = state.cars.length;
   }
+
+  // a reload never loses more than the most recent promotions
+  window.addEventListener('beforeunload', () => {
+    for (const group of groups) {
+      if (group.best) io.saveBestModels([group.best.brain], 1);
+    }
+  });
 };

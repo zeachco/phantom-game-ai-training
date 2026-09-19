@@ -12,10 +12,8 @@ export const defaultState = {
   sortedCars: [] as Car[],
   /** live car count, a corpse is replaced the frame it dies so it only dips */
   living: 0,
-  /** live cars at the start of the generation, the cap the board reports */
+  /** live cars at the start of the map, the cap the board reports */
   population: 0,
-  /** AI cars that have crashed once this generation, a full pass re-rolls */
-  passed: 0,
   /** world x/y at the follow point, exposed for debugging the camera */
   camX: 0,
   camY: 0,

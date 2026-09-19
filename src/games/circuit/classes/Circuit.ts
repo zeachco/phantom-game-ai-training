@@ -1,5 +1,6 @@
-import { rand, Vector } from '../../../utilities/math';
+import { mulberry32, Rng, Vector } from '../../../utilities/math';
 import { config } from './Config';
+import { Obstacle } from './Obstacle';
 import { Checkpoint } from './Checkpoint';
 
 /** one boundary edge with its precomputed box, the sensor's wall */
@@ -32,20 +33,22 @@ export class Circuit {
   public roadPath: Path2D;
   public lanePaths: Path2D[] = [];
   public edgePaths: Path2D[] = [];
+  /** obstacles placed along the circuit, seeded with the same random stream */
+  public obstacles: Obstacle[] = [];
 
-  constructor() {
-    this.#generate();
+  constructor(public seed: number) {
+    this.#generate(mulberry32(seed));
   }
 
-  #generate() {
+  #generate(rng: Rng) {
     // random harmonics of the radius, low frequencies for wide sweeping turns
     const harmonics = 4;
     const waves: { freq: number; amp: number; phase: number }[] = [];
     for (let k = 0; k < harmonics; k++) {
       waves.push({
         freq: k + 2,
-        amp: rand(0.25, 1) * (config.CIRCUIT_WAVINESS / harmonics),
-        phase: rand(0, Math.PI * 2),
+        amp: (0.25 + rng() * 0.75) * (config.CIRCUIT_WAVINESS / harmonics),
+        phase: rng() * Math.PI * 2,
       });
     }
     const radius = (t: number) => {
@@ -118,6 +121,28 @@ export class Circuit {
           this.left[idx],
           this.right[idx],
           i,
+        ),
+      );
+    }
+
+    // obstacles seeded with the same rng stream
+    this.obstacles = [];
+    const per = this.length / n;
+    const first = Math.round((config.SPAWN_OFFSET + 250) / per) + 1;
+    const last = n - 4;
+    const span = Math.max(1, last - first);
+    const step = span / config.OBSTACLES;
+    for (let i = 0; i < config.OBSTACLES; i++) {
+      const base = first + (i + 0.5) * step;
+      const idx = Math.round(base + (-0.35 + rng() * 0.7) * step) % n;
+      const p = this.points[idx];
+      const t = this.tangents[idx];
+      const off = -60 + rng() * 120;
+      this.obstacles.push(
+        new Obstacle(
+          p.x + this.normals[idx].x * off,
+          p.y + this.normals[idx].y * off,
+          Math.atan2(-t.x, -t.y),
         ),
       );
     }

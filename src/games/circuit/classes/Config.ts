@@ -4,13 +4,12 @@ class Config {
   // population
   /** cap of live AI cars, a replacement spawns the frame one dies */
   public CAR_NB = 200;
-  /** floor of cars per brain type (network layer), so every layer keeps breeding */
-  public MIN_CARS_PER_LAYER = 2;
-  public AUTO_DISTRIBUTE_LAYERS = false;
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = 0.0001;
-  /** 18 per layer x 9 layers, the rest of the cap goes to the mixed cars */
-  public CARS_PER_LAYERS = [0, 18, 18, 18, 18, 18, 18, 18, 18];
+  /** every brain category runs a pool of exactly this many cars, slots 0..19 */
+  public CARS_PER_GROUP = 20;
+  /** laps over which the max mutation shrinks from MAX down to MIN */
+  public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
   public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */
@@ -87,39 +86,6 @@ class Config {
 
   public get CAR_PER_LEVELS() {
     return this.CAR_NB / this.MAX_NETWORK_LAYERS;
-  }
-
-  public autoDistributeByScores(saves: ModelsByLayerCount[]) {
-    if (!this.AUTO_DISTRIBUTE_LAYERS) return;
-    const getModel = (layer) => saves[layer] && saves[layer][0];
-    const layerScore = (models: ModelsByLayerCount[number]) =>
-      (models && models[0] && models[0].score) || 0;
-
-    let totalScore = 0;
-    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
-      const save = getModel(i);
-      if (!save) continue;
-      totalScore += save.score;
-    }
-
-    const sortedLayers = [...saves].sort(
-      (a, b) => layerScore(a) - layerScore(b),
-    );
-
-    let remainingScore = totalScore;
-
-    sortedLayers.forEach((models) => {
-      if (!models || !models[0]) return;
-      const layer = models[0].levels.length;
-      const give = layer ? Math.ceil(remainingScore * 0.55) : 0;
-      remainingScore -= give;
-      this.CARS_PER_LAYERS[layer] = Math.round(
-        (give / totalScore) * this.CAR_NB + 2,
-      );
-      console.log(
-        `set layer ${layer} with ${this.CARS_PER_LAYERS[layer]} cars`,
-      );
-    });
   }
 }
 
