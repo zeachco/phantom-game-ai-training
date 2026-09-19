@@ -141,14 +141,13 @@ export class Car {
     this.damaged = this.#assessDamage(obstacles, circuit);
     if (this.sensor) {
       this.sensor.update(obstacles, circuit.segments);
-      const offsets = this.sensor.readings.map((s) =>
-        s == null ? 0 : 1 - s.offset,
-      );
-      offsets.push(this.speed / this.maxSpeed);
-      offsets.push(this.gateDelta);
-      const outputs = this.brain.process(offsets);
-
       if (this.useAI) {
+        const offsets = this.sensor.readings.map((s) =>
+          s == null ? 0 : 1 - s.offset,
+        );
+        offsets.push(this.speed / this.maxSpeed);
+        offsets.push(this.gateDelta);
+        const outputs = this.brain.process(offsets);
         const [forward, left, right, reverse] = outputs;
         this.controls.forward = forward;
         this.controls.left = left;

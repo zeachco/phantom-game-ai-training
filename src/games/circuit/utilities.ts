@@ -45,8 +45,8 @@ export const defaultState = {
   camY: 0,
   obstacles: [] as Obstacle[],
   circuit: undefined as Circuit | undefined,
-  /** the human driven car, only exists when a compatible death car model loads */
-  player: undefined as Car | undefined,
+  /** the human driven car, exists only while the toggle is on */
+  human: undefined as Car | undefined,
   sortedModels: [] as ModelsByLayerCount[],
   sortedMixed: [] as ModelsByLayerCount[],
   playing: false,
@@ -117,6 +117,11 @@ export function drawScores(
 
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
+      if (ref === state.human) {
+        ctx.fillStyle = ref.damaged ? '#def' : ref.color;
+        ctx.fillText(`🕹 ${ref.label} ${Math.round(ref.brain.score)}`, TL, FH * 4 + index * FH);
+        return;
+      }
       const group = state.groups.find(
         (g) => g.key === (ref.brain instanceof MixedNetwork ? 'mixed' : String(ref.brainLayers)),
       );

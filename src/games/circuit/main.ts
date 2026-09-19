@@ -7,7 +7,6 @@ import {
 } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import { fileUtilities } from '../../ai/utils';
-import type { ModelsByLayerCount } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { contrastText, getColorScale } from '../../utilities/colors';
 import { createCanvas, resizeCanvas } from '../../utilities/dom';
@@ -95,9 +94,35 @@ export default async (state: typeof defaultState) => {
   let panelOpen = true;
   /** the mixed brain's library, empty until the first saves exist */
   let experts: NeuralNetwork[] = [];
-  /** the death car's saved model, the player respawns with it */
-  let deathCarModel: ModelsByLayerCount[number] | undefined;
-  let deathCarLayer = 1;
+
+  /** the human car: no brain, no group, no saves — the keys are the action */
+  function spawnHuman() {
+    const spawn = circuit.getSpawn();
+    const car = new Car(
+      spawn.x,
+      spawn.y,
+      spawn.angle,
+      ControlType.HUMAN,
+      3,
+      '🕹',
+      'white',
+      1,
+    );
+    state.human = car;
+    state.cars.push(car);
+    state.living++;
+    state.population++;
+  }
+
+  function removeHuman() {
+    if (!state.human) return;
+    const idx = state.cars.indexOf(state.human);
+    if (idx >= 0) state.cars.splice(idx, 1);
+    state.human.controls.dispose();
+    state.human = undefined;
+    state.living = Math.max(0, state.living - 1);
+    state.population = Math.max(0, state.population - 1);
+  }
 
   const panel = document.createElement('aside');
   panel.className = 'side-panel open';
@@ -274,6 +299,14 @@ export default async (state: typeof defaultState) => {
     neuralVisualizer.renderStats = !neuralVisualizer.renderStats;
   };
 
+  // the human play toggle: one brainless car driven by the keyboard
+  const humanWrap = document.createElement('label');
+  humanWrap.className = 'human-toggle';
+  const humanCheckbox = document.createElement('input');
+  humanCheckbox.type = 'checkbox';
+  humanCheckbox.title = 'Drive a car with the arrows or WASD';
+  humanWrap.append(humanCheckbox, document.createTextNode(' Human play'));
+
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
   netWrap.style.flex = '1';
@@ -293,6 +326,7 @@ export default async (state: typeof defaultState) => {
     '💜 car is racing',
     '💚 car is besting the total score',
     '👻 line total (the bar) + map high',
+    '🕹 human car, driven with the arrows or WASD',
     '🧭 mixed brain',
     '🏁 next checkpoint glows',
     '🚧 solid obstacle',
@@ -314,6 +348,7 @@ export default async (state: typeof defaultState) => {
     saveBtn,
     clearBtn,
     statsBtn,
+    humanWrap,
     followKeys,
     netWrap,
     legend,
@@ -324,6 +359,11 @@ export default async (state: typeof defaultState) => {
   document.body.appendChild(panel);
 
   // the wheel and pedals mimic the followed car's live outputs, display only
+  humanCheckbox.onchange = () => {
+    if (humanCheckbox.checked) spawnHuman();
+    else removeHuman();
+  };
+
   const steerOverlay = document.createElement('div');
   steerOverlay.className = 'steer-overlay hidden';
   const wheelCanvas = document.createElement('canvas');
@@ -407,37 +447,7 @@ export default async (state: typeof defaultState) => {
   let circuit = new Circuit(seed);
   const groups: Group[] = [];
 
-  /** a dead car respawns as a fresh player car, using deathCarModel */
-  function respawnPlayer() {
-    if (!deathCarModel) {
-      state.player = undefined;
-      return;
-    }
-    const spawn = circuit.getSpawn();
-    const player = new Car(
-      spawn.x,
-      spawn.y,
-      spawn.angle,
-      ControlType.KEYS,
-      3,
-      '🎥 Camera',
-      getColorScale(deathCarLayer / config.MAX_NETWORK_LAYERS),
-      deathCarLayer,
-    );
-    player.brain.mutationFactor = 0;
-    player.brain.mutationIndex = 0;
-    try {
-      player.brain.mutate(deathCarModel);
-    } catch (err) {
-      // an old save with a different sensor count would otherwise kill the run
-      console.error(
-        `Death car model does not fit the current sensors, respawning fresh.\nReset data with ${location.href}&clear=true`,
-        err.message,
-      );
-    }
-    state.player = player;
-    state.cars.push(player);
-  }
+
 
   /** the ladder's top: shrinks with session progress (laps completed) */
   function maxMutation() {
@@ -601,8 +611,10 @@ export default async (state: typeof defaultState) => {
         }
       }
       state.living++;
-    } else if (state.player && car === state.player) {
-      respawnPlayer();
+    } else if (state.human && car === state.human) {
+      // a human crash respawns a fresh human car, the person keeps driving
+      state.human = undefined;
+      spawnHuman();
       state.living++;
     }
   }
@@ -615,14 +627,14 @@ export default async (state: typeof defaultState) => {
     state.circuit = circuit;
     state.obstacles = circuit.obstacles;
     buildPools();
-    if (state.player) respawnPlayer();
+
     for (const group of groups) {
       foldScores(group.scores, seed);
       group.seedBest = null;
       saveScores(group);
     }
     state.cars = groups.flatMap((g) => g.pool);
-    if (state.player) state.cars.push(state.player);
+    if (state.human) spawnHuman();
     state.population = state.cars.length;
     state.living = state.cars.length;
     camSet = false;
@@ -882,41 +894,8 @@ export default async (state: typeof defaultState) => {
     state.circuit = circuit;
     state.obstacles = circuit.obstacles;
 
-    deathCarModel = undefined;
-
     buildPools();
     state.cars = groups.flatMap((g) => g.pool);
-
-    // the human driven car rides the worst brain of the best line
-    const bestModel = [...state.sortedModels].sort(
-      (a, b) => (b && b[0] ? b[0].score : 0) - (a && a[0] ? a[0].score : 0),
-    )[0];
-    deathCarModel = bestModel?.[0] ?? undefined;
-    if (deathCarModel && deathCarModel.levels?.length) {
-      deathCarLayer = deathCarModel.levels.length;
-      const player = new Car(
-        circuit.getSpawn().x,
-        circuit.getSpawn().y,
-        circuit.getSpawn().angle,
-        ControlType.KEYS,
-        3,
-        '🎥 Camera',
-        getColorScale(deathCarLayer / config.MAX_NETWORK_LAYERS),
-        deathCarLayer,
-      );
-      player.brain.mutationFactor = 0;
-      player.brain.mutationIndex = 0;
-      try {
-        player.brain.mutate(deathCarModel);
-        state.cars.push(player);
-        state.player = player;
-      } catch (err) {
-        console.error(
-          `Death car model does not fit the current sensors, skipping it.\nReset data with ${location.href}&clear=true`,
-          err.message,
-        );
-      }
-    }
 
     state.population = state.cars.length;
     state.living = state.cars.length;

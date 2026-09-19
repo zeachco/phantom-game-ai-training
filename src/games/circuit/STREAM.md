@@ -17,29 +17,47 @@ panel shows its brain.
   gates across the road, claimed in order around the loop, and a gate touched
   out of order subtracts its value, so a U-turn is a debt and donuts earn
   nothing.
-- A crashed car stays as a corpse for 20 seconds, then gets deleted. A
-  replacement rolls from the saved best of its line (a fresh random mutation
-  inside the line's spread), keeping the cap of 200 live cars.
-- A crashed brain overwrites its line's save when it beats it, so a line
-  improves between generations. When every car has died once, the best seven
-  are saved and a new generation starts from the saves.
+- There are no generations: a crash respawns the slot at once from the group's
+  spawn ladder — slot 0 clones the group's best brain, the higher slots carry
+  progressively bolder mutations — so every brain category always runs its pool
+  of 20. Crashed cars stay as corpses for 20 seconds.
+- The moment a car beats its group's summarized total score, its brain is saved
+  as the group's new best (live, not at death). The map is a pure function of
+  a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
+  seed input field changes it on demand, and any car completing a full lap
+  advances it by 1. Each finished map's high score folds into the total with
+  a halving, so recent maps dominate.
 
 car names are set as such:
 
-- amount of neural layers
-- neural network generation
-- mutation index (0 being the original)
-
-showing as `layers-gen-index`
+- `layers-slot` (there is no generation), e.g. `3-7` = 3-layer brain, slot 7.
 
 ### Score legend
 
-- 👶 is first generation
 - 💀 car has crashed (corpse deleted after 20s)
 - 🏆 car has crashed with a higher score
 - 💜 car is racing
 - 💚 car is besting the best score
-- 👻 ghost car from a previous generation
+- 👻 line total (the bar) + map high
 - 🧭 mixed brain
 - 🏁 checkpoint, the followed car's next one glows
 - 🚧 solid obstacle
+- 🕹 human car, driven with the arrows or WASD
+
+### Human play
+
+A \"Human play\" checkbox in the panel spawns one brainless car driven with
+the arrows or WASD (up/W throttle, down/S brake-then-reverse, left/A and
+right/D steer). It is a watcher, not a participant in training: no network,
+no saves, no group — its score competes in the live list and it can be
+followed by the camera, but it never writes into the AI pipeline. Crashing
+respawns a fresh human car; unchecking removes it.
+
+### Human play
+
+A "Human play" checkbox in the panel spawns one brainless car driven with
+the arrows or WASD (up/W throttle, down/S brake-then-reverse, left/A and
+right/D steer). It is a watcher, not a participant in training: no network,
+no saves, no group — its score competes in the live list and it can be
+followed by the camera, but it never writes into the AI pipeline. Crashing
+respawns a fresh human car; unchecking removes it.

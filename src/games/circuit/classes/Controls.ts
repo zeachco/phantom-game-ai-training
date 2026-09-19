@@ -5,9 +5,14 @@ export class Controls {
   public left: number = 0;
   public right: number = 0;
   public reverse: number = 0;
+  /** the bound handlers, kept so dispose() can remove them again */
+  private keydown: ((e: KeyboardEvent) => void) | undefined;
+  private keyup: ((e: KeyboardEvent) => void) | undefined;
+
   constructor(type: ControlType) {
     switch (type) {
       case ControlType.KEYS:
+      case ControlType.HUMAN:
         this.#addKeyboardListeners();
         break;
       case ControlType.DUMMY:
@@ -16,38 +21,61 @@ export class Controls {
     }
   }
 
+  /** the output a key maps to, undefined for every unbound key */
+  #keyToOutput(key: string): 'forward' | 'left' | 'right' | 'reverse' | undefined {
+    switch (key) {
+      case 'ArrowUp':
+      case 'w':
+      case 'W':
+        return 'forward';
+      case 'ArrowDown':
+      case 's':
+      case 'S':
+        return 'reverse';
+      case 'ArrowLeft':
+      case 'a':
+      case 'A':
+        return 'left';
+      case 'ArrowRight':
+      case 'd':
+      case 'D':
+        return 'right';
+    }
+  }
+
+  /** arrows or WASD drive the car, exactly those keys are captured */
   #addKeyboardListeners() {
-    document.onkeydown = (event) => {
-      switch (event.key) {
-        case 'ArrowLeft':
-          this.left = 1;
-          break;
-        case 'ArrowRight':
-          this.right = 1;
-          break;
-        case 'ArrowUp':
-          this.forward = 1;
-          break;
-        case 'ArrowDown':
-          this.reverse = 1;
-          break;
-      }
+    const down = (e: KeyboardEvent) => {
+      // typing in a form field never drives the car
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t instanceof HTMLInputElement ||
+          t instanceof HTMLTextAreaElement ||
+          t instanceof HTMLSelectElement ||
+          t.isContentEditable)
+      )
+        return;
+      const output = this.#keyToOutput(e.key);
+      if (output === undefined) return;
+      e.preventDefault();
+      this[output] = 1;
     };
-    document.onkeyup = (event) => {
-      switch (event.key) {
-        case 'ArrowLeft':
-          this.left = 0;
-          break;
-        case 'ArrowRight':
-          this.right = 0;
-          break;
-        case 'ArrowUp':
-          this.forward = 0;
-          break;
-        case 'ArrowDown':
-          this.reverse = 0;
-          break;
-      }
+    const up = (e: KeyboardEvent) => {
+      const output = this.#keyToOutput(e.key);
+      if (output === undefined) return;
+      this[output] = 0;
     };
+    this.keydown = down;
+    this.keyup = up;
+    document.addEventListener('keydown', down);
+    document.addEventListener('keyup', up);
+  }
+
+  public dispose() {
+    if (this.keydown) document.removeEventListener('keydown', this.keydown);
+    if (this.keyup) document.removeEventListener('keyup', this.keyup);
+    this.keydown = undefined;
+    this.keyup = undefined;
   }
 }
