@@ -1,6 +1,6 @@
 # TODO: Continuous learning + seeded map (circuit game)
 
-Status: spec only — not implemented.
+Status: implemented (2026-09-18), defaults per §8.
 
 ## Intent
 
@@ -142,10 +142,10 @@ When a car is (re)spawned into slot `i` of group `G`, its brain is built from
 
 ## 9. Removed / replaced (checklist for the implementing pass)
 
-- [ ] Generation counter + "NEXT GENERATION" overlay and button.
-- [ ] All-dead → new generation flow.
-- [ ] Multi-model-per-layer save/load (single best brain + score per category
+- [x] Generation counter + "NEXT GENERATION" overlay and button.
+- [x] All-dead → new generation flow.
+- [x] Multi-model-per-layer save/load (single best brain + score per category
       instead).
-- [ ] Per-generation map re-roll.
-- [ ] "Randomize circuit" button → seed input field.
-- [ ] Unseeded randomness in circuit generation → seeded PRNG.
+- [x] Per-generation map re-roll.
+- [x] "Randomize circuit" button → seed input field.
+- [x] Unseeded randomness in circuit generation → seeded PRNG.
