@@ -1,6 +1,6 @@
 # TODO: Seed high scores + summarized total score (circuit game)
 
-Status: spec only — not implemented.
+Status: implemented (2026-09-18), defaults per §6.
 
 Depends on `continous-learning-and-map-seed.md` (the map seed, the full-lap
 seed advance, and per-group persistence). This spec **modifies** that spec:
@@ -129,11 +129,11 @@ Properties of the halving (why it is the "summarized overall score"):
 
 ## 7. Removed / replaced (checklist for the implementing pass)
 
-- [ ] Raw per-map best score as promotion bar → `total_score` (summarized
+- [x] Raw per-map best score as promotion bar → `total_score` (summarized
       overall score).
-- [ ] Single "best score" persisted per group → scores object
+- [x] Single "best score" persisted per group → scores object
       (`current_seed_reference`, `total_score`, `seed_score`, per-seed
       history).
-- [ ] "Reset bestScore to 0 on map change" → fold: `(total + finishedHigh) / 2`,
+- [x] "Reset bestScore to 0 on map change" → fold: `(total + finishedHigh) / 2`,
       then start the new seed with `seed_score` = 0.
-- [ ] Brain that sets a new `seed_score` → snapshot its weights with the score.
+- [x] Brain that sets a new `seed_score` → snapshot its weights with the score.
