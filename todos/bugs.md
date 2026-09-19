@@ -11,3 +11,5 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [x] car saves are written to local storage too often: since scoring changed, a save should update at most when the car passes a checkpoint or crashes
 - [x] obstacles could leave a gap to the road edge that the sensors see but a car cannot fit through: the gap must be at least one car width, or zero (block snapped flush to the edge)
 - [x] the steering wheel spokes are not centered on the wheel in the middle position, and the pedals only travel to the middle of the box when fully pressed (gas was too weak to drift: tripled)
+- [x] when pressing arrows to control the human car, the camera now follows the human until it crashes
+- [x] the road sometimes goes from 3 lanes to 2 lanes (seeded pinched sections); where there is not at least the full 3-lane width (transitions included) no obstacles are placed
