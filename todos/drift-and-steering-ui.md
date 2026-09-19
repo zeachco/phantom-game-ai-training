@@ -1,6 +1,6 @@
 # TODO: Drift physics + steering wheel / pedals UI (circuit game)
 
-Status: spec only — not implemented.
+Status: implemented (2026-09-18), values per §1 tuning targets.
 
 ## Intent
 
@@ -85,8 +85,8 @@ Written as intent + rules, not an implementation plan.
 
 ## 3. Removed / replaced (checklist for the implementing pass)
 
-- [ ] Scalar `speed`-along-heading movement → heading + 2D velocity with grip.
-- [ ] Flat steering response → speed-relative yaw rate.
-- [ ] No drift → lateral-grip model with slip and a drifting state.
-- [ ] Nothing at the bottom of the screen → steering wheel + gas/brake overlay
+- [x] Scalar `speed`-along-heading movement → heading + 2D velocity with grip.
+- [x] Flat steering response → speed-relative yaw rate.
+- [x] No drift → lateral-grip model with slip and a drifting state.
+- [x] Nothing at the bottom of the screen → steering wheel + gas/brake overlay
       driven by the followed car's outputs, hidden while it is dead.
