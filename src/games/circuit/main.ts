@@ -171,8 +171,14 @@ export default async (state: typeof defaultState) => {
   const followLabel = document.createElement('span');
   followLabel.textContent = 'Follow';
 
+  // driving the human car takes the camera; it gives it back on a crash or
+  // a manual follow change
+  let humanFollow = false;
+  let humanDriving = false;
+
   const setFollow = (value: number | 'mixed') => {
     follow = value;
+    humanFollow = false;
     followKeys.querySelectorAll('button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.follow === String(value));
     });
@@ -354,7 +360,13 @@ export default async (state: typeof defaultState) => {
   const pedalCap = document.createElement('div');
   pedalCap.className = 'pedal-cap';
   pedal.append(pedalCap);
-  // the speed reads the followed car's velocity magnitude, raw
+  // the laps and speed readouts sit together, laps just above the speed
+  const readout = document.createElement('div');
+  readout.className = 'readout';
+  const lapsEl = document.createElement('div');
+  lapsEl.className = 'laps';
+  lapsEl.title = 'laps on this map';
+  lapsEl.textContent = `0/${config.LAPS_PER_SEED}`;
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
   speedo.title = 'speed';
@@ -365,7 +377,8 @@ export default async (state: typeof defaultState) => {
   speedoUnit.className = 'speedo-unit';
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
-  steerOverlay.append(wheelCanvas, pedal, speedo);
+  readout.append(lapsEl, speedo);
+  steerOverlay.append(wheelCanvas, pedal, readout);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
@@ -421,7 +434,8 @@ export default async (state: typeof defaultState) => {
     );
   }
 
-  let seed = readSeed() ?? 1 + Math.floor(Math.random() * 0xffffff);
+  // no seed in the URL: start at 0
+  let seed = readSeed() ?? 0;
   writeSeed(seed);
   let laps = 0;
   let circuit = new Circuit(seed);
@@ -607,6 +621,7 @@ export default async (state: typeof defaultState) => {
       // a human crash respawns a fresh human car, the person keeps driving
       car.controls.dispose();
       state.human = undefined;
+      humanFollow = false;
       spawnHuman();
       state.living++;
     }
@@ -701,10 +716,6 @@ export default async (state: typeof defaultState) => {
         const car = state.cars[i];
         const alive = !car.damaged;
         car.update(state.obstacles, circuit);
-        if (alive && performance.now() - car.bornAt > config.CAR_LIFETIME_CAP) {
-          car.damaged = true;
-          car.deathTime = performance.now();
-        }
         const brain = car.brain;
         if (brain instanceof MixedNetwork) {
           car.setColor(mixedColor(brain));
@@ -717,6 +728,16 @@ export default async (state: typeof defaultState) => {
           if (group) pendingSaves.add(group);
         }
       }
+      // the first drive input takes the camera to the human car
+      const h = state.human;
+      const driving =
+        !!h &&
+        (h.controls.throttle !== 0 ||
+          h.controls.left !== 0 ||
+          h.controls.right !== 0);
+      if (driving && !humanDriving) humanFollow = true;
+      humanDriving = driving;
+
       // corpses stay on the map long enough to read where the line failed
       for (let i = state.cars.length - 1; i >= 0; i--) {
         const car = state.cars[i];
@@ -741,12 +762,13 @@ export default async (state: typeof defaultState) => {
         if (!group.best || car.brain.score > group.scores.total) promote(group, car);
       }
 
-      // the first full lap on this seed advances the map, the spec's only auto change
+      // a car needs LAPS_PER_SEED full laps on this seed before the map advances
       for (const car of state.cars) {
-        if (!car.completedLap) continue;
-        car.completedLap = false;
-        advanceSeed();
-        break; // the map just changed, the loop restarts on the new one
+        if (car.completedLap) car.completedLap = false;
+        if (car.laps >= config.LAPS_PER_SEED) {
+          advanceSeed();
+          break; // the map just changed, the loop restarts on the new one
+        }
       }
 
       state.sortedCars = state.cars.sort(
@@ -801,6 +823,10 @@ export default async (state: typeof defaultState) => {
       const throttle = Math.max(-1, Math.min(1, c.throttle));
       pedalCap.style.transform = `translateY(${(1 - throttle) * config.STEER_UI_PEDAL_TRAVEL}px)`;
       speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(1);
+      lapsEl.textContent = `${Math.min(
+        camTarget.laps,
+        config.LAPS_PER_SEED,
+      )}/${config.LAPS_PER_SEED}`;
     }
     lastFollowed = camTarget;
     state.camX = camX;
@@ -883,6 +909,7 @@ export default async (state: typeof defaultState) => {
   }
 
   function followedCar(): Car | undefined {
+    if (humanFollow && state.human && !state.human.damaged) return state.human;
     const inCategory = (car: Car) =>
       !car.damaged &&
       (follow === 'mixed'

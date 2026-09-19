@@ -276,6 +276,17 @@ ul:hover {
   background: rgba(255, 255, 255, 0.85);
   border-radius: 4px;
 }
+.readout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.laps {
+  font-family: monospace;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
 .speedo {
   display: flex;
   align-items: baseline;

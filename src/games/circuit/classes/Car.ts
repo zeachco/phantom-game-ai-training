@@ -42,6 +42,8 @@ export class Car {
   public nextCheckpoint = 0;
   /** set for one frame when the car claims the last gate and wraps to the start */
   public completedLap = false;
+  /** full laps on the current map, the map advances at LAPS_PER_SEED */
+  public laps = 0;
   /** set for one frame when the car claims an in-order checkpoint */
   public passedCheckpoint = false;
   /** gate the car is currently inside, -1 in none, charges out-of-order entries */
@@ -52,7 +54,8 @@ export class Car {
   public gateDelta = 0;
   /** performance.now() of the crash, corpses are deleted after DEAD_LIFETIME */
   public deathTime = 0;
-  public bornAt: number;
+  /** performance.now() when the current stall began, 0 while moving */
+  private stallSince = 0;
   private img: HTMLImageElement;
   private mask: HTMLCanvasElement;
   /** color the mask currently holds, it is only repainted when that moves */
@@ -89,7 +92,6 @@ export class Car {
     this.friction = config.CAR_FRICTION;
     this.angle = angle;
     this.damaged = false;
-    this.bornAt = performance.now();
 
     this.useAI = controlType == ControlType.AI;
 
@@ -142,7 +144,8 @@ export class Car {
     if (this.brain) this.#updateScore(circuit);
 
     this.#createPolygon();
-    this.damaged = this.#assessDamage(obstacles, circuit);
+    this.damaged =
+      this.#assessDamage(obstacles, circuit) || this.#checkStall();
     if (this.sensor) {
       this.sensor.update(obstacles, circuit.segments);
       if (this.useAI) {
@@ -163,6 +166,21 @@ export class Car {
 
   /** the trickle keeps a car moving, the gates in order carry the score,
    *  a gate touched out of order is a debt charged once per entry */
+  /** a car under CAR_STALL_SPEED for CAR_STALL_TIMEOUT in a row has stalled */
+  #checkStall() {
+    const now = performance.now();
+    if (Math.hypot(this.vx, this.vy) < config.CAR_STALL_SPEED) {
+      if (this.stallSince === 0) {
+        this.stallSince = now;
+        return false;
+      }
+      if (now - this.stallSince > config.CAR_STALL_TIMEOUT) return true;
+      return false;
+    }
+    this.stallSince = 0;
+    return false;
+  }
+
   #updateScore(circuit: Circuit) {
     this.brain.score += this.speed * config.DISTANCE_SCORE_RATE;
     const checkpoints = circuit.checkpoints;
@@ -185,7 +203,10 @@ export class Car {
         this.brain.score += config.CHECKPOINT_SCORE;
         this.passedCheckpoint = true;
         // claiming the last gate wraps the index back to the start: a full lap
-        if (this.nextCheckpoint === n - 1) this.completedLap = true;
+        if (this.nextCheckpoint === n - 1) {
+          this.completedLap = true;
+          this.laps++;
+        }
         this.nextCheckpoint = (this.nextCheckpoint + 1) % n;
       } else if (gate !== this.insideGate) {
         this.brain.score -= config.CHECKPOINT_SCORE;
