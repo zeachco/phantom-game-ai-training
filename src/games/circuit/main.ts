@@ -385,7 +385,18 @@ export default async (state: typeof defaultState) => {
   brakePedal.append(brakeCap);
   gasPedal.append(gasCap);
   pedalGroup.append(brakePedal, gasPedal);
-  steerOverlay.append(wheelCanvas, pedalGroup);
+  // the speed reads the followed car's velocity magnitude, raw
+  const speedo = document.createElement('div');
+  speedo.className = 'speedo';
+  speedo.title = 'speed';
+  const speedoValue = document.createElement('span');
+  speedoValue.className = 'speedo-value';
+  speedoValue.textContent = '0.0';
+  const speedoUnit = document.createElement('span');
+  speedoUnit.className = 'speedo-unit';
+  speedoUnit.textContent = 'u/f';
+  speedo.append(speedoValue, speedoUnit);
+  steerOverlay.append(wheelCanvas, pedalGroup, speedo);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
@@ -624,6 +635,7 @@ export default async (state: typeof defaultState) => {
       state.living++;
     } else if (state.human && car === state.human) {
       // a human crash respawns a fresh human car, the person keeps driving
+      car.controls.dispose();
       state.human = undefined;
       spawnHuman();
       state.living++;
@@ -645,7 +657,10 @@ export default async (state: typeof defaultState) => {
       saveScores(group);
     }
     state.cars = groups.flatMap((g) => g.pool);
-    if (state.human) spawnHuman();
+    if (state.human) {
+      state.human.controls.dispose();
+      spawnHuman();
+    }
     state.population = state.cars.length;
     state.living = state.cars.length;
     camSet = false;
@@ -815,6 +830,7 @@ export default async (state: typeof defaultState) => {
       drawWheel();
       brakeCap.style.transform = `translateY(${Math.max(0, Math.min(1, c.reverse)) * config.STEER_UI_PEDAL_TRAVEL}px)`;
       gasCap.style.transform = `translateY(${Math.max(0, Math.min(1, c.forward)) * config.STEER_UI_PEDAL_TRAVEL}px)`;
+      speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(1);
     }
     lastFollowed = camTarget;
     state.camX = camX;
