@@ -233,3 +233,47 @@ ul:hover {
   border-radius: 4px;
   font: inherit;
 }
+
+/* steering wheel + pedals: a fixed cockpit overlay mimicking the followed car */
+.steer-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 12px 24px;
+  pointer-events: none;
+  z-index: 500;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+.steer-overlay.hidden {
+  opacity: 0;
+}
+.steer-wheel {
+  width: 110px;
+  height: 110px;
+}
+.pedal-group {
+  display: flex;
+  gap: 14px;
+}
+.pedal {
+  position: relative;
+  width: 44px;
+  height: 90px;
+  overflow: hidden;
+  background: rgba(25, 52, 94, 0.55);
+  border-radius: 8px;
+}
+.pedal-cap {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 4px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+}

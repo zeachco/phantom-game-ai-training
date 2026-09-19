@@ -323,6 +323,63 @@ export default async (state: typeof defaultState) => {
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
 
+  // the wheel and pedals mimic the followed car's live outputs, display only
+  const steerOverlay = document.createElement('div');
+  steerOverlay.className = 'steer-overlay hidden';
+  const wheelCanvas = document.createElement('canvas');
+  wheelCanvas.className = 'steer-wheel';
+  wheelCanvas.width = 110;
+  wheelCanvas.height = 110;
+  const wheelCtx = wheelCanvas.getContext('2d');
+  const pedalGroup = document.createElement('div');
+  pedalGroup.className = 'pedal-group';
+  const brakePedal = document.createElement('div');
+  brakePedal.className = 'pedal';
+  brakePedal.title = 'brake / reverse';
+  const brakeCap = document.createElement('div');
+  brakeCap.className = 'pedal-cap';
+  const gasPedal = document.createElement('div');
+  gasPedal.className = 'pedal';
+  gasPedal.title = 'gas';
+  const gasCap = document.createElement('div');
+  gasCap.className = 'pedal-cap';
+  brakePedal.append(brakeCap);
+  gasPedal.append(gasCap);
+  pedalGroup.append(brakePedal, gasPedal);
+  steerOverlay.append(wheelCanvas, pedalGroup);
+  document.body.appendChild(steerOverlay);
+
+  let lastFollowed: Car | undefined;
+  let wheelAngle = 0;
+
+  function drawWheel() {
+    if (!wheelCtx) return;
+    wheelCtx.clearRect(0, 0, 110, 110);
+    wheelCtx.save();
+    wheelCtx.translate(55, 55);
+    // negative so a positive (left) steer turns the wheel counter-clockwise
+    wheelCtx.rotate(-wheelAngle);
+    wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    wheelCtx.lineWidth = 8;
+    wheelCtx.beginPath();
+    wheelCtx.arc(0, 0, 46, 0, Math.PI * 2);
+    wheelCtx.stroke();
+    wheelCtx.lineWidth = 4;
+    for (let s = 0; s < 3; s++) {
+      const a = (s / 3) * Math.PI * 2;
+      wheelCtx.beginPath();
+      wheelCtx.moveTo(0, 0);
+      wheelCtx.lineTo(Math.cos(a) * 44, Math.sin(a) * 44);
+      wheelCtx.stroke();
+    }
+    // the marker notch makes the rotation readable
+    wheelCtx.fillStyle = 'rgba(255, 220, 0, 0.9)';
+    wheelCtx.beginPath();
+    wheelCtx.arc(0, -40, 5, 0, Math.PI * 2);
+    wheelCtx.fill();
+    wheelCtx.restore();
+  }
+
   toggleBtn.onclick = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
@@ -708,14 +765,25 @@ export default async (state: typeof defaultState) => {
         camY = camTarget.y;
         camSet = true;
       }
-      // lead the target by 2 frames of travel so the 10% lerp stays centered
-      camX +=
-        (camTarget.x - 2 * camTarget.speed * Math.sin(camTarget.angle) - camX) *
-        0.1;
-      camY +=
-        (camTarget.y - 2 * camTarget.speed * Math.cos(camTarget.angle) - camY) *
-        0.1;
+      // lead the target by 2 frames of true velocity so the 10% lerp stays centered
+      camX += (camTarget.x - 2 * camTarget.vx - camX) * 0.1;
+      camY += (camTarget.y - 2 * camTarget.vy - camY) * 0.1;
     }
+    // the controls mimic the followed car, hidden while it is dead
+    steerOverlay.classList.toggle(
+      'hidden',
+      !camTarget || (lastFollowed && lastFollowed.damaged),
+    );
+    if (camTarget) {
+      const c = camTarget.controls;
+      const steer = Math.max(-1, Math.min(1, c.left - c.right));
+      wheelAngle +=
+        (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) * config.STEER_UI_SMOOTH;
+      drawWheel();
+      brakeCap.style.transform = `translateY(${Math.max(0, Math.min(1, c.reverse)) * config.STEER_UI_PEDAL_TRAVEL}px)`;
+      gasCap.style.transform = `translateY(${Math.max(0, Math.min(1, c.forward)) * config.STEER_UI_PEDAL_TRAVEL}px)`;
+    }
+    lastFollowed = camTarget;
     state.camX = camX;
     state.camY = camY;
     carCtx.save();
@@ -807,6 +875,7 @@ export default async (state: typeof defaultState) => {
     Object.assign(state, defaultState);
     state.playing = true;
     camSet = false;
+    lastFollowed = undefined;
     state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
     state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
     state.circuit = circuit;

@@ -3,7 +3,7 @@ import { NeuralNetwork } from '../../../ai/Network';
 import { Sensor } from './Sensor';
 import { ControlType } from '../types';
 import carImg from '../assets/car.png';
-import { AABB, polysIntersect, Vector } from '../../../utilities/math';
+import { AABB, lerp, polysIntersect, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
 import { config } from './Config';
 import { Circuit } from './Circuit';
@@ -17,6 +17,9 @@ const GATE_COLORS = new Array(21).fill(0).map((_s, i) => {
 
 export class Car {
   public speed: number;
+  public vx: number;
+  public vy: number;
+  public drifting: boolean;
   public acceleration: number;
   public friction: number;
   public damaged: boolean;
@@ -75,6 +78,9 @@ export class Car {
     this.y = y;
 
     this.speed = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.drifting = false;
     this.acceleration = config.CAR_ACCELERATION;
     this.maxSpeed = maxSpeed;
     this.friction = config.CAR_FRICTION;
@@ -264,23 +270,61 @@ export class Car {
   }
 
   #move() {
-    const { forward, reverse, left, right } = this.controls;
-    if (forward > 0) this.speed += this.acceleration * forward;
-    if (reverse > 0) this.speed -= this.acceleration * reverse;
-    if (this.speed > this.maxSpeed) this.speed = this.maxSpeed;
-    if (this.speed < -this.maxSpeed / 2) this.speed = -this.maxSpeed / 2;
-    if (this.speed > 0) this.speed -= this.friction;
-    if (this.speed < 0) this.speed += this.friction;
-    if (Math.abs(this.speed) < this.friction) this.speed = 0;
-
-    if (left > 0) this.va += (this.speed / 300) * left;
-    if (right > 0) this.va -= (this.speed / 300) * right;
-
-    this.va *= 0.6;
+    // 1. decompose old velocity in heading frame
+    const v = Math.hypot(this.vx, this.vy);
+    const steer = this.controls.left - this.controls.right;
+    const target =
+      steer *
+      lerp(config.CAR_YAW_SHARP, config.CAR_YAW_LAZY, Math.min(1, v / this.maxSpeed));
+    this.va += (target - this.va) * config.CAR_YAW_RESPONSE;
     this.angle += this.va;
 
-    this.x -= Math.sin(this.angle) * this.speed;
-    this.y -= Math.cos(this.angle) * this.speed;
+    // 2. decompose in new heading frame
+    const hx = -Math.sin(this.angle), hy = -Math.cos(this.angle);
+    const px = Math.cos(this.angle), py = -Math.sin(this.angle);
+    let vf = this.vx * hx + this.vy * hy;
+    let vl = this.vx * px + this.vy * py;
+
+    // 3. apply forward/reverse force
+    if (this.controls.forward > 0) vf += config.CAR_ACCELERATION * this.controls.forward;
+    if (this.controls.reverse > 0) {
+      if (vf > 0) vf = Math.max(0, vf - config.CAR_BRAKE_DECEL * this.controls.reverse);
+      else vf -= config.CAR_REVERSE_ACCEL * this.controls.reverse;
+    }
+
+    // 4. tire grip: lateral acceleration demands exceed grip limit, the lateral component persists
+    const demand = v * Math.abs(this.va);
+    const over = Math.min(1, demand / (this.maxSpeed * config.CAR_GRIP_LIMIT_RATIO));
+    const grip = lerp(config.CAR_GRIP, config.CAR_DRIFT_GRIP, over);
+    vl *= 1 - grip;
+
+    this.drifting = Math.abs(vl) > config.CAR_DRIFT_THRESHOLD;
+    if (this.drifting) vf *= 1 - config.CAR_DRIFT_SPEED_LOSS;
+
+    // 5. friction opposing motion
+    const vm = Math.hypot(vf, vl);
+    if (vm > 0) {
+      const f = Math.max(0, vm - config.CAR_FRICTION) / vm;
+      vf *= f;
+      vl *= f;
+    }
+
+    // 6. caps: forward ≤ maxSpeed, reverse ≥ -maxSpeed/2, total ≤ maxSpeed
+    if (vf > this.maxSpeed) vf = this.maxSpeed;
+    if (vf < -this.maxSpeed / 2) vf = -this.maxSpeed / 2;
+    const vm2 = Math.hypot(vf, vl);
+    if (vm2 > this.maxSpeed) {
+      const s = this.maxSpeed / vm2;
+      vf *= s;
+      vl *= s;
+    }
+
+    // 7. recompose and store
+    this.vx = hx * vf + px * vl;
+    this.vy = hy * vf + py * vl;
+    this.speed = vf;
+    this.x += this.vx;
+    this.y += this.vy;
   }
 
   draw(ctx: CanvasRenderingContext2D, focused = false) {

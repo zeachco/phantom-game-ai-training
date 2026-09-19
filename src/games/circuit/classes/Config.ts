@@ -55,12 +55,40 @@ class Config {
   public SENSORS_EDGE_LENGTH = 144;
 
   // car
+  /** yaw rate (rad/frame) at zero speed, full steer: the on-the-spot pivot */
+  public CAR_YAW_SHARP = 0.06;
+  /** yaw rate at max speed, full steer: the lazier top-speed corner */
+  public CAR_YAW_LAZY = 0.025;
+  /** first-order response of the yaw toward its target (yaw inertia) */
+  public CAR_YAW_RESPONSE = 0.35;
+  /** lateral velocity fraction cancelled per frame when grip is not saturated */
+  public CAR_GRIP = 0.45;
+  /** fraction cancelled when the grip limit is saturated: the drift */
+  public CAR_DRIFT_GRIP = 0.06;
+  /** grip limit as a fraction of maxSpeed, the turn demand that breaks it */
+  public CAR_GRIP_LIMIT_RATIO = 0.02;
+  /** |lateral velocity| above which the car counts as drifting */
+  public CAR_DRIFT_THRESHOLD = 0.15;
+  /** forward speed fraction lost per frame while drifting: drifts bleed */
+  public CAR_DRIFT_SPEED_LOSS = 0.005;
+  /** braking before the reverse drive kicks in */
+  public CAR_BRAKE_DECEL = 0.1;
+  /** reverse driving acceleration, the cap stays maxSpeed/2 */
+  public CAR_REVERSE_ACCEL = 0.03;
   public CAR_ACCELERATION = 0.03;
   public CAR_FRICTION = 0.005;
   public CAR_MAX_SPEED = 5;
   public CLEAR_STORAGE = /clear/.test(window.location.href);
   /** leaving the road kills, the trickle only exists to reward moving on it */
   public DISTANCE_SCORE_RATE = 1 / 30;
+
+  // steering ui, the wheel and pedals mimic the followed car's outputs
+  /** wheel rotation at full steer, radians */
+  public STEER_UI_WHEEL_MAX_ANGLE = 2.2;
+  /** max pedal depression, px */
+  public STEER_UI_PEDAL_TRAVEL = 30;
+  /** display lerp for the wheel, the brain outputs are noisy per frame */
+  public STEER_UI_SMOOTH = 0.35;
 
   // circuit, a radial curve r(theta) so the random waves can never
   // self-intersect, the map is bigger than the screen
