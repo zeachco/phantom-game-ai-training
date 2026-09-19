@@ -1,6 +1,6 @@
 import { mulberry32, Rng, Vector } from '../../../utilities/math';
 import { config } from './Config';
-import { Obstacle } from './Obstacle';
+import { COLORS, Obstacle } from './Obstacle';
 import { Checkpoint } from './Checkpoint';
 
 /** one boundary edge with its precomputed box, the sensor's wall */
@@ -125,7 +125,10 @@ export class Circuit {
       );
     }
 
-    // obstacles seeded with the same rng stream
+    // obstacles seeded with the same rng stream; the gap between a block's
+    // side and the road edge is either at least one car width or zero —
+    // anything in between is an opening the sensors see but no car fits,
+    // so the block snaps flush to the nearer edge
     this.obstacles = [];
     const per = this.length / n;
     const first = Math.round((config.SPAWN_OFFSET + 250) / per) + 1;
@@ -137,12 +140,22 @@ export class Circuit {
       const idx = Math.round(base + (-0.35 + rng() * 0.7) * step) % n;
       const p = this.points[idx];
       const t = this.tangents[idx];
-      const off = -60 + rng() * 120;
+      const width = 24 + rng() * 24;
+      const height = 20 + rng() * 30;
+      const color = COLORS[Math.floor(rng() * COLORS.length)];
+      let off = -60 + rng() * 120;
+      const gap = half - (Math.abs(off) + width / 2);
+      if (gap < config.OBSTACLE_PASS_GAP) {
+        off = (off < 0 ? -1 : 1) * (half - width / 2);
+      }
       this.obstacles.push(
         new Obstacle(
           p.x + this.normals[idx].x * off,
           p.y + this.normals[idx].y * off,
           Math.atan2(-t.x, -t.y),
+          width,
+          height,
+          color,
         ),
       );
     }

@@ -111,6 +111,9 @@ class Config {
 
   // obstacles, solid blocks along the road, none in the start zone
   public OBSTACLES = 40;
+  /** one car width (Car.width): the minimum gap between a block's side and
+   *  the road edge, otherwise the block snaps flush to the edge */
+  public OBSTACLE_PASS_GAP = 30;
 
   public get CAR_PER_LEVELS() {
     return this.CAR_NB / this.MAX_NETWORK_LAYERS;

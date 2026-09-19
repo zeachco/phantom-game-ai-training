@@ -1,15 +1,12 @@
-import { AABB, Vector, rand } from '../../../utilities/math';
+import { AABB, Vector } from '../../../utilities/math';
 
-const COLORS = ['#d96a2b', '#8a4a2a', '#b23a3a'];
+export const COLORS = ['#d96a2b', '#8a4a2a', '#b23a3a'];
 
 /**
  * A solid block on the road. It never moves, so the polygon and its box are
  * built once in the constructor and reused by the damage check and the rays.
  */
 export class Obstacle {
-  public width: number;
-  public height: number;
-  public color: string;
   public polygon: Vector[] = [
     { x: 0, y: 0 },
     { x: 0, y: 0 },
@@ -22,10 +19,10 @@ export class Obstacle {
     public x: number,
     public y: number,
     public angle: number,
+    public width: number,
+    public height: number,
+    public color: string,
   ) {
-    this.width = rand(24, 48);
-    this.height = rand(20, 50);
-    this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
     this.#corners();
   }
 
