@@ -42,6 +42,8 @@ export class Car {
   public nextCheckpoint = 0;
   /** set for one frame when the car claims the last gate and wraps to the start */
   public completedLap = false;
+  /** set for one frame when the car claims an in-order checkpoint */
+  public passedCheckpoint = false;
   /** gate the car is currently inside, -1 in none, charges out-of-order entries */
   public insideGate = -1;
   /** position of the next gate and the signed delta, refreshed for the viz */
@@ -105,8 +107,6 @@ export class Car {
 
     this.img = new Image();
     this.img.src = carImg;
-
-    this.img.onload = () => this.#paintMask();
 
     this.mask = document.createElement('canvas');
     this.mask.width = this.width;
@@ -183,6 +183,7 @@ export class Car {
     if (gate !== -1) {
       if (gate === this.nextCheckpoint) {
         this.brain.score += config.CHECKPOINT_SCORE;
+        this.passedCheckpoint = true;
         // claiming the last gate wraps the index back to the start: a full lap
         if (this.nextCheckpoint === n - 1) this.completedLap = true;
         this.nextCheckpoint = (this.nextCheckpoint + 1) % n;

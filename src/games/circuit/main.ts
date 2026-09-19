@@ -26,8 +26,7 @@ function scoreKey(group: Group) {
     : `circuit_score_${group.layer}`;
 }
 
-let groupDirty = false;
-let lastScoresSave = 0;
+
 
 function loadScores(group: Group, seed: number) {
   let scores: GroupScores | null = null;
@@ -446,6 +445,7 @@ export default async (state: typeof defaultState) => {
   let laps = 0;
   let circuit = new Circuit(seed);
   const groups: Group[] = [];
+  const pendingSaves = new Set<Group>();
 
 
 
@@ -574,7 +574,7 @@ export default async (state: typeof defaultState) => {
     // a snapshot: later changes to the promoting car cannot alter the best
     const brain = JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork;
     group.best = { brain, score: car.brain.score };
-    io.saveBestModels([car.brain], 1);
+    pendingSaves.add(group);
     // keep the in-memory saves in sync: the board shows them, and the mixed
     // brain's experts are re-hydrated from them when the mixed pool next spawns
     const saves = group.isMixed ? state.sortedMixed : state.sortedModels;
@@ -590,6 +590,14 @@ export default async (state: typeof defaultState) => {
     }
   }
 
+  function flushPendingSaves() {
+    for (const group of pendingSaves) {
+      if (group.best) io.saveBestModels([group.best.brain], 1);
+      saveScores(group);
+    }
+    pendingSaves.clear();
+  }
+
   function groupOf(car: Car): Group | undefined {
     const key =
       car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers);
@@ -600,6 +608,9 @@ export default async (state: typeof defaultState) => {
   function onDeath(car: Car) {
     state.living--;
     car.deathTime = performance.now();
+
+    // a crash is a save point: flush everything staged so far
+    flushPendingSaves();
 
     if (car.useAI) {
       const group = groupOf(car);
@@ -699,6 +710,8 @@ export default async (state: typeof defaultState) => {
 
     if (state.playing) {
       const now = performance.now();
+      // a checkpoint pass is a save point: staged saves flush only then
+      let savePoint = false;
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         const alive = !car.damaged;
@@ -712,6 +725,12 @@ export default async (state: typeof defaultState) => {
           car.setColor(mixedColor(brain));
         }
         if (alive && car.damaged) onDeath(car);
+        if (car.passedCheckpoint) {
+          car.passedCheckpoint = false;
+          savePoint = true;
+          const group = groupOf(car);
+          if (group) pendingSaves.add(group);
+        }
       }
       // corpses stay on the map long enough to read where the line failed
       for (let i = state.cars.length - 1; i >= 0; i--) {
@@ -732,7 +751,7 @@ export default async (state: typeof defaultState) => {
             brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
             score: car.brain.score,
           };
-          groupDirty = true;
+          pendingSaves.add(group);
         }
         if (!group.best || car.brain.score > group.scores.total) promote(group, car);
       }
@@ -749,12 +768,9 @@ export default async (state: typeof defaultState) => {
         (a, b) => b.brain.score - a.brain.score,
       );
 
-      // the seed high changes often, saving is throttled to once a second
-      if (groupDirty && now - lastScoresSave > 1000) {
-        lastScoresSave = now;
-        groupDirty = false;
-        for (const group of groups) saveScores(group);
-      }
+      // crashes flush in onDeath, the map fold and the unload persist
+      // directly; the checkpoint pass is the only per-frame save point
+      if (savePoint) flushPendingSaves();
     }
     updateFollowButtons();
 
