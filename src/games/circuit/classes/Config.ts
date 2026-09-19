@@ -45,11 +45,15 @@ class Config {
   public LANE_COLOR = 'rgba(255, 255, 255, 0.4)';
   public EDGE_COLOR = 'white';
 
-  // env
+  // env, the sensor fan is a front arc: longest straight ahead, tapering
+  // to the edges, so reach is one honest function of where a ray points
   public SENSORS = 17;
-  public SENSOR_ANGLE = (Math.PI / 2) * 3.5;
-  public SENSORS_MAX_DEPTH = 160;
-  public SENSORS_MAX_WIDTH = 160;
+  /** total fan spread centered on the heading, was a ~315 deg sweep */
+  public SENSOR_ANGLE = (Math.PI / 180) * 120;
+  /** reach of the center ray, ~1 s of lookahead at full throttle */
+  public SENSORS_MAX_LENGTH = 240;
+  /** reach of the edge rays, the sides pay for the forward reach */
+  public SENSORS_EDGE_LENGTH = 144;
 
   // car
   public CAR_ACCELERATION = 0.03;

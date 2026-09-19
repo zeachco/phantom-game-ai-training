@@ -26,6 +26,8 @@ export class Sensor {
   /** each ray's fixed offset from the car angle, with its sin/cos precomputed */
   #cosOff: number[] = [];
   #sinOff: number[] = [];
+  /** each ray's reach, a smooth profile over the fan angle */
+  #lengths: number[] = [];
 
   constructor(car: Car) {
     this.car = car;
@@ -34,13 +36,14 @@ export class Sensor {
     this.rays = [];
     this.readings = new Array(this.rayCount);
     for (let i = 0; i < this.rayCount; i++) {
-      const offset = lerp(
-        config.SENSOR_ANGLE / 2,
-        -config.SENSOR_ANGLE / 2,
-        this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
-      );
+      const t = this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1);
+      const offset = lerp(config.SENSOR_ANGLE / 2, -config.SENSOR_ANGLE / 2, t);
       this.#cosOff.push(Math.cos(offset));
       this.#sinOff.push(Math.sin(offset));
+      // cosine bell: 1 straight ahead, 0 at the edges, smooth between
+      this.#lengths.push(
+        lerp(config.SENSORS_EDGE_LENGTH, config.SENSORS_MAX_LENGTH, Math.cos((t - 0.5) * Math.PI)),
+      );
       this.rays.push([
         { x: 0, y: 0 },
         { x: 0, y: 0 },
@@ -117,8 +120,8 @@ export class Sensor {
       start.y = this.car.y;
       const sinR = sinA * this.#cosOff[i] - cosA * this.#sinOff[i];
       const cosR = cosA * this.#cosOff[i] + sinA * this.#sinOff[i];
-      end.x = this.car.x - sinR * config.SENSORS_MAX_WIDTH;
-      end.y = this.car.y - cosR * config.SENSORS_MAX_DEPTH;
+      end.x = this.car.x - sinR * this.#lengths[i];
+      end.y = this.car.y - cosR * this.#lengths[i];
     }
   }
 
