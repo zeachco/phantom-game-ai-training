@@ -416,7 +416,8 @@ export default async (state: typeof defaultState) => {
     wheelCtx.stroke();
     wheelCtx.lineWidth = 4;
     for (let s = 0; s < 3; s++) {
-      const a = (s / 3) * Math.PI * 2;
+      // +PI/2 so one spoke points down and two up: symmetric about the notch
+      const a = (s / 3) * Math.PI * 2 + Math.PI / 2;
       wheelCtx.beginPath();
       wheelCtx.moveTo(0, 0);
       wheelCtx.lineTo(Math.cos(a) * 44, Math.sin(a) * 44);

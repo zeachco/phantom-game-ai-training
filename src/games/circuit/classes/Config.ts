@@ -77,7 +77,8 @@ class Config {
   public CAR_BRAKE_DECEL = 0.1;
   /** reverse driving acceleration, the cap stays maxSpeed/2 */
   public CAR_REVERSE_ACCEL = 0.03;
-  public CAR_ACCELERATION = 0.03;
+  /** tripled on purpose: the car needs the speed to actually drift */
+  public CAR_ACCELERATION = 0.09;
   public CAR_FRICTION = 0.005;
   public CAR_MAX_SPEED = 5;
   public CLEAR_STORAGE = /clear/.test(window.location.href);
@@ -87,8 +88,8 @@ class Config {
   // steering ui, the wheel and pedals mimic the followed car's outputs
   /** wheel rotation at full steer, radians */
   public STEER_UI_WHEEL_MAX_ANGLE = 2.2;
-  /** max pedal depression, px */
-  public STEER_UI_PEDAL_TRAVEL = 30;
+  /** max pedal depression, px — the full stroke (90 pedal - 28 cap - 8 pads) */
+  public STEER_UI_PEDAL_TRAVEL = 54;
   /** display lerp for the wheel, the brain outputs are noisy per frame */
   public STEER_UI_SMOOTH = 0.35;
 
