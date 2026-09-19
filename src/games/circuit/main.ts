@@ -17,7 +17,13 @@ import { Car } from './classes/Car';
 import { config } from './classes/Config';
 import { Circuit } from './classes/Circuit';
 import { ControlType } from './types';
-import { defaultState, drawScores, mixedColor, Group, GroupScores } from './utilities';
+import {
+  defaultState,
+  drawScores,
+  mixedColor,
+  Group,
+  GroupScores,
+} from './utilities';
 
 /** scores live under their own key per group, still inside the game prefix */
 function scoreKey(group: Group) {
@@ -25,8 +31,6 @@ function scoreKey(group: Group) {
     ? `circuit_score_${MIXED_KIND}_${MIXED_LEVELS}`
     : `circuit_score_${group.layer}`;
 }
-
-
 
 function loadScores(group: Group, seed: number) {
   let scores: GroupScores | null = null;
@@ -55,7 +59,10 @@ function saveScores(group: Group) {
  *  total, so recent maps dominate and the bar self-calibrates */
 function foldScores(scores: GroupScores, newSeed: number) {
   const finished = String(scores.current);
-  scores.history[finished] = Math.max(scores.history[finished] || 0, scores.seed);
+  scores.history[finished] = Math.max(
+    scores.history[finished] || 0,
+    scores.seed,
+  );
   scores.total = (scores.total + scores.seed) / 2;
   scores.current = newSeed;
   scores.seed = 0;
@@ -90,7 +97,7 @@ export default async (state: typeof defaultState) => {
   let camX = 0;
   let camY = 0;
   let camSet = false;
-  let panelOpen = true;
+  let panelOpen = !window.location.href.includes('demo=true');
   /** the mixed brain's library, empty until the first saves exist */
   let experts: NeuralNetwork[] = [];
 
@@ -113,9 +120,8 @@ export default async (state: typeof defaultState) => {
     state.population++;
   }
 
-
   const panel = document.createElement('aside');
-  panel.className = 'side-panel open';
+  panel.className = (panelOpen ? 'open ' : '') + 'side-panel';
   panel.style.width = `${PANEL_RATIO * 100}%`;
   panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
 
@@ -274,8 +280,8 @@ export default async (state: typeof defaultState) => {
       value === 'mixed'
         ? config.MIXED_COLOR
         : value === 0
-          ? undefined
-          : getColorScale(value / config.MAX_NETWORK_LAYERS);
+        ? undefined
+        : getColorScale(value / config.MAX_NETWORK_LAYERS);
     if (color) {
       btn.style.setProperty('--btn-color', color);
       // black or white, whichever keeps the higher contrast on the car color
@@ -441,8 +447,6 @@ export default async (state: typeof defaultState) => {
   let circuit = new Circuit(seed);
   const groups: Group[] = [];
   const pendingSaves = new Set<Group>();
-
-
 
   /** the ladder's top: shrinks with session progress (laps completed) */
   function maxMutation() {
@@ -759,7 +763,8 @@ export default async (state: typeof defaultState) => {
           };
           pendingSaves.add(group);
         }
-        if (!group.best || car.brain.score > group.scores.total) promote(group, car);
+        if (!group.best || car.brain.score > group.scores.total)
+          promote(group, car);
       }
 
       // a car needs LAPS_PER_SEED full laps on this seed before the map advances
@@ -818,15 +823,19 @@ export default async (state: typeof defaultState) => {
       const c = camTarget.controls;
       const steer = Math.max(-1, Math.min(1, c.left - c.right));
       wheelAngle +=
-        (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) * config.STEER_UI_SMOOTH;
+        (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) *
+        config.STEER_UI_SMOOTH;
       drawWheel();
       const throttle = Math.max(-1, Math.min(1, c.throttle));
-      pedalCap.style.transform = `translateY(${(1 - throttle) * config.STEER_UI_PEDAL_TRAVEL}px)`;
-      speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(1);
-      lapsEl.textContent = `${Math.min(
-        camTarget.laps,
-        config.LAPS_PER_SEED,
-      )}/${config.LAPS_PER_SEED}`;
+      pedalCap.style.transform = `translateY(${
+        (1 - throttle) * config.STEER_UI_PEDAL_TRAVEL
+      }px)`;
+      speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(
+        1,
+      );
+      lapsEl.textContent = `${Math.min(camTarget.laps, config.LAPS_PER_SEED)}/${
+        config.LAPS_PER_SEED
+      }`;
     }
     lastFollowed = camTarget;
     state.camX = camX;
@@ -915,8 +924,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)
