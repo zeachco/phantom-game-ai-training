@@ -25,6 +25,9 @@ export class Circuit {
   public normals: Vector[] = [];
   public left: Vector[] = [];
   public right: Vector[] = [];
+  /** half width per point per side: the pinched edge is closer than the other */
+  public leftHalf: number[] = [];
+  public rightHalf: number[] = [];
   /** decimated boundary edges with precomputed boxes, what the rays bounce off */
   public segments: Segment[] = [];
   public checkpoints: Checkpoint[] = [];
@@ -88,11 +91,63 @@ export class Circuit {
     }
 
     const half = config.ROAD_WIDTH / 2;
+    const per = this.length / n;
+    const first = Math.round((config.SPAWN_OFFSET + 250) / per) + 1;
+    const last = n - 4;
+
+    // the road pinches from 3 lanes to 2 in seeded sections: one edge eases
+    // in over a transition, holds, eases back, the centerline never moves
+    const narrowHalf = config.ROAD_NARROW_WIDTH / 2;
+    const leftHalf = new Array<number>(n).fill(half);
+    const rightHalf = new Array<number>(n).fill(half);
+    const sectionLen =
+      config.NARROW_TRANSITION +
+      config.NARROW_LENGTH +
+      config.NARROW_TRANSITION;
+    const sectionCount = 1 + Math.floor(rng() * config.NARROW_SECTIONS_MAX);
+    for (let s = 0; s < sectionCount; s++) {
+      const start =
+        first +
+        8 +
+        Math.floor(
+          rng() * Math.max(1, last - first - 16 - sectionLen),
+        );
+      const pinchLeft = rng() < 0.5;
+      for (let i = 0; i < sectionLen; i++) {
+        const idx = (start + i) % n;
+        let narrow: number;
+        if (i < config.NARROW_TRANSITION)
+          narrow = 0.5 - 0.5 * Math.cos((i / config.NARROW_TRANSITION) * Math.PI);
+        else if (i < config.NARROW_TRANSITION + config.NARROW_LENGTH)
+          narrow = 1;
+        else
+          narrow =
+            0.5 +
+            0.5 *
+              Math.cos(
+                ((i - config.NARROW_TRANSITION - config.NARROW_LENGTH) /
+                  config.NARROW_TRANSITION) *
+                  Math.PI,
+              );
+        const w = half - (half - narrowHalf) * narrow;
+        if (pinchLeft) leftHalf[idx] = Math.min(leftHalf[idx], w);
+        else rightHalf[idx] = Math.min(rightHalf[idx], w);
+      }
+    }
+    this.leftHalf = leftHalf;
+    this.rightHalf = rightHalf;
+
     for (let i = 0; i < n; i++) {
       const p = this.points[i];
       const nm = this.normals[i];
-      this.left.push({ x: p.x + nm.x * half, y: p.y + nm.y * half });
-      this.right.push({ x: p.x - nm.x * half, y: p.y - nm.y * half });
+      this.left.push({
+        x: p.x + nm.x * leftHalf[i],
+        y: p.y + nm.y * leftHalf[i],
+      });
+      this.right.push({
+        x: p.x - nm.x * rightHalf[i],
+        y: p.y - nm.y * rightHalf[i],
+      });
     }
 
     const pushSegments = (bound: Vector[]) => {
@@ -130,14 +185,18 @@ export class Circuit {
     // anything in between is an opening the sensors see but no car fits,
     // so the block snaps flush to the nearer edge
     this.obstacles = [];
-    const per = this.length / n;
-    const first = Math.round((config.SPAWN_OFFSET + 250) / per) + 1;
-    const last = n - 4;
     const span = Math.max(1, last - first);
     const step = span / config.OBSTACLES;
     for (let i = 0; i < config.OBSTACLES; i++) {
       const base = first + (i + 0.5) * step;
       const idx = Math.round(base + (-0.35 + rng() * 0.7) * step) % n;
+      // no obstacles where the full 3-lane width is missing, transitions
+      // included: a block there would wall the pinch
+      if (
+        this.leftHalf[idx] < half - 0.5 ||
+        this.rightHalf[idx] < half - 0.5
+      )
+        continue;
       const p = this.points[idx];
       const t = this.tangents[idx];
       const width = 24 + rng() * 24;
@@ -167,12 +226,30 @@ export class Circuit {
       path.closePath();
       return path;
     };
-    this.roadPath = loopPath(this.points);
+    // the road surface is the variable-width strip between the two edges
+    const strip = new Path2D();
+    strip.moveTo(this.left[0].x, this.left[0].y);
+    for (let i = 1; i < n; i++) strip.lineTo(this.left[i].x, this.left[i].y);
+    for (let i = n - 1; i >= 0; i--)
+      strip.lineTo(this.right[i].x, this.right[i].y);
+    strip.closePath();
+    this.roadPath = strip;
     this.edgePaths = [loopPath(this.left), loopPath(this.right)];
     for (let l = 1; l < config.ROAD_LANES; l++) {
-      const off = (l / config.ROAD_LANES - 0.5) * config.ROAD_WIDTH;
+      // the lane lines slide to the centerline as the road pinches, so a
+      // 2-lane section shows its single center line
       const line: Vector[] = [];
       for (let i = 0; i < n; i++) {
+        const t3 = Math.max(
+          0,
+          Math.min(
+            1,
+            (Math.min(leftHalf[i], rightHalf[i]) - narrowHalf) /
+              (half - narrowHalf),
+          ),
+        );
+        const off =
+          (l / config.ROAD_LANES - 0.5) * (leftHalf[i] + rightHalf[i]) * t3;
         line.push({
           x: this.points[i].x + this.normals[i].x * off,
           y: this.points[i].y + this.normals[i].y * off,
@@ -209,7 +286,13 @@ export class Circuit {
       distToSegment2(x, y, points[(best - 1 + n) % n], points[best]),
       distToSegment2(x, y, points[best], points[(best + 1) % n]),
     );
-    const half = config.ROAD_WIDTH / 2 + 4;
+    // the width is per side: the pinched edge is closer than the other one
+    const nm = this.normals[best];
+    const side =
+      (x - points[best].x) * nm.x + (y - points[best].y) * nm.y >= 0
+        ? this.leftHalf[best]
+        : this.rightHalf[best];
+    const half = side + 4;
     return bestD <= half * half;
   }
 
@@ -228,9 +311,8 @@ export class Circuit {
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = config.ROAD_COLOR;
-    ctx.lineWidth = config.ROAD_WIDTH;
-    ctx.stroke(this.roadPath);
+    ctx.fillStyle = config.ROAD_COLOR;
+    ctx.fill(this.roadPath);
 
     ctx.setLineDash([20, 20]);
     ctx.strokeStyle = config.LANE_COLOR;

@@ -16,8 +16,9 @@ class Config {
   public SPAWN_OFFSET = 150;
   /** corpses stay on the map that long after the crash, then get deleted */
   public DEAD_LIFETIME = 20000;
-  /** per-car lifetime cap in ms: a car that neither moves nor crashes is killed at this age so it can never keep an experiment alive forever */
-  public CAR_LIFETIME_CAP = 120000;
+  /** a car under this speed (u/f) is stalling; CAR_STALL_TIMEOUT of that in a row kills it */
+  public CAR_STALL_SPEED = 1;
+  public CAR_STALL_TIMEOUT = 5000;
 
   // mixed: a brain that picks which trained brain drives
   public MIXED_ENABLED = true;
@@ -81,7 +82,7 @@ class Config {
   public CAR_ACCELERATION = 0.09;
   public CAR_FRICTION = 0.005;
   /** top speed in u/f */
-  public CAR_MAX_SPEED = 10;
+  public CAR_MAX_SPEED = 9;
   public CLEAR_STORAGE = /clear/.test(window.location.href);
   /** leaving the road kills, the trickle only exists to reward moving on it */
   public DISTANCE_SCORE_RATE = 1 / 30;
@@ -105,6 +106,14 @@ class Config {
   public SENSOR_DECIMATION = 4;
   public ROAD_WIDTH = 180;
   public ROAD_LANES = 3;
+  /** the road pinches from 3 lanes to 2 in seeded sections, one edge at a time */
+  public ROAD_NARROW_WIDTH = 120;
+  /** 1 to this many pinched sections per map */
+  public NARROW_SECTIONS_MAX = 2;
+  /** points of centerline held at the narrow width */
+  public NARROW_LENGTH = 24;
+  /** points of smooth cosine ease in and out */
+  public NARROW_TRANSITION = 12;
 
   // checkpoints, claimed in order so the only way to bank score is
   // around the loop, donuts in the open plane earn nothing
@@ -112,9 +121,11 @@ class Config {
   /** worth more than the walk to the next one, that is the anti-donut lever */
   public CHECKPOINT_SCORE = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;
+  /** full laps one car needs on a seed before the map advances */
+  public LAPS_PER_SEED = 3;
 
   // obstacles, solid blocks along the road, none in the start zone
-  public OBSTACLES = 40;
+  public OBSTACLES = 20;
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge, otherwise the block snaps flush to the edge */
   public OBSTACLE_PASS_GAP = 30;
