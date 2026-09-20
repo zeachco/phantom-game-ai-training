@@ -228,6 +228,11 @@ export class Circuit {
         width = Math.min(width, maxWidth, fittingWidth);
       }
 
+      // A wall wider than one lane is too punishing as a solid block. Keep
+      // its full span, but flatten it into one collision/rendering line.
+      const obstacleShape =
+        shape === 'wall' && width > laneWidth ? 'line' : shape;
+
       const crossHalf =
         shape === 'circle'
           ? width / 2
@@ -256,8 +261,8 @@ export class Circuit {
           p.y + this.normals[idx].y * off,
           roadAngle + relativeAngle,
           width,
-          height,
-          shape,
+          obstacleShape === 'line' ? 0 : height,
+          obstacleShape,
         ),
       );
     }

@@ -1,6 +1,6 @@
 import type { AABB, Vector } from '../../../utilities/math';
 
-export type ObstacleShape = 'circle' | 'wall';
+export type ObstacleShape = 'circle' | 'wall' | 'line';
 
 const OBSTACLE_FILL = '#666';
 const OBSTACLE_OUTLINE = '#fff';
@@ -25,7 +25,7 @@ export class Obstacle {
     public height: number,
     public shape: ObstacleShape,
   ) {
-    const sides = shape === 'circle' ? CIRCLE_SIDES : 4;
+    const sides = shape === 'circle' ? CIRCLE_SIDES : shape === 'line' ? 2 : 4;
     this.polygon = new Array(sides).fill(0).map(() => ({ x: 0, y: 0 }));
     this.#corners();
   }
@@ -42,12 +42,17 @@ export class Obstacle {
             const a = (i / this.polygon.length) * Math.PI * 2;
             return [Math.cos(a) * hw, Math.sin(a) * hh];
           })
-        : [
-            [-hw, -hh],
-            [hw, -hh],
-            [hw, hh],
-            [-hw, hh],
-          ];
+        : this.shape === 'line'
+          ? [
+              [-hw, 0],
+              [hw, 0],
+            ]
+          : [
+              [-hw, -hh],
+              [hw, -hh],
+              [hw, hh],
+              [-hw, hh],
+            ];
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -74,6 +79,9 @@ export class Obstacle {
     ctx.beginPath();
     if (this.shape === 'circle') {
       ctx.arc(0, 0, this.width / 2, 0, Math.PI * 2);
+    } else if (this.shape === 'line') {
+      ctx.moveTo(-this.width / 2, 0);
+      ctx.lineTo(this.width / 2, 0);
     } else {
       ctx.rect(-this.width / 2, -this.height / 2, this.width, this.height);
     }
@@ -90,7 +98,7 @@ export class Obstacle {
 
     this.#path(ctx);
     ctx.strokeStyle = OBSTACLE_OUTLINE;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = this.shape === 'line' ? 5 : 3;
     ctx.setLineDash([]);
     ctx.stroke();
 
