@@ -117,7 +117,6 @@ export default async (state: typeof defaultState) => {
     state.human = car;
     state.cars.push(car);
     state.living++;
-    state.population++;
   }
 
   const panel = document.createElement('aside');
@@ -315,7 +314,7 @@ export default async (state: typeof defaultState) => {
   legend.className = 'side-panel-legend';
   [
     'Score board',
-    '💀 crashed, deleted after 20s',
+    '💀 crashed, fades out over 5s',
     '🏆 crashed with a higher score',
     '💜 car is racing',
     '💚 car is besting the total score',
@@ -331,22 +330,21 @@ export default async (state: typeof defaultState) => {
     legend.append(el);
   });
 
+  const about = document.createElement('div');
+  about.className = 'side-panel-about';
+  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration and scores are halved to let the AIs train on a new scenario.`;
+
   const footer = document.createElement('div');
   footer.className = 'side-panel-footer';
   footer.textContent = 'Long press for reset (right-click also works)';
 
+  const actions = document.createElement('div');
+  actions.className = 'model-actions';
+  actions.append(loadBtn, saveBtn, clearBtn, statsBtn);
+
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(
-    loadBtn,
-    saveBtn,
-    clearBtn,
-    statsBtn,
-    followKeys,
-    netWrap,
-    legend,
-    footer,
-  );
+  panelContent.append(actions, followKeys, netWrap, about, legend, footer);
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
@@ -603,7 +601,8 @@ export default async (state: typeof defaultState) => {
     return groups.find((g) => g.key === key);
   }
 
-  /** a dead car stays a corpse for DEAD_LIFETIME, its slot respawns at once */
+  /** a dead car stays a fading corpse for DEAD_LIFETIME, its slot respawns
+   *  only once the corpse expires, so the map stays capped at CAR_NB */
   function onDeath(car: Car) {
     state.living--;
     car.deathTime = performance.now();
@@ -611,23 +610,13 @@ export default async (state: typeof defaultState) => {
     // a crash is a save point: flush everything staged so far
     flushPendingSaves();
 
-    if (car.useAI) {
-      const group = groupOf(car);
-      if (group) {
-        const slot = group.pool.indexOf(car);
-        if (slot >= 0) {
-          group.pool[slot] = spawnCar(group, slot);
-          state.cars.push(group.pool[slot]);
-        }
-      }
-      state.living++;
-    } else if (state.human && car === state.human) {
+    if (state.human && car === state.human) {
       // a human crash respawns a fresh human car, the person keeps driving
       car.controls.dispose();
       state.human = undefined;
       humanFollow = false;
+      // spawnHuman bumps living itself, the old corpse just fades out
       spawnHuman();
-      state.living++;
     }
   }
 
@@ -651,7 +640,8 @@ export default async (state: typeof defaultState) => {
       spawnHuman();
     }
     state.population = state.cars.length;
-    state.living = state.cars.length;
+    // the pools may still hold corpses, they do not count as alive
+    state.living = state.cars.filter((c) => !c.damaged).length;
     camSet = false;
     if (document.activeElement !== seedInput) seedInput.value = String(seed);
   }
@@ -742,11 +732,24 @@ export default async (state: typeof defaultState) => {
       if (driving && !humanDriving) humanFollow = true;
       humanDriving = driving;
 
-      // corpses stay on the map long enough to read where the line failed
+      // corpses fade out over DEAD_LIFETIME; when one expires its slot
+      // respawns, so a fast line never stacks more cars than CAR_NB
       for (let i = state.cars.length - 1; i >= 0; i--) {
         const car = state.cars[i];
         if (car.damaged && now - car.deathTime > config.DEAD_LIFETIME) {
           state.cars.splice(i, 1);
+          if (car.useAI) {
+            const group = groupOf(car);
+            if (group) {
+              const slot = group.pool.indexOf(car);
+              if (slot >= 0) {
+                const fresh = spawnCar(group, slot);
+                group.pool[slot] = fresh;
+                state.cars.push(fresh);
+              }
+            }
+            state.living++;
+          }
         }
       }
 
@@ -866,10 +869,19 @@ export default async (state: typeof defaultState) => {
       circuit.obstacles[i].draw(carCtx);
     }
     // the human car draws last, above every other car, no sensor fan
+    const corpseNow = performance.now();
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
       if (car === state.human) continue;
-      carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
+      if (car.damaged) {
+        // fade from full opacity to 0 over DEAD_LIFETIME, ~0.8 at 1 s
+        carCtx.globalAlpha = Math.max(
+          0,
+          1 - (corpseNow - car.deathTime) / config.DEAD_LIFETIME,
+        );
+      } else {
+        carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
+      }
       car.draw(carCtx, car === camTarget);
     }
     if (state.human) {
@@ -945,10 +957,11 @@ export default async (state: typeof defaultState) => {
     buildPools();
     state.cars = groups.flatMap((g) => g.pool);
 
-    state.population = state.cars.length;
-    state.living = state.cars.length;
     // the human car is always in the race, the keys are always its brain
     spawnHuman();
+    state.population = state.cars.length;
+    // everything is fresh and alive, the human included
+    state.living = state.cars.length;
   }
 
   // a reload never loses more than the most recent promotions

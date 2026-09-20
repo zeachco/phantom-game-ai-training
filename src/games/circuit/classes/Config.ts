@@ -2,7 +2,8 @@ import { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
   // population
-  /** cap of live AI cars, a replacement spawns the frame one dies */
+  /** number of AI car slots: each slot holds one car at a time (alive or a
+   *  corpse), so the map never holds more AI cars than this */
   public CAR_NB = 200;
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = 0.0001;
@@ -14,8 +15,9 @@ class Config {
   public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */
   public SPAWN_OFFSET = 150;
-  /** corpses stay on the map that long after the crash, then get deleted */
-  public DEAD_LIFETIME = 20000;
+  /** corpses linger that long after the crash, fading to 0 opacity, and
+   *  their slot respawns once they expire */
+  public DEAD_LIFETIME = 5000;
   /** a car under this speed (u/f) is stalling; CAR_STALL_TIMEOUT of that in a row kills it */
   public CAR_STALL_SPEED = 1;
   public CAR_STALL_TIMEOUT = 5000;

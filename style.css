@@ -126,6 +126,13 @@ ul:hover {
   background: hsl(180, 100%, 45%);
 }
 
+/* the load / save / clear / stats buttons share a compact 2-column grid */
+.model-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4em;
+}
+
 /* the network canvas is transparent, this only paints behind the brain */
 .neural-canvas {
   background: #949494;
@@ -133,7 +140,7 @@ ul:hover {
 
 .follow-keys {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.4em;
 }
 
@@ -150,7 +157,7 @@ ul:hover {
 .follow-keys button {
   border: 2px solid transparent;
   border-radius: 0.4em;
-  padding: 0.4em 0;
+  padding: 0.25em 0;
   font:
     bold 0.8em Arial,
     sans-serif;
@@ -183,8 +190,15 @@ ul:hover {
   outline-offset: 1px;
 }
 
-.follow-keys button:last-child {
-  grid-column: 1 / -1;
+.side-panel-about {
+  padding: 0.5em 0.7em;
+  border-radius: 0.4em;
+  background: rgba(255, 255, 255, 0.08);
+  font:
+    0.72em Arial,
+    sans-serif;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .side-panel-legend {

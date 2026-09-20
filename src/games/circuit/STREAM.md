@@ -17,10 +17,11 @@ panel shows its brain.
   gates across the road, claimed in order around the loop, and a gate touched
   out of order subtracts its value, so a U-turn is a debt and donuts earn
   nothing.
-- There are no generations: a crash respawns the slot at once from the group's
-  spawn ladder — slot 0 clones the group's best brain, the higher slots carry
-  progressively bolder mutations — so every brain category always runs its pool
-  of 20. Crashed cars stay as corpses for 20 seconds.
+- There are no generations: a crash leaves the car as a corpse that fades out
+  over 5 s, and its slot only respawns once the corpse is gone — slot 0 clones
+  the group's best brain, the higher slots carry progressively bolder
+  mutations — so every brain category always runs its pool of 20, and the map
+  never holds more than CAR_NB (200) AI cars at once.
 - The moment a car beats its group's summarized total score, its brain is saved
   as the group's new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
@@ -34,7 +35,7 @@ car names are set as such:
 
 ### Score legend
 
-- 💀 car has crashed (corpse deleted after 20s)
+- 💀 car has crashed (the corpse fades out over 5 s)
 - 🏆 car has crashed with a higher score
 - 💜 car is racing
 - 💚 car is besting the best score

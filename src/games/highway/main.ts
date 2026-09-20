@@ -264,18 +264,13 @@ export default async (state: typeof defaultState) => {
   footer.className = 'side-panel-footer';
   footer.textContent = 'Long press for reset (right-click also works)';
 
+  const actions = document.createElement('div');
+  actions.className = 'model-actions';
+  actions.append(loadBtn, saveBtn, presetBtn, clearBtn, statsBtn);
+
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(
-    loadBtn,
-    saveBtn,
-    presetBtn,
-    clearBtn,
-    followKeys,
-    statsBtn,
-    legend,
-    footer,
-  );
+  panelContent.append(actions, followKeys, legend, footer);
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);

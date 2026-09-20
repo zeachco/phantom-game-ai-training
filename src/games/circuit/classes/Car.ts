@@ -52,7 +52,8 @@ export class Car {
   public gateX = 0;
   public gateY = 0;
   public gateDelta = 0;
-  /** performance.now() of the crash, corpses are deleted after DEAD_LIFETIME */
+  /** performance.now() of the crash: the corpse fades over DEAD_LIFETIME and
+   *  the car's slot respawns once the corpse expires */
   public deathTime = 0;
   /** performance.now() when the current stall began, 0 while moving */
   private stallSince = 0;
