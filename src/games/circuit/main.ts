@@ -643,8 +643,25 @@ export default async (state: typeof defaultState) => {
     return groups.find((g) => g.key === key);
   }
 
-  /** a dead car stays a fading corpse for DEAD_LIFETIME, its slot respawns
-   *  only once the corpse expires, so the map stays capped at CAR_NB */
+  /** Respawn a whole brain group after every car in it has finished fading.
+   *  Keeping this decision per group means one line never waits for another. */
+  function respawnGroup(group: Group, now: number) {
+    if (
+      group.pool.length === 0 ||
+      group.pool.some((car) => !car.damaged) ||
+      group.pool.some(
+        (car) => now - car.deathTime <= config.DEAD_LIFETIME,
+      )
+    )
+      return;
+
+    const corpses = new Set(group.pool);
+    state.cars = state.cars.filter((car) => !corpses.has(car));
+    group.pool = group.pool.map((_corpse, slot) => spawnCar(group, slot));
+    state.cars.push(...group.pool);
+    state.living += group.pool.length;
+  }
+
   function onDeath(car: Car) {
     state.living--;
     car.deathTime = performance.now();
@@ -774,26 +791,21 @@ export default async (state: typeof defaultState) => {
       if (driving && !humanDriving) humanFollow = true;
       humanDriving = driving;
 
-      // corpses fade out over DEAD_LIFETIME; when one expires its slot
-      // respawns, so a fast line never stacks more cars than CAR_NB
+      // Human corpses are not part of a brain group, so clean them up on their
+      // own timer. AI corpses stay until their whole group can respawn.
       for (let i = state.cars.length - 1; i >= 0; i--) {
         const car = state.cars[i];
-        if (car.damaged && now - car.deathTime > config.DEAD_LIFETIME) {
+        if (
+          !car.useAI &&
+          car.damaged &&
+          now - car.deathTime > config.DEAD_LIFETIME
+        )
           state.cars.splice(i, 1);
-          if (car.useAI) {
-            const group = groupOf(car);
-            if (group) {
-              const slot = group.pool.indexOf(car);
-              if (slot >= 0) {
-                const fresh = spawnCar(group, slot);
-                group.pool[slot] = fresh;
-                state.cars.push(fresh);
-              }
-            }
-            state.living++;
-          }
-        }
       }
+
+      // A group keeps its fading corpses until every same-group car is dead,
+      // then the entire group respawns together. Each group is checked alone.
+      for (const group of groups) respawnGroup(group, now);
 
       // the map high score is the max over the pool; the bar is the total
       for (const car of state.cars) {

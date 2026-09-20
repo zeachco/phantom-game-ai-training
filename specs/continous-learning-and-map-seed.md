@@ -4,7 +4,9 @@ There are no generations. Each brain layer runs a pool of `CARS_PER_GROUP`
 (10) cars; the mixed pool runs 10 cars once at least two saved experts exist.
 Slot 0 clones the group's best brain. Slot `k > 0` mutates it with the
 maximum mutation divided by `k`, clamped to `Number.MIN_VALUE`; the maximum
-decays over `MUTATION_LAP_DECAY` (50) laps.
+decays over `MUTATION_LAP_DECAY` (50) laps. A group waits until all of its cars
+are dead and their corpses have faded, then respawns every slot together;
+groups do not wait for one another.
 
 The map is deterministic from its seed. The seed is mirrored in
 `#circuit=<seed>` and rebuilding it reproduces the same road, sections,

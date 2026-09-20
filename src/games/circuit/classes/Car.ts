@@ -68,8 +68,8 @@ export class Car {
   public gateX = 0;
   public gateY = 0;
   public gateDelta = 0;
-  /** performance.now() of the crash: the corpse fades over DEAD_LIFETIME and
-   *  the car's slot respawns once the corpse expires */
+  /** performance.now() of the crash: the corpse fades over DEAD_LIFETIME;
+   *  the whole brain group respawns when every corpse has expired */
   public deathTime = 0;
   /** frames remaining to reach the next checkpoint at the reference 60 FPS */
   public checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;

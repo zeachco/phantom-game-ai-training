@@ -21,9 +21,10 @@ panel shows its brain.
   checkpoint or the car dies like a collision (the followed car's remaining
   time shows in the "secs" badge of the bottom HUD).
 - There are no generations: a crash leaves the car as a corpse that fades out
-  over 5 s, and its slot only respawns once the corpse is gone — slot 0 clones
-  the group's best brain, the higher slots carry progressively bolder
-  mutations — so every brain category always runs its pool of 10, and the map
+  over 5 s. A brain category waits until every car in its pool is dead and the
+  corpses are gone, then respawns the whole pool together — slot 0 clones the
+  group's best brain, the higher slots carry progressively bolder mutations.
+  Groups are independent, so one category never waits for another, and the map
   never holds more than CAR_NB (200) AI cars at once.
 - The moment a car beats its group's summarized total score, its brain is saved
   as the group's new best (live, not at death). The map is a pure function of

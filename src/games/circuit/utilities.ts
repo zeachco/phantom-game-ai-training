@@ -39,7 +39,8 @@ export const defaultState = {
   /** alive cars and the corpses still on the map, both draw and score */
   cars: [] as Car[],
   sortedCars: [] as Car[],
-  /** live car count: dips while a slot's corpse lingers, climbs back on respawn */
+  /** live car count: dips while a group's corpses linger, climbs back when
+   *  that whole group respawns */
   living: 0,
   /** live cars at the start of the map, the cap the board reports */
   population: 0,
