@@ -95,43 +95,78 @@ export class Circuit {
     const first = Math.round((config.SPAWN_OFFSET + 250) / per) + 1;
     const last = n - 4;
 
-    // the road pinches from 4 lanes to 2 in seeded sections: one edge eases
-    // in over a transition, holds, eases back, the centerline never moves
-    const narrowHalf = config.ROAD_NARROW_WIDTH / 2;
+    const laneWidth = config.ROAD_LANE_WIDTH;
     const leftHalf = new Array<number>(n).fill(half);
     const rightHalf = new Array<number>(n).fill(half);
-    const sectionLen =
-      config.NARROW_TRANSITION +
-      config.NARROW_LENGTH +
-      config.NARROW_TRANSITION;
-    const sectionCount = 1 + Math.floor(rng() * config.NARROW_SECTIONS_MAX);
-    for (let s = 0; s < sectionCount; s++) {
-      const start =
-        first +
-        8 +
-        Math.floor(
-          rng() * Math.max(1, last - first - 16 - sectionLen),
-        );
+    // A section closes or opens one lane at a time.  Moving just one edge is
+    // important: the boundaries of all the lanes that remain stay in place.
+    const sectionSide = new Array<'left' | 'right'>(n).fill('left');
+    const targets = [
+      config.ROAD_MIN_LANES,
+      Math.max(config.ROAD_MIN_LANES, Math.min(config.ROAD_MAX_LANES, 2)),
+      config.ROAD_MAX_LANES,
+    ].slice(0, config.ROAD_SECTION_COUNT);
+    for (let i = targets.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [targets[i], targets[j]] = [targets[j], targets[i]];
+    }
+    const transition = config.ROAD_SECTION_TRANSITION;
+    const hold = config.ROAD_SECTION_LENGTH;
+    const sectionLengths = targets.map(
+      (target) => hold + 2 * transition * Math.abs(config.ROAD_LANES - target),
+    );
+    const profileStart = first + 8;
+    const profileEnd = last - 8;
+    const totalSectionLength = sectionLengths.reduce(
+      (sum, value) => sum + value,
+      0,
+    );
+    let free = Math.max(0, profileEnd - profileStart - totalSectionLength);
+    let cursor = profileStart;
+
+    for (let s = 0; s < targets.length; s++) {
+      const target = targets[s];
+      const distance = Math.abs(config.ROAD_LANES - target);
+      const sectionLen = sectionLengths[s];
+      const gapsLeft = targets.length - s;
+      const gap =
+        gapsLeft > 0 ? Math.floor(rng() * (free / gapsLeft + 1)) : free;
+      cursor += gap;
+      free -= gap;
+      const start = cursor;
+      cursor += sectionLen;
       const pinchLeft = rng() < 0.5;
+
       for (let i = 0; i < sectionLen; i++) {
-        const idx = (start + i) % n;
-        let narrow: number;
-        if (i < config.NARROW_TRANSITION)
-          narrow = 0.5 - 0.5 * Math.cos((i / config.NARROW_TRANSITION) * Math.PI);
-        else if (i < config.NARROW_TRANSITION + config.NARROW_LENGTH)
-          narrow = 1;
-        else
-          narrow =
-            0.5 +
-            0.5 *
-              Math.cos(
-                ((i - config.NARROW_TRANSITION - config.NARROW_LENGTH) /
-                  config.NARROW_TRANSITION) *
-                  Math.PI,
-              );
-        const w = half - (half - narrowHalf) * narrow;
-        if (pinchLeft) leftHalf[idx] = Math.min(leftHalf[idx], w);
-        else rightHalf[idx] = Math.min(rightHalf[idx], w);
+        let lanes: number;
+        const enterLength = distance * transition;
+        const exitStart = enterLength + hold;
+        if (distance === 0) {
+          lanes = target;
+        } else if (i < enterLength) {
+          const stage = Math.floor(i / transition);
+          const local = i % transition;
+          const progress = transition > 1 ? local / (transition - 1) : 1;
+          const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+          lanes =
+            config.ROAD_LANES +
+            ((target - config.ROAD_LANES) * (stage + eased)) / distance;
+        } else if (i < exitStart) {
+          lanes = target;
+        } else {
+          const stage = Math.floor((i - exitStart) / transition);
+          const local = (i - exitStart) % transition;
+          const progress = transition > 1 ? local / (transition - 1) : 1;
+          const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+          lanes =
+            target +
+            ((config.ROAD_LANES - target) * (stage + eased)) / distance;
+        }
+        const width = lanes * laneWidth;
+        const idx = start + i;
+        sectionSide[idx] = pinchLeft ? 'left' : 'right';
+        if (pinchLeft) leftHalf[idx] = width - rightHalf[idx];
+        else rightHalf[idx] = width - leftHalf[idx];
       }
     }
     this.leftHalf = leftHalf;
@@ -185,24 +220,21 @@ export class Circuit {
     this.obstacles = [];
     const span = Math.max(1, last - first);
     const step = span / config.OBSTACLES;
-    const laneWidth = config.ROAD_WIDTH / config.ROAD_LANES;
-
-    for (let i = 0; i < config.OBSTACLES; i++) {
-      const base = first + (i + 0.5) * step;
-      const idx = Math.round(base + (-0.35 + rng() * 0.7) * step) % n;
+    const makeObstacle = (idx: number) => {
+      const roadWidth = this.leftHalf[idx] + this.rightHalf[idx];
+      // A single-lane section has no safe passing lane, so leave it empty.
+      if (roadWidth <= laneWidth + 1e-6) return null;
       const p = this.points[idx];
       const t = this.tangents[idx];
       const roadAngle = Math.atan2(-t.x, -t.y);
-      const roadWidth = this.leftHalf[idx] + this.rightHalf[idx];
       const maxWidth = Math.max(1, roadWidth - laneWidth);
       const minDiameter = Math.min(laneWidth * 0.7, maxWidth);
       const maxDiameter = Math.min(laneWidth * 0.8, maxWidth);
       const width = minDiameter + rng() * (maxDiameter - minDiameter);
-      const height = width;
       const crossHalf = width / 2;
       const leftRoom = this.leftHalf[idx] - crossHalf;
       const rightRoom = this.rightHalf[idx] - crossHalf;
-      if (leftRoom < 0 || rightRoom < 0) continue;
+      if (leftRoom < 0 || rightRoom < 0) return null;
 
       // Either leave a full car-width gap on every open side or snap the
       // obstacle flush to one edge; never create a tempting unusable sliver.
@@ -216,16 +248,30 @@ export class Circuit {
             ? leftRoom
             : -rightRoom;
 
-      this.obstacles.push(
-        new Obstacle(
-          p.x + this.normals[idx].x * off,
-          p.y + this.normals[idx].y * off,
-          roadAngle,
-          width,
-          height,
-          'circle',
-        ),
+      return new Obstacle(
+        p.x + this.normals[idx].x * off,
+        p.y + this.normals[idx].y * off,
+        roadAngle,
+        width,
+        width,
+        'circle',
       );
+    };
+
+    for (let i = 0; i < config.OBSTACLES; i++) {
+      const base = first + (i + 0.5) * step;
+      let obstacle: Obstacle | null = null;
+      // Keep twelve obstacles even when a seeded sample lands in a
+      // one-lane section: reroll that sample rather than adding an obstacle
+      // where it would remove every safe route.
+      for (let attempt = 0; attempt < n && !obstacle; attempt++) {
+        const idx =
+          (((Math.round(base + (-0.35 + rng() * 0.7) * step) + attempt) % n) +
+            n) %
+          n;
+        obstacle = makeObstacle(idx);
+      }
+      if (obstacle) this.obstacles.push(obstacle);
     }
 
     const loopPath = (pts: Vector[]) => {
@@ -244,27 +290,37 @@ export class Circuit {
     strip.closePath();
     this.roadPath = strip;
     this.edgePaths = [loopPath(this.left), loopPath(this.right)];
-    for (let l = 1; l < config.ROAD_LANES; l++) {
-      // the lane lines slide to the centerline as the road pinches, so a
-      // 2-lane section shows its single center line
-      const line: Vector[] = [];
-      for (let i = 0; i < n; i++) {
-        const t3 = Math.max(
-          0,
-          Math.min(
-            1,
-            (Math.min(leftHalf[i], rightHalf[i]) - narrowHalf) /
-              (half - narrowHalf),
-          ),
-        );
-        const off =
-          (l / config.ROAD_LANES - 0.5) * (leftHalf[i] + rightHalf[i]) * t3;
-        line.push({
-          x: this.points[i].x + this.normals[i].x * off,
-          y: this.points[i].y + this.normals[i].y * off,
-        });
+    for (let divider = 1; divider < config.ROAD_MAX_LANES; divider++) {
+      const path = new Path2D();
+      let drawing = false;
+      for (let step = 0; step <= n; step++) {
+        const i = step % n;
+        const stableEdge =
+          sectionSide[i] === 'left' ? -rightHalf[i] : leftHalf[i];
+        const direction = sectionSide[i] === 'left' ? 1 : -1;
+        const off = stableEdge + direction * divider * laneWidth;
+        // Divider slots are measured from the untouched edge.  Thus only the
+        // boundary of a lane being closed reaches the moving edge; all
+        // unaffected lane boundaries remain separate through the transition.
+        const valid = off > -rightHalf[i] + 1e-6 && off < leftHalf[i] - 1e-6;
+        if (valid) {
+          const p = this.points[i];
+          if (!drawing)
+            path.moveTo(
+              p.x + this.normals[i].x * off,
+              p.y + this.normals[i].y * off,
+            );
+          else
+            path.lineTo(
+              p.x + this.normals[i].x * off,
+              p.y + this.normals[i].y * off,
+            );
+          drawing = true;
+        } else {
+          drawing = false;
+        }
       }
-      this.lanePaths.push(loopPath(line));
+      this.lanePaths.push(path);
     }
   }
 

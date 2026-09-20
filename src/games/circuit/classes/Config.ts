@@ -105,16 +105,18 @@ class Config {
   public CIRCUIT_SAMPLES = 192;
   /** every Nth boundary point becomes a sensor segment, coarser is cheaper */
   public SENSOR_DECIMATION = 4;
+  /** the default road is three 60-unit lanes (180 units total) */
   public ROAD_WIDTH = 180;
-  public ROAD_LANES = 4;
-  /** the road pinches from 4 lanes to 2 in seeded sections, one edge at a time */
-  public ROAD_NARROW_WIDTH = 120;
-  /** 1 to this many pinched sections per map */
-  public NARROW_SECTIONS_MAX = 2;
-  /** points of centerline held at the narrow width */
-  public NARROW_LENGTH = 24;
+  public ROAD_LANES = 3;
+  public ROAD_LANE_WIDTH = this.ROAD_WIDTH / this.ROAD_LANES;
+  public ROAD_MIN_LANES = 1;
+  public ROAD_MAX_LANES = 4;
+  /** seeded lane sections are separated so most of the loop stays at default width */
+  public ROAD_SECTION_COUNT = 3;
+  /** points of centerline held at a seeded section's target lane count */
+  public ROAD_SECTION_LENGTH = 12;
   /** points of smooth cosine ease in and out */
-  public NARROW_TRANSITION = 12;
+  public ROAD_SECTION_TRANSITION = 8;
 
   // checkpoints, claimed in order so the only way to bank score is
   // around the loop, donuts in the open plane earn nothing
