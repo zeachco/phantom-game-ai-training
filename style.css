@@ -122,6 +122,11 @@ ul:hover {
   background: rgba(25, 52, 94, 0.9);
 }
 
+.model-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .model-btn.active {
   background: hsl(180, 100%, 45%);
 }
