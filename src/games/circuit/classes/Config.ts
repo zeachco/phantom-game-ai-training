@@ -106,8 +106,8 @@ class Config {
   /** every Nth boundary point becomes a sensor segment, coarser is cheaper */
   public SENSOR_DECIMATION = 4;
   public ROAD_WIDTH = 180;
-  public ROAD_LANES = 3;
-  /** the road pinches from 3 lanes to 2 in seeded sections, one edge at a time */
+  public ROAD_LANES = 4;
+  /** the road pinches from 4 lanes to 2 in seeded sections, one edge at a time */
   public ROAD_NARROW_WIDTH = 120;
   /** 1 to this many pinched sections per map */
   public NARROW_SECTIONS_MAX = 2;
@@ -129,10 +129,8 @@ class Config {
   /** full laps one car needs on a seed before the map advances */
   public LAPS_PER_SEED = 3;
 
-  // obstacles, solid blocks along the road, none in the start zone
-  public OBSTACLES = 20;
-  /** base chance that a seeded obstacle is round instead of a wall */
-  public OBSTACLE_CIRCLE_CHANCE = 0.55;
+  // obstacles, round objects along the road, none in the start zone
+  public OBSTACLES = 12;
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge, otherwise the block snaps flush to the edge */
   public OBSTACLE_PASS_GAP = 30;

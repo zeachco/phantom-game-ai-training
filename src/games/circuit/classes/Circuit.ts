@@ -95,7 +95,7 @@ export class Circuit {
     const first = Math.round((config.SPAWN_OFFSET + 250) / per) + 1;
     const last = n - 4;
 
-    // the road pinches from 3 lanes to 2 in seeded sections: one edge eases
+    // the road pinches from 4 lanes to 2 in seeded sections: one edge eases
     // in over a transition, holds, eases back, the centerline never moves
     const narrowHalf = config.ROAD_NARROW_WIDTH / 2;
     const leftHalf = new Array<number>(n).fill(half);
@@ -180,21 +180,12 @@ export class Circuit {
       );
     }
 
-    // Obstacles use the same seeded stream as the road. Higher seeds make
-    // walls more common, while every obstacle still leaves a useful lane.
+    // Obstacles use the same seeded stream as the road and always remain
+    // round, leaving a useful lane around each one.
     this.obstacles = [];
     const span = Math.max(1, last - first);
     const step = span / config.OBSTACLES;
     const laneWidth = config.ROAD_WIDTH / config.ROAD_LANES;
-    const seedDifficulty = Math.min(1, Math.max(0, this.seed) / 10);
-    const circleChance = Math.max(
-      0.2,
-      config.OBSTACLE_CIRCLE_CHANCE - seedDifficulty * 0.25,
-    );
-    // Relative to the road, these describe the wall's long axis. The
-    // obstacle's local width axis is perpendicular to that axis, so a 90°
-    // wall must use the road's cross-road axis rather than its tangent.
-    const wallAngles = [-Math.PI / 4, Math.PI / 4, Math.PI / 2];
 
     for (let i = 0; i < config.OBSTACLES; i++) {
       const base = first + (i + 0.5) * step;
@@ -204,49 +195,11 @@ export class Circuit {
       const roadAngle = Math.atan2(-t.x, -t.y);
       const roadWidth = this.leftHalf[idx] + this.rightHalf[idx];
       const maxWidth = Math.max(1, roadWidth - laneWidth);
-      const shape = rng() < circleChance ? 'circle' : 'wall';
-
-      let width: number;
-      let height: number;
-      let relativeAngle = 0;
-      if (shape === 'circle') {
-        const minDiameter = Math.min(laneWidth * 0.7, maxWidth);
-        const maxDiameter = Math.min(laneWidth * 0.8, maxWidth);
-        width = minDiameter + rng() * (maxDiameter - minDiameter);
-        height = width;
-      } else {
-        relativeAngle = wallAngles[Math.floor(rng() * wallAngles.length)];
-        height = Math.min(42, 18 + rng() * 24, roadWidth);
-        const minWidth = Math.min(24, maxWidth);
-        width = minWidth + rng() * (maxWidth - minWidth);
-
-        // The wall's width is perpendicular to its declared long axis.
-        // Convert that axis to the obstacle rotation used by Obstacle, where
-        // local width is the x axis. A 90° wall therefore spans the road.
-        const obstacleAngle = relativeAngle - Math.PI / 2;
-        // A diagonal wall's cross-road footprint is wider than its local
-        // width. Reduce it if necessary so it cannot extend off the road.
-        const across = Math.abs(Math.cos(obstacleAngle));
-        const along = Math.abs(Math.sin(obstacleAngle));
-        const fittingWidth =
-          across > 0
-            ? Math.max(1, (roadWidth - along * height) / across)
-            : maxWidth;
-        width = Math.min(width, maxWidth, fittingWidth);
-      }
-
-      // A wall wider than one lane is too punishing as a solid block. Keep
-      // its full span, but flatten it into one collision/rendering line.
-      const obstacleShape =
-        shape === 'wall' && width > laneWidth ? 'line' : shape;
-
-      const obstacleHeight = obstacleShape === 'line' ? 0 : height;
-      const crossHalf =
-        shape === 'circle'
-          ? width / 2
-          : (Math.abs(Math.cos(relativeAngle - Math.PI / 2)) * width +
-              Math.abs(Math.sin(relativeAngle - Math.PI / 2)) * obstacleHeight) /
-            2;
+      const minDiameter = Math.min(laneWidth * 0.7, maxWidth);
+      const maxDiameter = Math.min(laneWidth * 0.8, maxWidth);
+      const width = minDiameter + rng() * (maxDiameter - minDiameter);
+      const height = width;
+      const crossHalf = width / 2;
       const leftRoom = this.leftHalf[idx] - crossHalf;
       const rightRoom = this.rightHalf[idx] - crossHalf;
       if (leftRoom < 0 || rightRoom < 0) continue;
@@ -256,27 +209,21 @@ export class Circuit {
       const gap = config.OBSTACLE_PASS_GAP;
       const minWithGap = gap - rightRoom;
       const maxWithGap = leftRoom - gap;
-      let off: number;
-      if (obstacleShape === 'line') {
-        // Multi-lane walls block a continuous span, so never leave a narrow
-        // unusable strip beside the road edge: flush one projected edge.
-        off = rng() < 0.5 ? leftRoom : -rightRoom;
-      } else if (minWithGap <= maxWithGap && rng() > 0.25) {
-        off = minWithGap + rng() * (maxWithGap - minWithGap);
-      } else {
-        off = rng() < 0.5 ? leftRoom : -rightRoom;
-      }
+      const off =
+        minWithGap <= maxWithGap && rng() > 0.25
+          ? minWithGap + rng() * (maxWithGap - minWithGap)
+          : rng() < 0.5
+            ? leftRoom
+            : -rightRoom;
 
       this.obstacles.push(
         new Obstacle(
           p.x + this.normals[idx].x * off,
           p.y + this.normals[idx].y * off,
-          shape === 'circle'
-            ? roadAngle
-            : roadAngle + relativeAngle - Math.PI / 2,
+          roadAngle,
           width,
-          obstacleShape === 'line' ? 0 : height,
-          obstacleShape,
+          height,
+          'circle',
         ),
       );
     }
