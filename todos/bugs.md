@@ -29,3 +29,4 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [x] add as input the current vector velocity of the car and it's relative angle to the front similar to the vector pointing to the next checkpoint, -1.0 to 1.0 for the vector angle and it's delta with the front of the car.
 - [ ] add a maximum fps toggle that's off by default that limits 60 fps and auto enables when the player is playing (camera following the player)
 - [ ] add 40% to the front distance for sensors
+- [ ] road can have 4 lane width, max obstacle width is 80% of half the available lane width, none when lane is one lane width
