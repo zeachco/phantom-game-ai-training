@@ -375,6 +375,9 @@ export default async (state: typeof defaultState) => {
   lapsEl.className = 'laps';
   lapsEl.title = 'laps on this map';
   lapsEl.textContent = `lap 0/${config.LAPS_PER_SEED}`;
+  const finishCountdown = document.createElement('div');
+  finishCountdown.className = 'finish-countdown';
+  finishCountdown.hidden = true;
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
   speedo.title = 'speed';
@@ -385,7 +388,7 @@ export default async (state: typeof defaultState) => {
   speedoUnit.className = 'speedo-unit';
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
-  readout.append(raceEl, lapsEl, speedo);
+  readout.append(raceEl, finishCountdown, lapsEl, speedo);
   // the gate countdown: time left for the followed car to claim its next gate
   const gateTimer = document.createElement('div');
   gateTimer.className = 'gate-timer';
@@ -454,6 +457,11 @@ export default async (state: typeof defaultState) => {
   raceEl.textContent = `race#${seed}`;
   let laps = 0;
   let circuit = new Circuit(seed);
+  /** distinct brain structures that finished on the current map */
+  const completedBrainIndices = new Set<string>();
+  /** set once the required finishers are present; the track changes later */
+  let seedChangeAt = 0;
+  const SEED_CHANGE_DELAY = 10_000;
   const groups: Group[] = [];
   const pendingSaves = new Set<Group>();
 
@@ -511,7 +519,10 @@ export default async (state: typeof defaultState) => {
   function buildPools() {
     groups.length = 0;
     const inputNb = config.SENSORS + 2;
-    const outputNb = 4;
+    // Controls exposes throttle, left and right. Keeping this derived from a
+    // car prevents mixed experts from being rejected for an impossible
+    // fourth output.
+    const outputNb = 3;
 
     // the mixed pool only exists once there are experts to route to
     if (config.MIXED_ENABLED) {
@@ -637,6 +648,9 @@ export default async (state: typeof defaultState) => {
     writeSeed(seed);
     raceEl.textContent = `race#${seed}`;
     circuit = new Circuit(seed);
+    completedBrainIndices.clear();
+    seedChangeAt = 0;
+    finishCountdown.hidden = true;
     state.circuit = circuit;
     state.obstacles = circuit.obstacles;
     buildPools();
@@ -783,21 +797,37 @@ export default async (state: typeof defaultState) => {
           promote(group, car);
       }
 
-      // a car needs LAPS_PER_SEED full laps on this seed before the map advances
+      // A map advances only after three distinct brain structures (or the
+      // human) have completed the required race distance. This gives every
+      // competing structure a chance to finish before the track changes.
       for (const car of state.cars) {
         if (car.completedLap) car.completedLap = false;
         if (car.laps >= config.LAPS_PER_SEED) {
-          // finishing the race is a save point, like a crash: the brains that
-          // just finished are persisted before the pools respawn and they are
-          // gone, and everything staged flushes on the current groups
-          for (const other of state.cars) {
-            if (other.useAI && other.laps >= config.LAPS_PER_SEED)
-              io.saveBestModels([other.brain], 1);
-          }
-          flushPendingSaves();
-          advanceSeed();
-          break; // the map just changed, the loop restarts on the new one
+          const brainIndex = car === state.human
+            ? 'human'
+            : car.brain instanceof MixedNetwork
+            ? 'mixed'
+            : String(car.brainLayers);
+          completedBrainIndices.add(brainIndex);
         }
+      }
+      if (completedBrainIndices.size >= 3 && !seedChangeAt) {
+        // Finishing is a save point. Only a finisher that beats its
+        // structure's saved champion is promoted and persisted.
+        for (const other of state.cars) {
+          if (!other.useAI || other.laps < config.LAPS_PER_SEED) continue;
+          const group = groupOf(other);
+          if (group && (!group.best || other.brain.score > group.best.score))
+            promote(group, other);
+        }
+        flushPendingSaves();
+        seedChangeAt = now + SEED_CHANGE_DELAY;
+        finishCountdown.hidden = false;
+      }
+      if (seedChangeAt) {
+        const remaining = Math.max(0, seedChangeAt - now);
+        finishCountdown.textContent = `next track in ${(remaining / 1000).toFixed(1)}s`;
+        if (remaining === 0) advanceSeed();
       }
 
       state.sortedCars = state.cars.sort(
@@ -828,7 +858,12 @@ export default async (state: typeof defaultState) => {
     }
 
     const camTarget = followedCar();
-    if (state.playing && camTarget) {
+    if (state.playing && seedChangeAt) {
+      const spawn = circuit.getSpawn();
+      camX = spawn.x;
+      camY = spawn.y;
+      camSet = true;
+    } else if (state.playing && camTarget) {
       if (!camSet) {
         camX = camTarget.x;
         camY = camTarget.y;
@@ -857,7 +892,7 @@ export default async (state: typeof defaultState) => {
       speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(
         1,
       );
-      lapsEl.textContent = `lap ${Math.min(camTarget.laps, config.LAPS_PER_SEED)}/${
+      lapsEl.textContent = `lap ${Math.min(camTarget.laps + 1, config.LAPS_PER_SEED)}/${
         config.LAPS_PER_SEED
       }`;
       const gateLeft =

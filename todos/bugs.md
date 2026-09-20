@@ -17,10 +17,10 @@ Single running list of known bugs across the games. Each entry is one line: what
 
 ## In circuit game
 
-- [ ] cars die after 7 seconds without crossing a checkpoint, there's a small text right to the controls showing remaining time with fixed 1 digit after coma
-- [ ] lap should show 1/3 for the first lap and 3/3 for the last one (lap # not the index of the lap)
-- [ ] mixed brain instances are not visibly playing on the circuit
-- [ ] (feature change) before jumping to the next map seed, at least 3 cars group needs to finish the track (3 distinct neural structures, mixed experts group and human player can count), next to controls, a small message would appear as a success "completed" in green next to the circuit number or "unfinished" in yellow
+- [x] cars die after 7 seconds without crossing a checkpoint, there's a small text right to the controls showing remaining time with fixed 1 digit after coma
+- [x] lap should show 1/3 for the first lap and 3/3 for the last one (lap # not the index of the lap)
+- [x] mixed brain instances are not visibly playing on the circuit
+- [x] (feature change) before jumping to the next map seed, at least 3 cars group needs to finish the track (3 distinct neural structures, mixed experts group and human player can count), next to controls, a small message would appear as a success "completed" in green next to the circuit number or "unfinished" in yellow
 - [ ] time to completion would be tracked per car, saved on the brain group, updated for each lap ( as an array lie [60.45, 55.2] when there's 2 laps in completing the 3rd one )
 - [ ] diminish the mutation rate per index so there's less variation and mutation stay closer to the original model. clamp minimal mutation values to Number.MIN_VALUE to ensure index 1 at very high cumulated generation still makes a change
 - [ ] 7 seconds elapsed time might yield different results based on performances, let's try to do the equivalent elapsed frames instead and and display a gauge instead of "x secs" budgets for checkpoint time checks
