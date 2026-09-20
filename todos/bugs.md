@@ -4,7 +4,6 @@ Only unfinished work remains here; completed behavior lives in `specs/`.
 
 ## Circuit
 
-- [ ] Replace the wall-clock 7-second checkpoint timeout with an equivalent frame budget and show a gauge instead of the seconds badge.
 - [ ] Increase curve difficulty with the map seed; later maps should add more frequent and more intense hard curves.
 - [ ] Add an optional 60 FPS cap, enabled automatically while following the human player.
 - [ ] Extend the sensor fan's forward reach by 40%.
