@@ -7,8 +7,9 @@ the map.
 - The speed indicator reads the followed car's velocity magnitude
   (hypot of vx, vy), a live digital number with a small "u/f" label.
   Raw value, no extra smoothing, same update cadence as the pedals.
-- The followed car's lap progress on the current map (e.g. "2/3")
-  shows just above the speed.
+- The map seed shows as its own line on top (e.g. "race#12").
+- The followed car's lap progress on the current map (e.g. "lap 2/3")
+  shows just above the speed, on its own line.
 - Everything is display-only and mimics the followed car (AI, mixed or
   human) in real time, swapping when the followed car changes.
 - The whole overlay hides while the followed car is dead or nothing is

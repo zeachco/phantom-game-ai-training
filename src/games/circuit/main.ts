@@ -364,13 +364,17 @@ export default async (state: typeof defaultState) => {
   const pedalCap = document.createElement('div');
   pedalCap.className = 'pedal-cap';
   pedal.append(pedalCap);
-  // the laps and speed readouts sit together, laps just above the speed
+  // the race, laps and speed readouts sit together, race on top, laps just
+  // above the speed
   const readout = document.createElement('div');
   readout.className = 'readout';
+  const raceEl = document.createElement('div');
+  raceEl.className = 'race';
+  raceEl.title = 'current map seed';
   const lapsEl = document.createElement('div');
   lapsEl.className = 'laps';
   lapsEl.title = 'laps on this map';
-  lapsEl.textContent = `0/${config.LAPS_PER_SEED}`;
+  lapsEl.textContent = `lap 0/${config.LAPS_PER_SEED}`;
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
   speedo.title = 'speed';
@@ -381,7 +385,7 @@ export default async (state: typeof defaultState) => {
   speedoUnit.className = 'speedo-unit';
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
-  readout.append(lapsEl, speedo);
+  readout.append(raceEl, lapsEl, speedo);
   steerOverlay.append(wheelCanvas, pedal, readout);
   document.body.appendChild(steerOverlay);
 
@@ -441,6 +445,7 @@ export default async (state: typeof defaultState) => {
   // no seed in the URL: start at 0
   let seed = readSeed() ?? 0;
   writeSeed(seed);
+  raceEl.textContent = `race#${seed}`;
   let laps = 0;
   let circuit = new Circuit(seed);
   const groups: Group[] = [];
@@ -624,13 +629,15 @@ export default async (state: typeof defaultState) => {
    *  each group keeps its best brain but the score bar restarts at zero */
   function regenerateMap() {
     writeSeed(seed);
+    raceEl.textContent = `race#${seed}`;
     circuit = new Circuit(seed);
     state.circuit = circuit;
     state.obstacles = circuit.obstacles;
     buildPools();
 
+    // buildPools' loadScores already folded the previous seed once the seed
+    // moved, the per-seed state just restarts
     for (const group of groups) {
-      foldScores(group.scores, seed);
       group.seedBest = null;
       saveScores(group);
     }
@@ -774,6 +781,14 @@ export default async (state: typeof defaultState) => {
       for (const car of state.cars) {
         if (car.completedLap) car.completedLap = false;
         if (car.laps >= config.LAPS_PER_SEED) {
+          // finishing the race is a save point, like a crash: the brains that
+          // just finished are persisted before the pools respawn and they are
+          // gone, and everything staged flushes on the current groups
+          for (const other of state.cars) {
+            if (other.useAI && other.laps >= config.LAPS_PER_SEED)
+              io.saveBestModels([other.brain], 1);
+          }
+          flushPendingSaves();
           advanceSeed();
           break; // the map just changed, the loop restarts on the new one
         }
@@ -836,7 +851,7 @@ export default async (state: typeof defaultState) => {
       speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(
         1,
       );
-      lapsEl.textContent = `${Math.min(camTarget.laps, config.LAPS_PER_SEED)}/${
+      lapsEl.textContent = `lap ${Math.min(camTarget.laps, config.LAPS_PER_SEED)}/${
         config.LAPS_PER_SEED
       }`;
     }

@@ -25,9 +25,10 @@ panel shows its brain.
 - The moment a car beats its group's summarized total score, its brain is saved
   as the group's new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
-  seed input field changes it on demand, and any car completing a full lap
-  advances it by 1. Each finished map's high score folds into the total with
-  a halving, so recent maps dominate.
+  seed input field changes it on demand, and any car completing
+  LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
+  the finishing brain is saved first, like a crash. Each finished map's high
+  score folds into the total with a halving, so recent maps dominate.
 
 car names are set as such:
 
