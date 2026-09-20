@@ -15,6 +15,20 @@ const GATE_COLORS = new Array(21).fill(0).map((_s, i) => {
   return `rgb(255, ${v}, ${v})`;
 });
 
+/** Inputs appended after the sensor rays: speed, velocity delta, gate delta. */
+const EXTRA_BRAIN_INPUTS = 3;
+
+/** The dimensions used by both regular and mixed circuit brains. */
+export function getCircuitBrainDimensions(rayCount = config.SENSORS) {
+  // AI controls have no event handlers, so their enumerable fields are the
+  // actual output channels consumed by Car.update().
+  const controls = new Controls(ControlType.AI);
+  return {
+    inputCount: rayCount + EXTRA_BRAIN_INPUTS,
+    outputCount: Object.keys(controls).length,
+  };
+}
+
 export class Car {
   public speed: number;
   public vx: number;
@@ -113,9 +127,9 @@ export class Car {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      // one input per ray, then velocity magnitude/angle and the next-gate angle
-      const inputCount = this.sensor.rayCount + 3;
-      const outputCount = Object.keys(this.controls).length;
+      const { inputCount, outputCount } = getCircuitBrainDimensions(
+        this.sensor.rayCount,
+      );
       this.brain = brainBuilder
         ? brainBuilder(inputCount, outputCount)
         : new NeuralNetwork(inputCount, outputCount, brainLayers);

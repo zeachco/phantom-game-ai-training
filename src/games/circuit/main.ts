@@ -13,7 +13,7 @@ import { createCanvas, resizeCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
-import { Car } from './classes/Car';
+import { Car, getCircuitBrainDimensions } from './classes/Car';
 import { config } from './classes/Config';
 import { Circuit } from './classes/Circuit';
 import { ControlType } from './types';
@@ -520,11 +520,10 @@ export default async (state: typeof defaultState) => {
   /** the mixed pool only exists once there are experts to route to */
   function buildPools() {
     groups.length = 0;
-    const inputNb = config.SENSORS + 3;
-    // Controls exposes throttle, left and right. Keeping this derived from a
-    // car prevents mixed experts from being rejected for an impossible
-    // fourth output.
-    const outputNb = 3;
+    // Keep expert hydration tied to the dimensions Car actually gives every
+    // brain, so changing sensors or Controls cannot silently disable mixed.
+    const { inputCount: inputNb, outputCount: outputNb } =
+      getCircuitBrainDimensions();
 
     // the mixed pool only exists once there are experts to route to
     if (config.MIXED_ENABLED) {
@@ -604,10 +603,11 @@ export default async (state: typeof defaultState) => {
     saves[group.layer] = [brain];
     if (group.isMixed) {
       // future mixed spawns route to the fresh champions
+      const { inputCount, outputCount } = getCircuitBrainDimensions();
       experts = hydrateExperts(
         state.sortedModels,
-        config.SENSORS + 3,
-        4,
+        inputCount,
+        outputCount,
         config.MIXED_EXPERTS_PER_LAYER,
       );
     }
