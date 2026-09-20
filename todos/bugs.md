@@ -24,7 +24,7 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [x] time to completion would be tracked per car, saved on the brain group, updated for each lap ( as an array lie [60.45, 55.2] when there's 2 laps in completing the 3rd one )
 - [x] diminish the mutation rate per index so there's less variation and mutation stay closer to the original model. clamp minimal mutation values to Number.MIN_VALUE to ensure index 1 at very high cumulated generation still makes a change
 - [ ] 7 seconds elapsed time might yield different results based on performances, let's try to do the equivalent elapsed frames instead and display a gauge instead of "x secs" budgets for checkpoint time checks
-- [x] update obstacles to sometimes be circles or sometimes walls that can be +/-45 deg or 90 deg (perpendicular to the road). A rect cannot can be any width but cannot exceed the current width of the road minus one lane. ie: can be 2x lane width on a 3way road, but only 1 length on a 2 lane road. The higher the seed of the road is. All obstacles are to be white outline and gray inside with a second outline of dotted white/red to make them easy to spot
+- [x] update obstacles to use round objects only, with white outlines, gray interiors, and a dotted white/red secondary outline; preserve safe road gaps
 - [ ] as the seed of the racing circuit augment, there's more and more tight curves. Seed can go up to the infinity so it could be used as a base divisor to set the curve difficulty (difficulty = 10/(10+seed)) and use the difficulty to add more often hard curves and make the hard curves more intense. At maximum diff, we could have almost zigzag shaped curves.
 - [x] add as input the current vector velocity of the car and it's relative angle to the front similar to the vector pointing to the next checkpoint, -1.0 to 1.0 for the vector angle and it's delta with the front of the car.
 - [ ] add a maximum fps toggle that's off by default that limits 60 fps and auto enables when the player is playing (camera following the player)
@@ -33,4 +33,4 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [ ] purple UI: change the Follow buttons to a four-column grid
 - [ ] yellow/green UI: place the explanatory text beside the legend to save vertical space, and make the text area vertically scrollable with overflow auto
 - [ ] neural network UI: use the selected brain group's color for DOM borders; use light gray for mixed DOM elements to avoid per-frame DOM color updates while keeping the canvas visualization matched to the mixed selection
-- [ ] road can have up to 4 lanes, obstacles are less frequent, max obstacle width is 80% of half the available lane width, none when lane is one lane width
+- [x] road can have up to 4 lanes, obstacles are less frequent, max obstacle width is 80% of half the available lane width, none when lane is one lane width
