@@ -34,7 +34,7 @@ panel shows its brain.
   seed input field changes it on demand, and any car completing
   LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
   the finishing brain is saved first, like a crash. Each finished map's high
-  score folds into the total with a halving, so recent maps dominate.
+  score folds into the total with a 10% carry-over, so recent maps dominate.
 
 car names are set as such:
 

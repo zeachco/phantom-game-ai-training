@@ -13,7 +13,7 @@ import { Obstacle } from './classes/Obstacle';
 export interface GroupScores {
   /** the seed of the map the group is scoring on now */
   current: number;
-  /** the summarized overall score: each finished map halves the running total */
+  /** the summarized overall score: each finished map keeps 10% of the running total */
   total: number;
   /** live high score on the current seed */
   seed: number;

@@ -55,15 +55,15 @@ function saveScores(group: Group) {
   localStorage.setItem(scoreKey(group), JSON.stringify(group.scores));
 }
 
-/** a new seed finalizes the old one's high score and halves the running
- *  total, so recent maps dominate and the bar self-calibrates */
+/** a new seed finalizes the old one's high score and keeps 10% of the
+ *  running total, so recent maps dominate and the bar self-calibrates */
 function foldScores(scores: GroupScores, newSeed: number) {
   const finished = String(scores.current);
   scores.history[finished] = Math.max(
     scores.history[finished] || 0,
     scores.seed,
   );
-  scores.total = (scores.total + scores.seed) / 2;
+  scores.total = (scores.total + scores.seed) / 10;
   scores.current = newSeed;
   scores.seed = 0;
 }
@@ -340,7 +340,7 @@ export default async (state: typeof defaultState) => {
 
   const about = document.createElement('div');
   about.className = 'side-panel-about';
-  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration and scores are halved to let the AIs train on a new scenario.`;
+  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration and scores are reduced to 10% to let the AIs train on a new scenario.`;
 
   const footer = document.createElement('div');
   footer.className = 'side-panel-footer';
