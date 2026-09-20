@@ -86,6 +86,7 @@ export class Car {
   /** color the mask currently holds, it is only repainted when that moves */
   private maskColor = '';
   private va = 0;
+  private brainInputs: number[] = [];
   /** half diagonal and corner angle, both derived from the fixed size */
   private rad = Math.hypot(this.width, this.height) / 2;
   private alpha = Math.atan2(this.width, this.height);
@@ -179,13 +180,15 @@ export class Car {
     if (this.sensor) {
       this.sensor.update(obstacles, circuit.segments);
       if (this.useAI) {
-        const offsets = this.sensor.readings.map((s) =>
-          s == null ? 0 : 1 - s.offset,
-        );
-        offsets.push(Math.min(1, Math.hypot(this.vx, this.vy) / this.maxSpeed));
-        offsets.push(this.#velocityDelta());
-        offsets.push(this.gateDelta);
-        const outputs = this.brain.process(offsets);
+        const inputs = this.brainInputs;
+        inputs.length = 0;
+        for (const reading of this.sensor.readings) {
+          inputs.push(reading == null ? 0 : 1 - reading.offset);
+        }
+        inputs.push(Math.min(1, Math.hypot(this.vx, this.vy) / this.maxSpeed));
+        inputs.push(this.#velocityDelta());
+        inputs.push(this.gateDelta);
+        const outputs = this.brain.process(inputs);
         const [throttle, left, right] = outputs;
         // one signed float: gas positive, brake / reverse negative
         this.controls.throttle = Math.max(-1, Math.min(1, throttle));

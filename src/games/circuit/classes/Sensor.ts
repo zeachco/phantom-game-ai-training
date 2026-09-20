@@ -1,10 +1,5 @@
 import type { Car } from './Car';
-import {
-  getIntersection,
-  lerp,
-  segmentHitsAABB,
-  Vector,
-} from '../../../utilities/math';
+import { lerp, segmentHitsAABB, Vector } from '../../../utilities/math';
 import { config } from './Config';
 import type { Segment } from './Circuit';
 import type { Obstacle } from './Obstacle';
@@ -21,8 +16,6 @@ export class Sensor {
   /** one [start, end] pair per ray, the points are updated in place */
   rays: Vector[][];
   readings: (Reading | null)[];
-  /** touched by the current ray, reused across rays and frames */
-  #touches: Reading[] = [];
   /** each ray's fixed offset from the car angle, with its sin/cos precomputed */
   #cosOff: number[] = [];
   #sinOff: number[] = [];
@@ -63,12 +56,11 @@ export class Sensor {
     obstacles: Obstacle[],
     segments: Segment[],
   ): Reading | null {
-    const touches = this.#touches;
-    touches.length = 0;
     const ax = ray[0].x;
     const ay = ray[0].y;
     const bx = ray[1].x;
     const by = ray[1].y;
+    let bestOffset = Infinity;
 
     for (let i = 0; i < obstacles.length; i++) {
       const obstacle = obstacles[i];
@@ -76,37 +68,44 @@ export class Sensor {
       if (!segmentHitsAABB(ax, ay, bx, by, obstacle.aabb)) continue;
       const poly = obstacle.polygon;
       for (let j = 0; j < poly.length; j++) {
-        const value = getIntersection(
-          ray[0],
-          ray[1],
-          poly[j],
-          poly[(j + 1) % poly.length],
+        const next = poly[(j + 1) % poly.length];
+        const offset = intersectionOffset(
+          ax,
+          ay,
+          bx,
+          by,
+          poly[j].x,
+          poly[j].y,
+          next.x,
+          next.y,
         );
-        if (value) {
-          touches.push(value);
-        }
+        if (offset >= 0 && offset < bestOffset) bestOffset = offset;
       }
     }
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
       if (!segmentHitsAABB(ax, ay, bx, by, segment)) continue;
-      const value = getIntersection(ray[0], ray[1], segment.a, segment.b);
-      if (value) {
-        touches.push(value);
-      }
+      const offset = intersectionOffset(
+        ax,
+        ay,
+        bx,
+        by,
+        segment.a.x,
+        segment.a.y,
+        segment.b.x,
+        segment.b.y,
+      );
+      if (offset >= 0 && offset < bestOffset) bestOffset = offset;
     }
 
-    if (touches.length == 0) {
-      return null;
-    }
-    let best = touches[0];
-    for (let i = 1; i < touches.length; i++) {
-      if (touches[i].offset < best.offset) {
-        best = touches[i];
-      }
-    }
-    return best;
+    return bestOffset === Infinity
+      ? null
+      : {
+          x: ax + (bx - ax) * bestOffset,
+          y: ay + (by - ay) * bestOffset,
+          offset: bestOffset,
+        };
   }
 
   #castRays() {
@@ -143,4 +142,24 @@ export class Sensor {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+function intersectionOffset(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+) {
+  const tTop = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
+  const uTop = (cy - ay) * (ax - bx) - (cx - ax) * (ay - by);
+  const bottom = (dy - cy) * (bx - ax) - (dx - cx) * (by - ay);
+
+  if (bottom === 0) return -1;
+  const t = tTop / bottom;
+  const u = uTop / bottom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
 }

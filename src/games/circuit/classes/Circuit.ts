@@ -38,6 +38,13 @@ export class Circuit {
   public edgePaths: Path2D[] = [];
   /** obstacles placed along the circuit, seeded with the same random stream */
   public obstacles: Obstacle[] = [];
+  /** centerline candidates for the per-car road membership query */
+  #roadGrid = new Map<number, number[]>();
+  #roadGridMinX = 0;
+  #roadGridMinY = 0;
+  #roadGridWidth = 0;
+  #roadGridHeight = 0;
+  #roadCellSize = config.ROAD_WIDTH;
 
   constructor(public seed: number) {
     this.#generate(mulberry32(seed));
@@ -208,6 +215,8 @@ export class Circuit {
       });
     }
 
+    this.#buildRoadGrid();
+
     const pushSegments = (bound: Vector[]) => {
       for (let i = 0; i < n; i += config.SENSOR_DECIMATION) {
         const a = bound[i];
@@ -361,20 +370,22 @@ export class Circuit {
 
   /** true when the point sits between the actual left and right road edges */
   isOnRoad(x: number, y: number) {
-    const points = this.points;
-    const n = points.length;
-    let best = 0;
+    const key = this.#roadCellKey(x, y);
+    if (key === undefined) return false;
+    const candidates = this.#roadGrid.get(key);
+    if (!candidates) return false;
+
+    let best = candidates[0];
     let bestT = 0;
     let bestD = Infinity;
-    for (let i = 0; i < n; i++) {
-      const a = points[i];
-      const b = points[(i + 1) % n];
+    for (let candidate = 0; candidate < candidates.length; candidate++) {
+      const i = candidates[candidate];
+      const a = this.points[i];
+      const b = this.points[(i + 1) % this.points.length];
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const length2 = dx * dx + dy * dy;
-      let t = length2
-        ? ((x - a.x) * dx + (y - a.y) * dy) / length2
-        : 0;
+      let t = length2 ? ((x - a.x) * dx + (y - a.y) * dy) / length2 : 0;
       t = Math.max(0, Math.min(1, t));
       const px = a.x + dx * t;
       const py = a.y + dy * t;
@@ -386,11 +397,9 @@ export class Circuit {
       }
     }
 
-    const next = (best + 1) % n;
-    const p = points[best];
-    const q = points[next];
-    const centerX = p.x + (q.x - p.x) * bestT;
-    const centerY = p.y + (q.y - p.y) * bestT;
+    const next = (best + 1) % this.points.length;
+    const p = this.points[best];
+    const q = this.points[next];
     let normalX =
       this.normals[best].x * (1 - bestT) + this.normals[next].x * bestT;
     let normalY =
@@ -402,14 +411,87 @@ export class Circuit {
       this.leftHalf[best] * (1 - bestT) + this.leftHalf[next] * bestT;
     const right =
       this.rightHalf[best] * (1 - bestT) + this.rightHalf[next] * bestT;
-    const lateral =
-      (x - centerX) * normalX + (y - centerY) * normalY;
+    const centerX = p.x + (q.x - p.x) * bestT;
+    const centerY = p.y + (q.y - p.y) * bestT;
+    const lateral = (x - centerX) * normalX + (y - centerY) * normalY;
 
-    // Check both bounds explicitly.  A one-lane section can sit entirely on
+    // Check both bounds explicitly. A one-lane section can sit entirely on
     // one side of the centerline, so choosing a bound from the sign of the
     // point would incorrectly treat the space between the centerline and the
-    // road edge as drivable.  The small margin preserves the old tolerance.
+    // road edge as drivable.
     return lateral >= -right - 4 && lateral <= left + 4;
+  }
+
+  #buildRoadGrid() {
+    const padding = config.ROAD_MAX_LANES * config.ROAD_LANE_WIDTH + 4;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const point of this.points) {
+      if (point.x < minX) minX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y > maxY) maxY = point.y;
+    }
+
+    this.#roadGridMinX =
+      Math.floor((minX - padding) / this.#roadCellSize) * this.#roadCellSize;
+    this.#roadGridMinY =
+      Math.floor((minY - padding) / this.#roadCellSize) * this.#roadCellSize;
+    const gridMaxX =
+      Math.ceil((maxX + padding) / this.#roadCellSize) * this.#roadCellSize;
+    const gridMaxY =
+      Math.ceil((maxY + padding) / this.#roadCellSize) * this.#roadCellSize;
+    this.#roadGridWidth = Math.ceil(
+      (gridMaxX - this.#roadGridMinX) / this.#roadCellSize,
+    );
+    this.#roadGridHeight = Math.ceil(
+      (gridMaxY - this.#roadGridMinY) / this.#roadCellSize,
+    );
+
+    this.#roadGrid.clear();
+    for (let i = 0; i < this.points.length; i++) {
+      const a = this.points[i];
+      const b = this.points[(i + 1) % this.points.length];
+      const minCellX = Math.floor(
+        (Math.min(a.x, b.x) - padding - this.#roadGridMinX) /
+          this.#roadCellSize,
+      );
+      const maxCellX = Math.floor(
+        (Math.max(a.x, b.x) + padding - this.#roadGridMinX) /
+          this.#roadCellSize,
+      );
+      const minCellY = Math.floor(
+        (Math.min(a.y, b.y) - padding - this.#roadGridMinY) /
+          this.#roadCellSize,
+      );
+      const maxCellY = Math.floor(
+        (Math.max(a.y, b.y) + padding - this.#roadGridMinY) /
+          this.#roadCellSize,
+      );
+      for (let cellY = minCellY; cellY <= maxCellY; cellY++) {
+        for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+          const key = cellX + cellY * this.#roadGridWidth;
+          const cell = this.#roadGrid.get(key);
+          if (cell) cell.push(i);
+          else this.#roadGrid.set(key, [i]);
+        }
+      }
+    }
+  }
+
+  #roadCellKey(x: number, y: number) {
+    const cellX = Math.floor((x - this.#roadGridMinX) / this.#roadCellSize);
+    const cellY = Math.floor((y - this.#roadGridMinY) / this.#roadCellSize);
+    if (
+      cellX < 0 ||
+      cellX >= this.#roadGridWidth ||
+      cellY < 0 ||
+      cellY >= this.#roadGridHeight
+    )
+      return undefined;
+    return cellX + cellY * this.#roadGridWidth;
   }
 
   /** the single start point, just behind the line, every car overlaps there */
