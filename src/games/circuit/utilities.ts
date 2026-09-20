@@ -129,8 +129,10 @@ export function drawScores(
       const diff = ref.brain.score - previousScore;
       let emoji = '';
       let add = '';
-      if (diff > 0) {
-        emoji = ref.damaged ? '🏆' : '💚';
+      if (ref.laps >= config.LAPS_PER_SEED) {
+        emoji = '🏆';
+      } else if (diff > 0) {
+        emoji = ref.damaged ? '💀' : '💚';
         add = ` +${diff.toFixed(2)}`;
       } else {
         emoji = ref.damaged ? '💀' : '💜';

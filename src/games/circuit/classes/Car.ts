@@ -44,6 +44,8 @@ export class Car {
   public completedLap = false;
   /** full laps on the current map, the map advances at LAPS_PER_SEED */
   public laps = 0;
+  /** completed cars keep their finishing brain fixed until the next spawn */
+  public finished = false;
   /** set for one frame when the car claims an in-order checkpoint */
   public passedCheckpoint = false;
   /** gate the car is currently inside, -1 in none, charges out-of-order entries */
@@ -195,6 +197,7 @@ export class Car {
   }
 
   #updateScore(circuit: Circuit) {
+    if (this.finished) return;
     this.brain.score += this.speed * config.DISTANCE_SCORE_RATE;
     const checkpoints = circuit.checkpoints;
     const n = checkpoints.length;
@@ -220,6 +223,7 @@ export class Car {
         if (this.nextCheckpoint === n - 1) {
           this.completedLap = true;
           this.laps++;
+          if (this.laps >= config.LAPS_PER_SEED) this.finished = true;
         }
         this.nextCheckpoint = (this.nextCheckpoint + 1) % n;
       } else if (gate !== this.insideGate) {

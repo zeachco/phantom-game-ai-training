@@ -782,7 +782,7 @@ export default async (state: typeof defaultState) => {
 
       // the map high score is the max over the pool; the bar is the total
       for (const car of state.cars) {
-        if (car.damaged || !car.useAI) continue;
+        if (car.damaged || car.finished || !car.useAI) continue;
         const group = groupOf(car);
         if (!group) continue;
         if (car.brain.score > group.scores.seed) {
@@ -990,9 +990,11 @@ export default async (state: typeof defaultState) => {
   }
 
   function followedCar(): Car | undefined {
-    if (humanFollow && state.human && !state.human.damaged) return state.human;
+    if (humanFollow && state.human && !state.human.damaged && !state.human.finished)
+      return state.human;
     const inCategory = (car: Car) =>
       !car.damaged &&
+      !car.finished &&
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
@@ -1000,7 +1002,7 @@ export default async (state: typeof defaultState) => {
         : true);
     return (
       state.sortedCars.find(inCategory) ??
-      state.sortedCars.find((car) => !car.damaged)
+      state.sortedCars.find((car) => !car.damaged && !car.finished)
     );
   }
 
