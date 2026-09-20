@@ -13,7 +13,7 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [x] the steering wheel spokes are not centered on the wheel in the middle position, and the pedals only travel to the middle of the box when fully pressed (gas was too weak to drift: tripled)
 - [x] when pressing arrows to control the human car, the camera now follows the human until it crashes
 - [x] the road sometimes goes from 3 lanes to 2 lanes (seeded pinched sections); where there is not at least the full 3-lane width (transitions included) no obstacles are placed
-- [ ] in both circuit and highway, loading default model loads an old model that is trained with different sensors, giving a bad trained experience, let's disable the button for now
+- [x] in both circuit and highway, loading default model loads an old model that is trained with different sensors, giving a bad trained experience, let's disable the button for now
 
 ## In circuit game
 
@@ -21,7 +21,7 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [x] lap should show 1/3 for the first lap and 3/3 for the last one (lap # not the index of the lap)
 - [x] mixed brain instances are not visibly playing on the circuit
 - [x] (feature change) before jumping to the next map seed, at least 3 cars group needs to finish the track (3 distinct neural structures, mixed experts group and human player can count), next to controls, a small message would appear as a success "completed" in green next to the circuit number or "unfinished" in yellow
-- [ ] time to completion would be tracked per car, saved on the brain group, updated for each lap ( as an array lie [60.45, 55.2] when there's 2 laps in completing the 3rd one )
+- [x] time to completion would be tracked per car, saved on the brain group, updated for each lap ( as an array lie [60.45, 55.2] when there's 2 laps in completing the 3rd one )
 - [x] diminish the mutation rate per index so there's less variation and mutation stay closer to the original model. clamp minimal mutation values to Number.MIN_VALUE to ensure index 1 at very high cumulated generation still makes a change
 - [ ] 7 seconds elapsed time might yield different results based on performances, let's try to do the equivalent elapsed frames instead and display a gauge instead of "x secs" budgets for checkpoint time checks
 - [x] update obstacles to sometimes be circles or sometimes walls that can be +/-45 deg or 90 deg (perpendicular to the road). A rect cannot can be any width but cannot exceed the current width of the road minus one lane. ie: can be 2x lane width on a 3way road, but only 1 length on a 2 lane road. The higher the seed of the road is. All obstacles are to be white outline and gray inside with a second outline of dotted white/red to make them easy to spot
@@ -29,4 +29,8 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [x] add as input the current vector velocity of the car and it's relative angle to the front similar to the vector pointing to the next checkpoint, -1.0 to 1.0 for the vector angle and it's delta with the front of the car.
 - [ ] add a maximum fps toggle that's off by default that limits 60 fps and auto enables when the player is playing (camera following the player)
 - [ ] add 40% to the front distance for sensors
-- [ ] road can have 4 lane width, max obstacle width is 80% of half the available lane width, none when lane is one lane width
+- [ ] orange UI: move controls to the right, move seed to the top-left, and replace the seed input with a number div plus < and > buttons that change the map and URL immediately
+- [ ] purple UI: change the Follow buttons to a four-column grid
+- [ ] yellow/green UI: place the explanatory text beside the legend to save vertical space, and make the text area vertically scrollable with overflow auto
+- [ ] neural network UI: use the selected brain group's color for DOM borders; use light gray for mixed DOM elements to avoid per-frame DOM color updates while keeping the canvas visualization matched to the mixed selection
+- [ ] road can have up to 4 lanes, obstacles are less frequent, max obstacle width is 80% of half the available lane width, none when lane is one lane width
