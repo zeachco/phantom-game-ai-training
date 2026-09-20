@@ -236,17 +236,23 @@ export class Circuit {
       const rightRoom = this.rightHalf[idx] - crossHalf;
       if (leftRoom < 0 || rightRoom < 0) return null;
 
-      // Either leave a full car-width gap on every open side or snap the
-      // obstacle flush to one edge; never create a tempting unusable sliver.
+      // On a two-lane road an obstacle this wide already occupies one lane.
+      // Keep the other lane usable by anchoring the obstacle to an edge;
+      // centering it would leave two half-lane slivers on either side.
+      const twoLaneRoad = roadWidth <= laneWidth * 2 + 1e-6;
       const gap = config.OBSTACLE_PASS_GAP;
       const minWithGap = gap - rightRoom;
       const maxWithGap = leftRoom - gap;
       const off =
-        minWithGap <= maxWithGap && rng() > 0.25
-          ? minWithGap + rng() * (maxWithGap - minWithGap)
-          : rng() < 0.5
+        twoLaneRoad
+          ? rng() < 0.5
             ? leftRoom
-            : -rightRoom;
+            : -rightRoom
+          : minWithGap <= maxWithGap && rng() > 0.25
+            ? minWithGap + rng() * (maxWithGap - minWithGap)
+            : rng() < 0.5
+              ? leftRoom
+              : -rightRoom;
 
       return new Obstacle(
         p.x + this.normals[idx].x * off,
