@@ -278,7 +278,7 @@ ul:hover {
   left: 24px;
   bottom: 132px;
   z-index: 500;
-  min-width: 220px;
+  min-width: 300px;
   padding: 0.45em 0.7em;
   border-radius: 0.45em;
   background: rgba(17, 21, 15, 0.82);
@@ -288,10 +288,24 @@ ul:hover {
 }
 
 .timing-board-title {
-  margin-bottom: 0.25em;
+  margin-bottom: 0.35em;
   color: rgba(255, 255, 255, 0.55);
   font-size: 0.85em;
   letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.timing-board-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(86px, 0.8fr);
+  column-gap: 1.25em;
+}
+
+.timing-board-heading {
+  margin-bottom: 0.15em;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 

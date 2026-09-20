@@ -789,17 +789,40 @@ export default async (state: typeof defaultState) => {
 
   const timingBoard = document.createElement('section');
   timingBoard.className = 'timing-board';
-  timingBoard.setAttribute('aria-label', 'Best lap times');
+  timingBoard.setAttribute('aria-label', 'Best laps and finishers');
   const timingTitle = document.createElement('div');
   timingTitle.className = 'timing-board-title';
-  timingTitle.textContent = 'best timing';
+  timingTitle.textContent = 'race progress';
+  const timingColumns = document.createElement('div');
+  timingColumns.className = 'timing-board-columns';
+  const bestLapColumn = document.createElement('div');
+  bestLapColumn.className = 'timing-board-column';
+  const bestLapHeading = document.createElement('div');
+  bestLapHeading.className = 'timing-board-heading';
+  bestLapHeading.textContent = 'best laps';
   const timingRows = new Array(3).fill(0).map(() => {
     const row = document.createElement('div');
     row.className = 'timing-board-row';
-    timingBoard.append(row);
+    bestLapColumn.append(row);
     return row;
   });
-  timingBoard.prepend(timingTitle);
+  bestLapColumn.prepend(bestLapHeading);
+
+  const finishColumn = document.createElement('div');
+  finishColumn.className = 'timing-board-column';
+  const finishHeading = document.createElement('div');
+  finishHeading.className = 'timing-board-heading';
+  finishHeading.textContent = 'finish';
+  const finishRows = new Array(3).fill(0).map(() => {
+    const row = document.createElement('div');
+    row.className = 'timing-board-row';
+    finishColumn.append(row);
+    return row;
+  });
+  finishColumn.prepend(finishHeading);
+
+  timingColumns.append(bestLapColumn, finishColumn);
+  timingBoard.append(timingTitle, timingColumns);
   document.body.appendChild(timingBoard);
 
   function formatTimingFrames(frames: number) {
@@ -809,6 +832,17 @@ export default async (state: typeof defaultState) => {
     if (rounded >= 1_000)
       return `${(rounded / 1_000).toFixed(1).replace(/\.0$/, '')}k frames`;
     return `${rounded} frames`;
+  }
+
+  function brainIdentityLabel(identity: string) {
+    if (identity === 'mixed') return 'mixed';
+    if (identity === 'human') return 'human';
+    return `brain ${identity}`;
+  }
+
+  function brainIdentityColor(identity: string) {
+    if (identity === 'human') return state.human?.color;
+    return groups.find((group) => group.key === identity)?.pool[0]?.color;
   }
 
   function updateTimingBoard() {
@@ -836,6 +870,17 @@ export default async (state: typeof defaultState) => {
         ? `${index + 1}. ${
             entry.group.isMixed ? 'mixed' : `brain ${entry.group.layer}`
           }  ${formatTimingFrames(entry.best)}`
+        : `${index + 1}. —`;
+    });
+
+    const finishers = [...completedBrainIndices].slice(0, finishRows.length);
+    finishRows.forEach((row, index) => {
+      const identity = finishers[index];
+      row.style.color =
+        (identity && brainIdentityColor(identity)) ||
+        'rgba(255, 255, 255, 0.82)';
+      row.textContent = identity
+        ? `${index + 1}. ${brainIdentityLabel(identity)}`
         : `${index + 1}. —`;
     });
   }
@@ -942,7 +987,6 @@ export default async (state: typeof defaultState) => {
           completedBrainIndices.add(brainIndex);
         }
       }
-      updateTimingBoard();
       if (completedBrainIndices.size >= 3 && !seedChangeAt) {
         // Finishing is a save point. Only a finisher that beats its
         // structure's saved champion is promoted and persisted.
@@ -956,6 +1000,7 @@ export default async (state: typeof defaultState) => {
         seedChangeAt = now + SEED_CHANGE_DELAY;
         finishCountdown.hidden = false;
       }
+      updateTimingBoard();
       if (seedChangeAt) {
         const remaining = Math.max(0, seedChangeAt - now);
         finishCountdown.textContent = `next track in ${(remaining / 1000).toFixed(1)}s`;
