@@ -16,7 +16,9 @@ panel shows its brain.
 - Score = a small trickle for moving + a checkpoint boost. Checkpoints are
   gates across the road, claimed in order around the loop, and a gate touched
   out of order subtracts its value, so a U-turn is a debt and donuts earn
-  nothing.
+  nothing. Every car also runs a 7 s countdown between gates: reach the next
+  checkpoint or the car dies like a collision (the followed car's remaining
+  time shows in the "secs" badge of the bottom HUD).
 - There are no generations: a crash leaves the car as a corpse that fades out
   over 5 s, and its slot only respawns once the corpse is gone — slot 0 clones
   the group's best brain, the higher slots carry progressively bolder

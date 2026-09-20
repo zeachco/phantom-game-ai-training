@@ -123,6 +123,8 @@ class Config {
   /** worth more than the walk to the next one, that is the anti-donut lever */
   public CHECKPOINT_SCORE = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;
+  /** a car that misses its next gate for this long dies, like a collision */
+  public CHECKPOINT_TIMEOUT = 7000;
   /** full laps one car needs on a seed before the map advances */
   public LAPS_PER_SEED = 3;
 

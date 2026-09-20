@@ -55,6 +55,9 @@ export class Car {
   /** performance.now() of the crash: the corpse fades over DEAD_LIFETIME and
    *  the car's slot respawns once the corpse expires */
   public deathTime = 0;
+  /** performance.now() of the last claimed gate: the next gate has to be
+   *  reached within CHECKPOINT_TIMEOUT of it, or the car dies like a crash */
+  public checkpointSince = 0;
   /** performance.now() when the current stall began, 0 while moving */
   private stallSince = 0;
   private img: HTMLImageElement;
@@ -93,6 +96,7 @@ export class Car {
     this.friction = config.CAR_FRICTION;
     this.angle = angle;
     this.damaged = false;
+    this.checkpointSince = performance.now();
 
     this.useAI = controlType == ControlType.AI;
 
@@ -146,7 +150,9 @@ export class Car {
 
     this.#createPolygon();
     this.damaged =
-      this.#assessDamage(obstacles, circuit) || this.#checkStall();
+      this.#assessDamage(obstacles, circuit) ||
+      this.#checkStall() ||
+      this.#checkGateTimeout();
     if (this.sensor) {
       this.sensor.update(obstacles, circuit.segments);
       if (this.useAI) {
@@ -168,6 +174,12 @@ export class Car {
   /** the trickle keeps a car moving, the gates in order carry the score,
    *  a gate touched out of order is a debt charged once per entry */
   /** a car under CAR_STALL_SPEED for CAR_STALL_TIMEOUT in a row has stalled */
+  /** a car that misses its next gate for CHECKPOINT_TIMEOUT dies, exactly
+   *  like a collision */
+  #checkGateTimeout() {
+    return performance.now() - this.checkpointSince > config.CHECKPOINT_TIMEOUT;
+  }
+
   #checkStall() {
     const now = performance.now();
     if (Math.hypot(this.vx, this.vy) < config.CAR_STALL_SPEED) {
@@ -203,6 +215,7 @@ export class Car {
       if (gate === this.nextCheckpoint) {
         this.brain.score += config.CHECKPOINT_SCORE;
         this.passedCheckpoint = true;
+        this.checkpointSince = performance.now();
         // claiming the last gate wraps the index back to the start: a full lap
         if (this.nextCheckpoint === n - 1) {
           this.completedLap = true;

@@ -386,7 +386,13 @@ export default async (state: typeof defaultState) => {
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
   readout.append(raceEl, lapsEl, speedo);
-  steerOverlay.append(wheelCanvas, pedal, readout);
+  // the gate countdown: time left for the followed car to claim its next gate
+  const gateTimer = document.createElement('div');
+  gateTimer.className = 'gate-timer';
+  gateTimer.title =
+    'time left for the followed car to reach the next checkpoint, then it dies';
+  gateTimer.textContent = `${(config.CHECKPOINT_TIMEOUT / 1000).toFixed(2)} secs`;
+  steerOverlay.append(wheelCanvas, pedal, readout, gateTimer);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
@@ -854,6 +860,10 @@ export default async (state: typeof defaultState) => {
       lapsEl.textContent = `lap ${Math.min(camTarget.laps, config.LAPS_PER_SEED)}/${
         config.LAPS_PER_SEED
       }`;
+      const gateLeft =
+        config.CHECKPOINT_TIMEOUT -
+        (performance.now() - camTarget.checkpointSince);
+      gateTimer.textContent = `${Math.max(0, gateLeft / 1000).toFixed(2)} secs`;
     }
     lastFollowed = camTarget;
     state.camX = camX;

@@ -323,3 +323,15 @@ ul:hover {
   color: rgba(255, 255, 255, 0.55);
   margin-left: 6px;
 }
+/* the gate countdown badge: same text size as the laps line */
+.gate-timer {
+  align-self: flex-end;
+  margin-bottom: 28px;
+  padding: 5px 12px;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: bold;
+  color: #ff5fa2;
+  background: #f7f0dd;
+  border-radius: 6px;
+}
