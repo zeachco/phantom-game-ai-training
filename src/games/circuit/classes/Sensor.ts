@@ -125,27 +125,21 @@ export class Sensor {
     }
   }
 
-  /** the whole fan of rays stroked in two passes, one per color */
+  /** the sensor coverage area, using the current effective ray endpoints */
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    ctx.lineWidth = 2;
-
     ctx.beginPath();
-    ctx.strokeStyle = 'yellow';
+    const origin = this.rays[0][0];
+    ctx.moveTo(origin.x, origin.y);
     for (let i = 0; i < this.rays.length; i++) {
       const end = this.readings[i] || this.rays[i][1];
-      ctx.moveTo(this.rays[i][0].x, this.rays[i][0].y);
       ctx.lineTo(end.x, end.y);
     }
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'black';
-    for (let i = 0; i < this.rays.length; i++) {
-      const end = this.readings[i] || this.rays[i][1];
-      ctx.moveTo(this.rays[i][1].x, this.rays[i][1].y);
-      ctx.lineTo(end.x, end.y);
-    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(125, 211, 252, 0.22)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.8)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.restore();
   }
