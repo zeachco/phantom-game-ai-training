@@ -189,6 +189,13 @@ export default async (state: typeof defaultState) => {
     followKeys.querySelectorAll('button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.follow === String(value));
     });
+    // Mixed colors change every frame, so mixed and "all" keep a neutral DOM
+    // outline instead of repainting the panel continuously.
+    const color =
+      typeof value === 'number' && value > 0
+        ? getColorScale(value / config.MAX_NETWORK_LAYERS)
+        : '#c4c4c4';
+    networkCanvas.style.setProperty('--network-color', color);
   };
 
   /** car buttons: key 0 any car, 1-9 that brain layer, 'mixed' the mix,
@@ -277,17 +284,15 @@ export default async (state: typeof defaultState) => {
     btn.textContent = label;
     btn.dataset.follow = String(value);
     btn.title = 'Click to follow, long press or right-click to reset';
+    // Numbered brains get a stable group color. Mixed and "all" stay light
+    // gray because their effective color can change every frame.
     const color =
-      value === 'mixed'
-        ? config.MIXED_COLOR
-        : value === 0
-        ? undefined
-        : getColorScale(value / config.MAX_NETWORK_LAYERS);
-    if (color) {
-      btn.style.setProperty('--btn-color', color);
-      // black or white, whichever keeps the higher contrast on the car color
-      btn.style.setProperty('--btn-text', contrastText(color));
-    }
+      typeof value === 'number' && value > 0
+        ? getColorScale(value / config.MAX_NETWORK_LAYERS)
+        : '#c4c4c4';
+    btn.style.setProperty('--btn-color', color);
+    // black or white, whichever keeps the higher contrast on the car color
+    btn.style.setProperty('--btn-text', contrastText(color));
     followKeys.append(btn);
     followBtns.set(btn, { key: String(value) });
     armReset(btn, value, () => setFollow(value));
@@ -344,9 +349,13 @@ export default async (state: typeof defaultState) => {
   actions.className = 'model-actions';
   actions.append(loadBtn, saveBtn, clearBtn, statsBtn);
 
+  const info = document.createElement('div');
+  info.className = 'side-panel-info';
+  info.append(about, legend);
+
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(actions, followKeys, netWrap, about, legend, footer);
+  panelContent.append(actions, followKeys, netWrap, info, footer);
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
@@ -681,7 +690,7 @@ export default async (state: typeof defaultState) => {
     // the pools may still hold corpses, they do not count as alive
     state.living = state.cars.filter((c) => !c.damaged).length;
     camSet = false;
-    if (document.activeElement !== seedInput) seedInput.value = String(seed);
+    seedValue.textContent = String(seed);
   }
 
   /** a full lap: +1, the lap count is the session progress */
@@ -698,32 +707,27 @@ export default async (state: typeof defaultState) => {
     regenerateMap();
   }
 
-  const seedWrap = document.createElement('label');
-  seedWrap.className = 'seed-wrap';
+  // The map selector stays in the top-left HUD so it remains available while
+  // the model panel is closed. Buttons apply immediately and update the hash.
+  const seedControls = document.createElement('div');
+  seedControls.className = 'seed-controls';
   const seedLabel = document.createElement('span');
-  seedLabel.textContent = 'map seed';
-  const seedInput = document.createElement('input');
-  seedInput.className = 'seed-input';
-  seedInput.inputMode = 'numeric';
-  seedInput.value = String(seed);
-  seedInput.title = 'Apply a new seed (enter or blur)';
-  const applySeedInput = () => {
-    const value = parseInt(seedInput.value, 10);
-    if (!Number.isFinite(value) || value <= 0 || value === seed) {
-      seedInput.value = String(seed);
-      return;
-    }
-    applyUserSeed(value);
-  };
-  seedInput.addEventListener('change', applySeedInput);
-  seedInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      seedInput.blur();
-    }
-  });
-  seedWrap.append(seedLabel, seedInput);
-  panelContent.insertBefore(seedWrap, followKeys);
+  seedLabel.textContent = 'map';
+  const seedValue = document.createElement('span');
+  seedValue.className = 'seed-value';
+  seedValue.textContent = String(seed);
+  const previousSeed = document.createElement('button');
+  previousSeed.type = 'button';
+  previousSeed.textContent = '<';
+  previousSeed.title = 'Previous map';
+  previousSeed.onclick = () => applyUserSeed(Math.max(0, seed - 1));
+  const nextSeed = document.createElement('button');
+  nextSeed.type = 'button';
+  nextSeed.textContent = '>';
+  nextSeed.title = 'Next map';
+  nextSeed.onclick = () => applyUserSeed(seed + 1);
+  seedControls.append(previousSeed, seedLabel, seedValue, nextSeed);
+  document.body.appendChild(seedControls);
 
   try {
     initialize();
@@ -995,6 +999,9 @@ export default async (state: typeof defaultState) => {
       statsBtn.classList.toggle('active', statsOn);
       statsBtn.setAttribute('aria-pressed', String(statsOn));
     }
+  }, {
+    maxFps: config.HUMAN_FPS_CAP,
+    shouldCap: () => config.HUMAN_FPS_CAP_ENABLED && humanFollow,
   });
 
   /** car buttons stay filled with their car color while the category

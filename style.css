@@ -141,11 +141,13 @@ ul:hover {
 /* the network canvas is transparent, this only paints behind the brain */
 .neural-canvas {
   background: #949494;
+  border: 2px solid var(--network-color, #c4c4c4);
+  box-sizing: border-box;
 }
 
 .follow-keys {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.4em;
 }
 
@@ -195,7 +197,18 @@ ul:hover {
   outline-offset: 1px;
 }
 
+.side-panel-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6em;
+  flex: 0 1 30%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .side-panel-about {
+  min-height: 0;
+  overflow-y: auto;
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
   background: rgba(255, 255, 255, 0.08);
@@ -207,6 +220,8 @@ ul:hover {
 }
 
 .side-panel-legend {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.15em;
@@ -235,22 +250,40 @@ ul:hover {
   text-align: center;
 }
 
-/* the seed field: a label plus a compact numeric input in the panel */
-.seed-wrap {
+/* the map selector sits just above the bottom-left cockpit */
+.seed-controls {
+  position: fixed;
+  left: 24px;
+  bottom: 132px;
+  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #ccc;
-  font-size: 12px;
-}
-.seed-input {
-  width: 110px;
-  padding: 4px 8px;
-  background: #111;
+  gap: 0.35em;
+  padding: 0.35em 0.5em;
+  border-radius: 0.4em;
+  background: rgba(25, 52, 94, 0.85);
   color: #fff;
-  border: 1px solid #444;
-  border-radius: 4px;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
+}
+.seed-controls button {
+  width: 1.8em;
+  height: 1.8em;
+  border: 0;
+  border-radius: 0.25em;
+  color: #111;
+  background: #c4c4c4;
   font: inherit;
+  cursor: pointer;
+}
+.seed-controls button:hover {
+  background: #fff;
+}
+.seed-value {
+  min-width: 3em;
+  text-align: center;
+  font-family: monospace;
 }
 
 /* the human play toggle in the panel */
@@ -261,7 +294,7 @@ ul:hover {
   right: 0;
   bottom: 0;
   display: flex;
-  /* one left-side cluster, the right stays clear for the map */
+  /* keep the cockpit cluster on the left, under the map selector */
   justify-content: flex-start;
   align-items: flex-end;
   gap: 28px;

@@ -1,6 +1,8 @@
-# Speed indicator and left controls cluster (circuit)
+# Speed indicator and cockpit controls (circuit)
 
 The fixed bottom overlay is a left-side cockpit cluster containing the wheel,
 throttle pill, race seed, lap number, speed and checkpoint timer. Speed is the
 followed car's 2D velocity magnitude; lap display uses human numbering (`1/3`
-through `3/3`). The overlay hides when nothing is followable.
+through `3/3`). The overlay hides when nothing is followable. A separate
+map control above the cockpit displays the seed and `<`/`>` immediately rebuild
+the map and update `#circuit=<seed>`.

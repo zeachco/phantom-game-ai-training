@@ -8,14 +8,16 @@ decays over `MUTATION_LAP_DECAY` (50) laps.
 
 The map is deterministic from its seed. The seed is mirrored in
 `#circuit=<seed>` and rebuilding it reproduces the same road, sections,
-checkpoints and obstacles. Model changes are promoted live and saves are
+checkpoints and obstacles. Later seeds increase curve amplitude and add up to
+four higher-frequency harmonics, making hard curves more frequent and intense. Model changes are promoted live and saves are
 staged until checkpoint, crash, map-fold or unload save points.
 
 A map waits for three distinct finish identities (brain layer, mixed brain or
 human) to complete the required three laps. Finished cars freeze, then a
 short countdown precedes the next seeded map.
 
-The road defaults to three 60-unit lanes. Seeded sections smoothly change by
+While the human car is followed, the optional shared game loop cap limits
+simulation/render callbacks to 60 FPS. The road defaults to three 60-unit lanes. Seeded sections smoothly change by
 one lane at a time between one and four lanes; only the closing lane's divider
 merges into a neighbor, while unaffected dividers stay separate. One-lane
 sections have no obstacles. Other sections use 12 round obstacles and

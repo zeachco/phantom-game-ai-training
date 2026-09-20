@@ -54,10 +54,10 @@ class Config {
   public SENSORS = 17;
   /** total fan spread centered on the heading, was a ~315 deg sweep */
   public SENSOR_ANGLE = (Math.PI / 180) * 120;
-  /** reach of the center ray, ~1 s of lookahead at full throttle */
-  public SENSORS_MAX_LENGTH = 240;
-  /** reach of the edge rays, the sides pay for the forward reach */
-  public SENSORS_EDGE_LENGTH = 144;
+  /** reach of the center ray, extended by 40% for earlier obstacle planning */
+  public SENSORS_MAX_LENGTH = 336;
+  /** reach of the edge rays, preserving the 60% edge-to-center profile */
+  public SENSORS_EDGE_LENGTH = 202;
 
   // car
   /** yaw rate (rad/frame) at zero speed, full steer: the on-the-spot pivot */
@@ -95,6 +95,9 @@ class Config {
   public STEER_UI_PEDAL_TRAVEL = 27;
   /** display lerp for the wheel, the brain outputs are noisy per frame */
   public STEER_UI_SMOOTH = 0.35;
+  /** optional browser cap while a human is actively being followed */
+  public HUMAN_FPS_CAP_ENABLED = true;
+  public HUMAN_FPS_CAP = 60;
 
   // circuit, a radial curve r(theta) so the random waves can never
   // self-intersect, the map is bigger than the screen

@@ -2,6 +2,7 @@ import { MixedNetwork } from '../../ai/Mixed';
 import { ModelsByLayerCount } from '../../ai/utils';
 import type { NeuralNetwork } from '../../ai/Network';
 import { blendColorScale, getColorScale } from '../../utilities/colors';
+import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
 import { Car } from './classes/Car';
 import { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
@@ -56,30 +57,8 @@ export const defaultState = {
   groups: [] as Group[],
 };
 
-/** color a layer depth gets on the scale shared by every brain of the game */
-const layerColor = (layer: number) =>
-  getColorScale(layer / config.MAX_NETWORK_LAYERS);
-
-const mixedColors = new Map<string, string>();
-export function mixedColor(brain: MixedNetwork) {
-  const shares = brain.selectionShares;
-  const layers = brain.expertLayers;
-  const key =
-    layers.join() + ':' + shares.map((s) => Math.round(s * 20)).join();
-  let color = mixedColors.get(key);
-  if (!color) {
-    color = blendColorScale(
-      layers.map((layer, i) => ({
-        ratio: layer / config.MAX_NETWORK_LAYERS,
-        weight: shares[i],
-      })),
-      config.MIXED_COLOR,
-    );
-    if (mixedColors.size > 512) mixedColors.clear();
-    mixedColors.set(key, color);
-  }
-  return color;
-}
+export const mixedColor = (brain: MixedNetwork) =>
+  mixedNetworkColor(brain, config.MAX_NETWORK_LAYERS, config.MIXED_COLOR);
 
 const FH = 12;
 const TL = 0;
@@ -121,11 +100,19 @@ export function drawScores(
     if (ref instanceof Car) {
       if (ref === state.human) {
         ctx.fillStyle = ref.damaged ? '#def' : ref.color;
-        ctx.fillText(`🕹 ${ref.label} ${Math.round(ref.brain.score)}`, TL, FH * 4 + index * FH);
+        ctx.fillText(
+          `🕹 ${ref.label} ${Math.round(ref.brain.score)}`,
+          TL,
+          FH * 4 + index * FH,
+        );
         return;
       }
       const group = state.groups.find(
-        (g) => g.key === (ref.brain instanceof MixedNetwork ? 'mixed' : String(ref.brainLayers)),
+        (g) =>
+          g.key ===
+          (ref.brain instanceof MixedNetwork
+            ? 'mixed'
+            : String(ref.brainLayers)),
       );
       const previousScore = group ? group.scores.total : 0;
       const diff = ref.brain.score - previousScore;
@@ -149,12 +136,14 @@ export function drawScores(
     } else {
       ctx.fillStyle = ref.isMixed
         ? blendColorScale([], config.MIXED_COLOR)
-        : layerColor(ref.layer);
+        : layerColor(ref.layer, config.MAX_NETWORK_LAYERS);
 
       const emoji = ref.isMixed ? '🧭' : '👻';
       const name = ref.isMixed ? 'mixed' : `brain ${ref.layer}`;
       ctx.fillText(
-        `${emoji} ${name} Σ ${Math.round(ref.scores.total)} · map ${Math.round(ref.scores.seed)}`,
+        `${emoji} ${name} Σ ${Math.round(ref.scores.total)} · map ${Math.round(
+          ref.scores.seed,
+        )}`,
         TL,
         FH * 4 + index * FH,
       );

@@ -1,6 +1,11 @@
 import { MIXED_KIND, MixedNetwork } from '../../ai/Mixed';
 import { ModelsByLayerCount } from '../../ai/utils';
-import { blendColorScale, getColorScale } from '../../utilities/colors';
+import { getColorScale } from '../../utilities/colors';
+import {
+  layerColor,
+  mixedNetworkColor,
+  savedMixedNetworkColor,
+} from '../../utilities/ai/colors';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
 
@@ -32,49 +37,17 @@ function previousSave(
   return (models && models[0]) || undefined;
 }
 
-/** color a layer depth gets on the scale shared by every brain of the game */
-const layerColor = (layer: number) =>
-  getColorScale(layer / config.MAX_NETWORK_LAYERS);
-
-/**
- * Accent of a mixed brain: the colors of the brains it drives with, weighted
- * by how much of the run each of them has been driving. The shares drift a
- * frame at a time while the blend takes trig, so they are quantized and the
- * color cached per car.
- */
-const mixedColors = new Map<string, string>();
-export function mixedColor(brain: MixedNetwork) {
-  const shares = brain.selectionShares;
-  const layers = brain.expertLayers;
-  const key =
-    layers.join() + ':' + shares.map((s) => Math.round(s * 20)).join();
-  let color = mixedColors.get(key);
-  if (!color) {
-    color = blendColorScale(
-      layers.map((layer, i) => ({
-        ratio: layer / config.MAX_NETWORK_LAYERS,
-        weight: shares[i],
-      })),
-      config.MIXED_COLOR,
-    );
-    if (mixedColors.size > 512) mixedColors.clear();
-    mixedColors.set(key, color);
-  }
-  return color;
-}
-
-/** same blend for a save, where the experts are only kept as `layer.rank` slots */
-const savedMixedColor = (model: ModelsByLayerCount[number]) =>
-  blendColorScale(
-    (model.expertIds || []).map((slot: string, i: number) => ({
-      ratio: parseInt(slot, 10) / config.MAX_NETWORK_LAYERS,
-      weight: (model.selectionCounts && model.selectionCounts[i]) || 0,
-    })),
-    config.MIXED_COLOR,
-  );
+export const mixedColor = (brain: MixedNetwork) =>
+  mixedNetworkColor(brain, config.MAX_NETWORK_LAYERS, config.MIXED_COLOR);
 
 const modelColor = (model: ModelsByLayerCount[number]) =>
-  isMixed(model) ? savedMixedColor(model) : layerColor(model.levels.length);
+  isMixed(model)
+    ? savedMixedNetworkColor(
+        model,
+        config.MAX_NETWORK_LAYERS,
+        config.MIXED_COLOR,
+      )
+    : layerColor(model.levels.length, config.MAX_NETWORK_LAYERS);
 
 const FH = 12;
 const TL = 0;
