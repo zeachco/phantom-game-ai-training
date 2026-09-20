@@ -86,8 +86,7 @@ class Config {
   /** top speed in u/f */
   public CAR_MAX_SPEED = 9;
   public CLEAR_STORAGE = /clear/.test(window.location.href);
-  /** leaving the road kills, the trickle only exists to reward moving on it */
-  public DISTANCE_SCORE_RATE = 1 / 30;
+  /** leaving the road kills; score comes from claiming checkpoints */
 
   // steering ui, the wheel and pedals mimic the followed car's outputs
   /** wheel rotation at full steer, radians */

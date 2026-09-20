@@ -179,8 +179,8 @@ export class Car {
     }
   }
 
-  /** the trickle keeps a car moving, the gates in order carry the score,
-   *  a gate touched out of order is a debt charged once per entry */
+  /** the gates in order carry the score; a gate touched out of order is a
+   *  debt charged once per entry */
   /** a car under CAR_STALL_SPEED for CAR_STALL_TIMEOUT in a row has stalled */
   /** a car that misses its next gate for CHECKPOINT_TIMEOUT dies, exactly
    *  like a collision */
@@ -204,7 +204,6 @@ export class Car {
 
   #updateScore(circuit: Circuit) {
     if (this.finished) return;
-    this.brain.score += this.speed * config.DISTANCE_SCORE_RATE;
     const checkpoints = circuit.checkpoints;
     const n = checkpoints.length;
     const r2 = config.CHECKPOINT_CLAIM_RADIUS ** 2;
