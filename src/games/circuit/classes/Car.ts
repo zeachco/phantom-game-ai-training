@@ -60,6 +60,8 @@ export class Car {
   /** performance.now() of the last claimed gate: the next gate has to be
    *  reached within CHECKPOINT_TIMEOUT of it, or the car dies like a crash */
   public checkpointSince = 0;
+  /** simulation frames since the last checkpoint was claimed */
+  public framesSinceLastCheckpoint = 0;
   /** performance.now() when the current lap started, zero while moving */
   public lapStartedAt = 0;
   /** performance.now() when the last completed lap finished */
@@ -204,6 +206,7 @@ export class Car {
 
   #updateScore(circuit: Circuit) {
     if (this.finished) return;
+    this.framesSinceLastCheckpoint++;
     const checkpoints = circuit.checkpoints;
     const n = checkpoints.length;
     const r2 = config.CHECKPOINT_CLAIM_RADIUS ** 2;
@@ -221,7 +224,9 @@ export class Car {
 
     if (gate !== -1) {
       if (gate === this.nextCheckpoint) {
-        this.brain.score += config.CHECKPOINT_SCORE;
+        this.brain.score +=
+          config.CHECKPOINT_SCORE / this.framesSinceLastCheckpoint;
+        this.framesSinceLastCheckpoint = 0;
         this.passedCheckpoint = true;
         this.checkpointSince = performance.now();
         // claiming the last gate wraps the index back to the start: a full lap
@@ -234,7 +239,7 @@ export class Car {
         }
         this.nextCheckpoint = (this.nextCheckpoint + 1) % n;
       } else if (gate !== this.insideGate) {
-        this.brain.score -= config.CHECKPOINT_SCORE;
+        this.brain.score -= config.WRONG_CHECKPOINT_PENALTY;
       }
       this.insideGate = gate;
     } else {

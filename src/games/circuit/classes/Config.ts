@@ -119,8 +119,10 @@ class Config {
   // checkpoints, claimed in order so the only way to bank score is
   // around the loop, donuts in the open plane earn nothing
   public CHECKPOINTS = 32;
-  /** worth more than the walk to the next one, that is the anti-donut lever */
-  public CHECKPOINT_SCORE = 100;
+  /** base checkpoint reward, divided by frames taken since the last gate */
+  public CHECKPOINT_SCORE = 1000;
+  /** fixed debt for entering a checkpoint out of order */
+  public WRONG_CHECKPOINT_PENALTY = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;
   /** a car that misses its next gate for this long dies, like a collision */
   public CHECKPOINT_TIMEOUT = 7000;
