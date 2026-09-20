@@ -336,35 +336,57 @@ export class Circuit {
     return ((Math.round(arc / per) % n) + n) % n;
   }
 
-  /** true when the point sits on the road, the nearest centerline point decides */
+  /** true when the point sits between the actual left and right road edges */
   isOnRoad(x: number, y: number) {
     const points = this.points;
     const n = points.length;
     let best = 0;
+    let bestT = 0;
     let bestD = Infinity;
     for (let i = 0; i < n; i++) {
-      const dx = points[i].x - x;
-      const dy = points[i].y - y;
-      const d = dx * dx + dy * dy;
-      if (d < bestD) {
-        bestD = d;
+      const a = points[i];
+      const b = points[(i + 1) % n];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length2 = dx * dx + dy * dy;
+      let t = length2
+        ? ((x - a.x) * dx + (y - a.y) * dy) / length2
+        : 0;
+      t = Math.max(0, Math.min(1, t));
+      const px = a.x + dx * t;
+      const py = a.y + dy * t;
+      const distance = (x - px) * (x - px) + (y - py) * (y - py);
+      if (distance < bestD) {
+        bestD = distance;
         best = i;
+        bestT = t;
       }
     }
-    // refine on the two segments around the nearest point, an exact projection
-    bestD = Math.min(
-      bestD,
-      distToSegment2(x, y, points[(best - 1 + n) % n], points[best]),
-      distToSegment2(x, y, points[best], points[(best + 1) % n]),
-    );
-    // the width is per side: the pinched edge is closer than the other one
-    const nm = this.normals[best];
-    const side =
-      (x - points[best].x) * nm.x + (y - points[best].y) * nm.y >= 0
-        ? this.leftHalf[best]
-        : this.rightHalf[best];
-    const half = side + 4;
-    return bestD <= half * half;
+
+    const next = (best + 1) % n;
+    const p = points[best];
+    const q = points[next];
+    const centerX = p.x + (q.x - p.x) * bestT;
+    const centerY = p.y + (q.y - p.y) * bestT;
+    let normalX =
+      this.normals[best].x * (1 - bestT) + this.normals[next].x * bestT;
+    let normalY =
+      this.normals[best].y * (1 - bestT) + this.normals[next].y * bestT;
+    const normalLength = Math.hypot(normalX, normalY) || 1;
+    normalX /= normalLength;
+    normalY /= normalLength;
+    const left =
+      this.leftHalf[best] * (1 - bestT) + this.leftHalf[next] * bestT;
+    const right =
+      this.rightHalf[best] * (1 - bestT) + this.rightHalf[next] * bestT;
+    const lateral =
+      (x - centerX) * normalX + (y - centerY) * normalY;
+
+    // Check both bounds explicitly.  A one-lane section can sit entirely on
+    // one side of the centerline, so choosing a bound from the sign of the
+    // point would incorrectly treat the space between the centerline and the
+    // road edge as drivable.  The small margin preserves the old tolerance.
+    return lateral >= -right - 4 && lateral <= left + 4;
   }
 
   /** the single start point, just behind the line, every car overlaps there */
@@ -399,19 +421,6 @@ export class Circuit {
       ctx.stroke(this.edgePaths[i]);
     }
   }
-}
-
-/** squared distance from a point to a segment, clamped to the segment ends */
-function distToSegment2(px: number, py: number, a: Vector, b: Vector) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  let t = len2 ? ((px - a.x) * dx + (py - a.y) * dy) / len2 : 0;
-  if (t < 0) t = 0;
-  else if (t > 1) t = 1;
-  const cx = a.x + dx * t - px;
-  const cy = a.y + dy * t - py;
-  return cx * cx + cy * cy;
 }
 
 /** re-paces a closed polyline so the points sit at even arc distances */
