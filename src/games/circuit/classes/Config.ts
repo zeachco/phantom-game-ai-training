@@ -99,8 +99,20 @@ class Config {
   // circuit, a radial curve r(theta) so the random waves can never
   // self-intersect, the map is bigger than the screen
   public CIRCUIT_BASE_RADIUS = 1500;
-  /** max total deviation of the radius from the base, wide sweeping turns */
+  /** max base deviation from the radius, split over four broad waves */
   public CIRCUIT_WAVINESS = 420;
+  /** seed scale for difficulty = seed / (scale + seed) */
+  public CIRCUIT_DIFFICULTY_SEED_BASE = 10;
+  /** low-frequency waves retained at difficulty zero */
+  public CIRCUIT_BASE_HARMONICS = 4;
+  /** maximum number of extra, higher-frequency waves at full difficulty */
+  public CIRCUIT_EXTRA_HARMONICS = 4;
+  /** first frequency after the four broad waves (which use 2 through 5) */
+  public CIRCUIT_EXTRA_HARMONIC_START = 6;
+  /** broad-wave amplitude growth at full difficulty (420 * 1.75 max) */
+  public CIRCUIT_BASE_AMPLITUDE_GROWTH = 0.75;
+  /** total extra-wave budget at full difficulty; 735 + 240 stays below radius */
+  public CIRCUIT_EXTRA_WAVINESS = 240;
   /** points of the resampled centerline, also the drawn boundary resolution */
   public CIRCUIT_SAMPLES = 192;
   /** every Nth boundary point becomes a sensor segment, coarser is cheaper */

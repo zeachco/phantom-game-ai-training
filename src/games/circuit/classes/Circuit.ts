@@ -44,13 +44,36 @@ export class Circuit {
   }
 
   #generate(rng: Rng) {
-    // random harmonics of the radius, low frequencies for wide sweeping turns
-    const harmonics = 4;
+    const nonnegativeSeed = Math.max(0, this.seed);
+    const difficulty = Math.min(
+      1,
+      nonnegativeSeed /
+        (config.CIRCUIT_DIFFICULTY_SEED_BASE + nonnegativeSeed),
+    );
+    // Random harmonics of the radius start as four low frequencies for wide
+    // sweeping turns.  Extra waves use this same seeded stream, so maps stay
+    // deterministic while later seeds add more frequent, sharper curves.
     const waves: { freq: number; amp: number; phase: number }[] = [];
-    for (let k = 0; k < harmonics; k++) {
+    for (let k = 0; k < config.CIRCUIT_BASE_HARMONICS; k++) {
       waves.push({
         freq: k + 2,
-        amp: (0.25 + rng() * 0.75) * (config.CIRCUIT_WAVINESS / harmonics),
+        amp:
+          (0.25 + rng() * 0.75) *
+          (config.CIRCUIT_WAVINESS / config.CIRCUIT_BASE_HARMONICS) *
+          (1 + difficulty * config.CIRCUIT_BASE_AMPLITUDE_GROWTH),
+        phase: rng() * Math.PI * 2,
+      });
+    }
+    const extraHarmonics = Math.ceil(
+      difficulty * config.CIRCUIT_EXTRA_HARMONICS,
+    );
+    for (let k = 0; k < extraHarmonics; k++) {
+      waves.push({
+        freq: config.CIRCUIT_EXTRA_HARMONIC_START + k,
+        amp:
+          (0.25 + rng() * 0.75) *
+          (config.CIRCUIT_EXTRA_WAVINESS / config.CIRCUIT_EXTRA_HARMONICS) *
+          difficulty,
         phase: rng() * Math.PI * 2,
       });
     }
