@@ -219,7 +219,8 @@ export default async (state: typeof defaultState) => {
     console.info(
       `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
     );
-    initialize();
+    if (value === 0) initialize();
+    else resetBrainGroup(value);
   };
 
   /** long press (or right click) a car button to reset its saved weights */
@@ -643,6 +644,46 @@ export default async (state: typeof defaultState) => {
     return groups.find((g) => g.key === key);
   }
 
+  /** Clear one group's saved champion and replace only that group's cars. */
+  function resetBrainGroup(value: number | 'mixed') {
+    const group = groups.find((candidate) =>
+      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
+    );
+    if (!group) return;
+
+    const oldPool = new Set(group.pool);
+    const oldLiving = group.pool.filter((car) => !car.damaged).length;
+    state.cars = state.cars.filter((car) => !oldPool.has(car));
+    group.best = null;
+    group.seedBest = null;
+    group.lapTimes = {};
+    pendingSaves.delete(group);
+
+    if (group.isMixed) state.sortedMixed[group.layer] = [];
+    else state.sortedModels[group.layer] = [];
+
+    // A regular brain may also be an expert for future mixed spawns.
+    if (!group.isMixed) {
+      const { inputCount, outputCount } = getCircuitBrainDimensions();
+      experts = hydrateExperts(
+        state.sortedModels,
+        inputCount,
+        outputCount,
+        config.MIXED_EXPERTS_PER_LAYER,
+      );
+    }
+
+    group.pool = new Array(config.CARS_PER_GROUP);
+    for (let slot = 0; slot < config.CARS_PER_GROUP; slot++) {
+      group.pool[slot] = spawnCar(group, slot);
+    }
+    state.cars.push(...group.pool);
+    state.living += group.pool.length - oldLiving;
+    state.sortedCars = state.cars.slice();
+    camSet = false;
+    updateTimingBoard();
+  }
+
   /** Respawn a whole brain group after every car in it has finished fading.
    *  Keeping this decision per group means one line never waits for another. */
   function respawnGroup(group: Group, now: number) {
@@ -746,6 +787,60 @@ export default async (state: typeof defaultState) => {
   seedControls.append(previousSeed, seedLabel, seedValue, nextSeed);
   document.body.appendChild(seedControls);
 
+  const timingBoard = document.createElement('section');
+  timingBoard.className = 'timing-board';
+  timingBoard.setAttribute('aria-label', 'Best lap times');
+  const timingTitle = document.createElement('div');
+  timingTitle.className = 'timing-board-title';
+  timingTitle.textContent = 'best timing';
+  const timingRows = new Array(3).fill(0).map(() => {
+    const row = document.createElement('div');
+    row.className = 'timing-board-row';
+    timingBoard.append(row);
+    return row;
+  });
+  timingBoard.prepend(timingTitle);
+  document.body.appendChild(timingBoard);
+
+  function formatTimingFrames(frames: number) {
+    const rounded = Math.max(0, Math.round(frames));
+    if (rounded >= 1_000_000)
+      return `${(rounded / 1_000_000).toFixed(1).replace(/\.0$/, '')}m frames`;
+    if (rounded >= 1_000)
+      return `${(rounded / 1_000).toFixed(1).replace(/\.0$/, '')}k frames`;
+    return `${rounded} frames`;
+  }
+
+  function updateTimingBoard() {
+    const ranked = groups
+      .map((group) => {
+        const times = Object.values(group.lapTimes).flat();
+        return {
+          group,
+          best: times.length ? Math.min(...times) : Infinity,
+        };
+      })
+      .filter((entry) => Number.isFinite(entry.best))
+      .sort(
+        (a, b) =>
+          a.best - b.best ||
+          (a.group.isMixed ? 1 : 0) - (b.group.isMixed ? 1 : 0) ||
+          a.group.layer - b.group.layer,
+      );
+
+    timingRows.forEach((row, index) => {
+      const entry = ranked[index];
+      row.style.color =
+        entry?.group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)';
+      row.textContent = entry
+        ? `${index + 1}. ${
+            entry.group.isMixed ? 'mixed' : `brain ${entry.group.layer}`
+          }  ${formatTimingFrames(entry.best)}`
+        : `${index + 1}. —`;
+    });
+  }
+  updateTimingBoard();
+
   try {
     initialize();
   } catch (err) {
@@ -836,9 +931,7 @@ export default async (state: typeof defaultState) => {
             ? 'mixed-' + group.pool.indexOf(car)
             : car.label;
           group.lapTimes[key] = group.lapTimes[key] || [];
-          group.lapTimes[key].push(
-            (car.completedLapAt - car.lapStartedAt) / 1000,
-          );
+          group.lapTimes[key].push(car.completedLapFrames);
         }
         if (car.laps >= config.LAPS_PER_SEED) {
           const brainIndex = car === state.human
@@ -849,6 +942,7 @@ export default async (state: typeof defaultState) => {
           completedBrainIndices.add(brainIndex);
         }
       }
+      updateTimingBoard();
       if (completedBrainIndices.size >= 3 && !seedChangeAt) {
         // Finishing is a save point. Only a finisher that beats its
         // structure's saved champion is promoted and persisted.

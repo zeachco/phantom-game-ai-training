@@ -31,7 +31,7 @@ export interface Group {
   /** the brain that set the current map's high score, kept for progress */
   seedBest: { brain: NeuralNetwork; score: number } | null;
   scores: GroupScores;
-  /** per-car lap completion times in seconds, one entry per completed lap */
+  /** per-car lap completion times in simulation frames, one entry per lap */
   lapTimes: Record<string, number[]>;
 }
 

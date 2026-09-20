@@ -79,6 +79,10 @@ export class Car {
   public lapStartedAt = 0;
   /** performance.now() when the last completed lap finished */
   public completedLapAt = 0;
+  /** simulation frames spent on the current lap */
+  public framesSinceLapStart = 0;
+  /** simulation frames spent on the last completed lap */
+  public completedLapFrames = 0;
   /** performance.now() when the current stall began, 0 while moving */
   private stallSince = 0;
   private img: HTMLImageElement;
@@ -224,6 +228,7 @@ export class Car {
   #updateScore(circuit: Circuit) {
     if (this.finished) return;
     this.framesSinceLastCheckpoint++;
+    this.framesSinceLapStart++;
     const checkpoints = circuit.checkpoints;
     const n = checkpoints.length;
     const r2 = config.CHECKPOINT_CLAIM_RADIUS ** 2;
@@ -253,6 +258,8 @@ export class Car {
           this.completedLap = true;
           this.laps++;
           this.completedLapAt = performance.now();
+          this.completedLapFrames = this.framesSinceLapStart;
+          this.framesSinceLapStart = 0;
           this.lapStartedAt = this.completedLapAt;
           if (this.laps >= config.LAPS_PER_SEED) this.finished = true;
         }

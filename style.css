@@ -286,6 +286,43 @@ ul:hover {
   font-family: monospace;
 }
 
+/* fastest completed AI laps, positioned just above the cockpit HUD */
+.timing-board {
+  position: fixed;
+  left: 160px;
+  bottom: 136px;
+  z-index: 500;
+  min-width: 220px;
+  padding: 0.45em 0.7em;
+  border-radius: 0.45em;
+  background: rgba(17, 21, 15, 0.82);
+  color: rgba(255, 255, 255, 0.82);
+  font: 12px monospace;
+  pointer-events: none;
+}
+
+.timing-board-title {
+  margin-bottom: 0.25em;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.85em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.timing-board-row {
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* leave room for the map selector on narrow screens */
+@media (max-width: 560px) {
+  .timing-board {
+    left: 150px;
+    right: 8px;
+    min-width: 0;
+  }
+}
+
 /* the human play toggle in the panel */
 /* steering wheel + pedals: a fixed cockpit overlay mimicking the followed car */
 .steer-overlay {
