@@ -322,7 +322,7 @@ export default async (state: typeof defaultState) => {
     '🕹 human car, driven with the arrows or WASD',
     '🧭 mixed brain',
     '🏁 next checkpoint glows',
-    '🚧 solid obstacle',
+    '🚧 gray obstacle (circle or wall)',
   ].forEach((line, i) => {
     const el = document.createElement('span');
     el.textContent = line;
@@ -501,9 +501,7 @@ export default async (state: typeof defaultState) => {
     if (group.best && car.brain) {
       car.brain.mutationIndex = slot;
       car.brain.mutationFactor =
-        slot === 0
-          ? 0
-          : Math.max(Number.MIN_VALUE, maxMutation() / slot);
+        slot === 0 ? 0 : Math.max(Number.MIN_VALUE, maxMutation() / slot);
       try {
         car.brain.mutate(group.best.brain);
       } catch (err) {
@@ -520,7 +518,7 @@ export default async (state: typeof defaultState) => {
   /** the mixed pool only exists once there are experts to route to */
   function buildPools() {
     groups.length = 0;
-    const inputNb = config.SENSORS + 2;
+    const inputNb = config.SENSORS + 3;
     // Controls exposes throttle, left and right. Keeping this derived from a
     // car prevents mixed experts from being rejected for an impossible
     // fourth output.
@@ -604,7 +602,7 @@ export default async (state: typeof defaultState) => {
       // future mixed spawns route to the fresh champions
       experts = hydrateExperts(
         state.sortedModels,
-        config.SENSORS + 2,
+        config.SENSORS + 3,
         4,
         config.MIXED_EXPERTS_PER_LAYER,
       );

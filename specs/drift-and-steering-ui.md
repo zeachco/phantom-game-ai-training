@@ -3,10 +3,10 @@
 Cars carry a heading plus a 2D velocity (vx, vy) instead of a single
 speed scalar: yaw is speed-relative (sharp at speed, lazy when slow) and
 lateral motion is grip-limited — when the turn demand outstrips grip the
-car drifts, bleeding a little speed while sliding. `speed` (the brain's
-I/O and the scoring input) stays the signed forward component of the
-velocity. The camera leads the followed car by two frames of its true
-velocity.
+car drifts, bleeding a little speed while sliding. `speed` stays the signed
+forward component for scoring, while the brain receives total velocity
+magnitude and its signed angle relative to the car's front. The camera leads
+the followed car by two frames of its true velocity.
 
 The car's longitudinal control is one signed float throttle in
 [-1, 1] — the brain has 3 outputs (throttle, left, right), floats

@@ -7,8 +7,8 @@ class Config {
   public CAR_NB = 200;
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
-  /** every brain category runs a pool of exactly this many cars, slots 0..19 */
-  public CARS_PER_GROUP = 20;
+  /** every brain category runs a pool of exactly this many cars, slots 0..9 */
+  public CARS_PER_GROUP = 10;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
@@ -24,7 +24,7 @@ class Config {
 
   // mixed: a brain that picks which trained brain drives
   public MIXED_ENABLED = true;
-  public MIXED_CARS = 20;
+  public MIXED_CARS = 10;
   /** floor on the mutating mixed cars, the run needs a spread to arbitrate */
   public MIXED_MIN_CARS = 20;
   /** below that there is nothing to arbitrate, the run is skipped */
@@ -130,6 +130,8 @@ class Config {
 
   // obstacles, solid blocks along the road, none in the start zone
   public OBSTACLES = 20;
+  /** base chance that a seeded obstacle is round instead of a wall */
+  public OBSTACLE_CIRCLE_CHANCE = 0.55;
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge, otherwise the block snaps flush to the edge */
   public OBSTACLE_PASS_GAP = 30;

@@ -106,8 +106,8 @@ export class Car {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      // one input per ray, then the speed, then the angle to the next gate
-      const inputCount = this.sensor.rayCount + 2;
+      // one input per ray, then velocity magnitude/angle and the next-gate angle
+      const inputCount = this.sensor.rayCount + 3;
       const outputCount = Object.keys(this.controls).length;
       this.brain = brainBuilder
         ? brainBuilder(inputCount, outputCount)
@@ -161,7 +161,8 @@ export class Car {
         const offsets = this.sensor.readings.map((s) =>
           s == null ? 0 : 1 - s.offset,
         );
-        offsets.push(this.speed / this.maxSpeed);
+        offsets.push(Math.min(1, Math.hypot(this.vx, this.vy) / this.maxSpeed));
+        offsets.push(this.#velocityDelta());
         offsets.push(this.gateDelta);
         const outputs = this.brain.process(offsets);
         const [throttle, left, right] = outputs;
@@ -239,6 +240,24 @@ export class Car {
     this.gateX = next.x;
     this.gateY = next.y;
     this.gateDelta = this.#gateDelta(circuit);
+  }
+
+  /** signed angle between the velocity vector and the front, in [-1, 1] */
+  #velocityDelta() {
+    const velocity = Math.hypot(this.vx, this.vy);
+    if (velocity === 0) return 0;
+    const hx = -Math.sin(this.angle);
+    const hy = -Math.cos(this.angle);
+    return Math.max(
+      -1,
+      Math.min(
+        1,
+        Math.atan2(
+          hx * this.vy - hy * this.vx,
+          hx * this.vx + hy * this.vy,
+        ) / Math.PI,
+      ),
+    );
   }
 
   /** signed angle between the heading and the next gate, in [-1, 1] */

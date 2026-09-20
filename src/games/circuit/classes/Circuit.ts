@@ -1,6 +1,6 @@
 import { mulberry32, Rng, Vector } from '../../../utilities/math';
 import { config } from './Config';
-import { COLORS, Obstacle } from './Obstacle';
+import { Obstacle } from './Obstacle';
 import { Checkpoint } from './Checkpoint';
 
 /** one boundary edge with its precomputed box, the sensor's wall */
@@ -180,41 +180,84 @@ export class Circuit {
       );
     }
 
-    // obstacles seeded with the same rng stream; the gap between a block's
-    // side and the road edge is either at least one car width or zero —
-    // anything in between is an opening the sensors see but no car fits,
-    // so the block snaps flush to the nearer edge
+    // Obstacles use the same seeded stream as the road. Higher seeds make
+    // walls more common, while every obstacle still leaves a useful lane.
     this.obstacles = [];
     const span = Math.max(1, last - first);
     const step = span / config.OBSTACLES;
+    const laneWidth = config.ROAD_WIDTH / config.ROAD_LANES;
+    const seedDifficulty = Math.min(1, Math.max(0, this.seed) / 10);
+    const circleChance = Math.max(
+      0.2,
+      config.OBSTACLE_CIRCLE_CHANCE - seedDifficulty * 0.25,
+    );
+    const wallAngles = [-Math.PI / 4, Math.PI / 4, Math.PI / 2];
+
     for (let i = 0; i < config.OBSTACLES; i++) {
       const base = first + (i + 0.5) * step;
       const idx = Math.round(base + (-0.35 + rng() * 0.7) * step) % n;
-      // no obstacles where the full 3-lane width is missing, transitions
-      // included: a block there would wall the pinch
-      if (
-        this.leftHalf[idx] < half - 0.5 ||
-        this.rightHalf[idx] < half - 0.5
-      )
-        continue;
       const p = this.points[idx];
       const t = this.tangents[idx];
-      const width = 24 + rng() * 24;
-      const height = 20 + rng() * 30;
-      const color = COLORS[Math.floor(rng() * COLORS.length)];
-      let off = -60 + rng() * 120;
-      const gap = half - (Math.abs(off) + width / 2);
-      if (gap < config.OBSTACLE_PASS_GAP) {
-        off = (off < 0 ? -1 : 1) * (half - width / 2);
+      const roadAngle = Math.atan2(-t.x, -t.y);
+      const roadWidth = this.leftHalf[idx] + this.rightHalf[idx];
+      const maxWidth = Math.max(1, roadWidth - laneWidth);
+      const shape = rng() < circleChance ? 'circle' : 'wall';
+
+      let width: number;
+      let height: number;
+      let relativeAngle = 0;
+      if (shape === 'circle') {
+        const minDiameter = Math.min(laneWidth * 0.7, maxWidth);
+        const maxDiameter = Math.min(laneWidth * 0.8, maxWidth);
+        width = minDiameter + rng() * (maxDiameter - minDiameter);
+        height = width;
+      } else {
+        relativeAngle = wallAngles[Math.floor(rng() * wallAngles.length)];
+        height = Math.min(42, 18 + rng() * 24, roadWidth);
+        const minWidth = Math.min(24, maxWidth);
+        width = minWidth + rng() * (maxWidth - minWidth);
+
+        // A diagonal wall's cross-road footprint is wider than its local
+        // width. Reduce it if necessary so it cannot extend off the road.
+        const across = Math.abs(Math.cos(relativeAngle));
+        const along = Math.abs(Math.sin(relativeAngle));
+        const fittingWidth =
+          across > 0
+            ? Math.max(1, (roadWidth - along * height) / across)
+            : maxWidth;
+        width = Math.min(width, maxWidth, fittingWidth);
       }
+
+      const crossHalf =
+        shape === 'circle'
+          ? width / 2
+          : (Math.abs(Math.cos(relativeAngle)) * width +
+              Math.abs(Math.sin(relativeAngle)) * height) /
+            2;
+      const leftRoom = this.leftHalf[idx] - crossHalf;
+      const rightRoom = this.rightHalf[idx] - crossHalf;
+      if (leftRoom < 0 || rightRoom < 0) continue;
+
+      // Either leave a full car-width gap on every open side or snap the
+      // obstacle flush to one edge; never create a tempting unusable sliver.
+      const gap = config.OBSTACLE_PASS_GAP;
+      const minWithGap = gap - rightRoom;
+      const maxWithGap = leftRoom - gap;
+      let off: number;
+      if (minWithGap <= maxWithGap && rng() > 0.25) {
+        off = minWithGap + rng() * (maxWithGap - minWithGap);
+      } else {
+        off = rng() < 0.5 ? leftRoom : -rightRoom;
+      }
+
       this.obstacles.push(
         new Obstacle(
           p.x + this.normals[idx].x * off,
           p.y + this.normals[idx].y * off,
-          Math.atan2(-t.x, -t.y),
+          roadAngle + relativeAngle,
           width,
           height,
-          color,
+          shape,
         ),
       );
     }

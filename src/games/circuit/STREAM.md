@@ -11,8 +11,8 @@ panel shows its brain.
 - The track is a radial curve `r(theta) = base + sum of random harmonics`,
   star-shaped so the random waves carve turns but can never cross themselves,
   resampled at even arc length.
-- No traffic: solid obstacles sit on the road instead, and driving off the
-  road kills, so the road is the only place to be.
+- No traffic: gray, white-outlined circles and angled walls sit on the road
+  instead, and driving off the road kills, so the road is the only place to be.
 - Score = a small trickle for moving + a checkpoint boost. Checkpoints are
   gates across the road, claimed in order around the loop, and a gate touched
   out of order subtracts its value, so a U-turn is a debt and donuts earn
@@ -22,7 +22,7 @@ panel shows its brain.
 - There are no generations: a crash leaves the car as a corpse that fades out
   over 5 s, and its slot only respawns once the corpse is gone — slot 0 clones
   the group's best brain, the higher slots carry progressively bolder
-  mutations — so every brain category always runs its pool of 20, and the map
+  mutations — so every brain category always runs its pool of 10, and the map
   never holds more than CAR_NB (200) AI cars at once.
 - The moment a car beats its group's summarized total score, its brain is saved
   as the group's new best (live, not at death). The map is a pure function of
@@ -45,7 +45,7 @@ car names are set as such:
 - 👻 line total (the bar) + map high
 - 🧭 mixed brain
 - 🏁 checkpoint, the followed car's next one glows
-- 🚧 solid obstacle
+- 🚧 gray obstacle (circle or wall)
 - 🕹 human car, driven with the arrows or WASD
 
 ### Human play
