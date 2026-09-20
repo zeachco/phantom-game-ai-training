@@ -33,4 +33,4 @@ Single running list of known bugs across the games. Each entry is one line: what
 - [ ] purple UI: change the Follow buttons to a four-column grid
 - [ ] yellow/green UI: place the explanatory text beside the legend to save vertical space, and make the text area vertically scrollable with overflow auto
 - [ ] neural network UI: use the selected brain group's color for DOM borders; use light gray for mixed DOM elements to avoid per-frame DOM color updates while keeping the canvas visualization matched to the mixed selection
-- [ ] road defaults to 3 lanes but seeded sections can vary from 1 to 4 lanes, obstacles are less frequent, and obstacle width respects the available lane width
+- [ ] road defaults to 3 lanes but seeded sections can vary from 1 to 4 lanes by adjacent +/-1 transitions only; a closing lane merges with one neighbor while other dividers stay separate, obstacles are less frequent, and obstacle width respects the available lane width
