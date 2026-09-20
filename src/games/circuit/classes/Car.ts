@@ -71,9 +71,8 @@ export class Car {
   /** performance.now() of the crash: the corpse fades over DEAD_LIFETIME and
    *  the car's slot respawns once the corpse expires */
   public deathTime = 0;
-  /** performance.now() of the last claimed gate: the next gate has to be
-   *  reached within CHECKPOINT_TIMEOUT of it, or the car dies like a crash */
-  public checkpointSince = 0;
+  /** frames remaining to reach the next checkpoint at the reference 60 FPS */
+  public checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
   /** simulation frames since the last checkpoint was claimed */
   public framesSinceLastCheckpoint = 0;
   /** performance.now() when the current lap started, zero while moving */
@@ -118,7 +117,7 @@ export class Car {
     this.friction = config.CAR_FRICTION;
     this.angle = angle;
     this.damaged = false;
-    this.checkpointSince = performance.now();
+    this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
     this.lapStartedAt = performance.now();
 
     this.useAI = controlType == ControlType.AI;
@@ -168,6 +167,7 @@ export class Car {
 
   update(obstacles: Obstacle[], circuit: Circuit) {
     if (this.damaged) return;
+    this.checkpointFramesRemaining--;
     this.#move();
     if (this.brain) this.#updateScore(circuit);
 
@@ -175,7 +175,7 @@ export class Car {
     this.damaged =
       this.#assessDamage(obstacles, circuit) ||
       this.#checkStall() ||
-      this.#checkGateTimeout();
+      this.#checkCheckpointBudget();
     if (this.sensor) {
       this.sensor.update(obstacles, circuit.segments);
       if (this.useAI) {
@@ -198,10 +198,10 @@ export class Car {
   /** the gates in order carry the score; a gate touched out of order is a
    *  debt charged once per entry */
   /** a car under CAR_STALL_SPEED for CAR_STALL_TIMEOUT in a row has stalled */
-  /** a car that misses its next gate for CHECKPOINT_TIMEOUT dies, exactly
-   *  like a collision */
-  #checkGateTimeout() {
-    return performance.now() - this.checkpointSince > config.CHECKPOINT_TIMEOUT;
+  /** a car that misses its next gate for the frame budget dies, exactly like
+   *  a collision */
+  #checkCheckpointBudget() {
+    return this.checkpointFramesRemaining <= 0;
   }
 
   #checkStall() {
@@ -242,7 +242,7 @@ export class Car {
           config.CHECKPOINT_SCORE / this.framesSinceLastCheckpoint;
         this.framesSinceLastCheckpoint = 0;
         this.passedCheckpoint = true;
-        this.checkpointSince = performance.now();
+        this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
         // claiming the last gate wraps the index back to the start: a full lap
         if (this.nextCheckpoint === n - 1) {
           this.completedLap = true;

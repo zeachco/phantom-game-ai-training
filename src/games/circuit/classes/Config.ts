@@ -126,8 +126,8 @@ class Config {
   /** fixed debt for entering a checkpoint out of order */
   public WRONG_CHECKPOINT_PENALTY = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;
-  /** a car that misses its next gate for this long dies, like a collision */
-  public CHECKPOINT_TIMEOUT = 7000;
+  /** reference 60 FPS budget for reaching the next checkpoint (seven seconds) */
+  public CHECKPOINT_BUDGET_FRAMES = 420;
   /** full laps one car needs on a seed before the map advances */
   public LAPS_PER_SEED = 3;
 

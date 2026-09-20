@@ -391,13 +391,20 @@ export default async (state: typeof defaultState) => {
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
   readout.append(raceEl, finishCountdown, lapsEl, speedo);
-  // the gate countdown: time left for the followed car to claim its next gate
-  const gateTimer = document.createElement('div');
-  gateTimer.className = 'gate-timer';
-  gateTimer.title =
-    'time left for the followed car to reach the next checkpoint, then it dies';
-  gateTimer.textContent = `${(config.CHECKPOINT_TIMEOUT / 1000).toFixed(2)} secs`;
-  steerOverlay.append(wheelCanvas, pedal, readout, gateTimer);
+  // the gate countdown: frame budget left for the followed car to claim its
+  // next gate
+  const gateGauge = document.createElement('div');
+  gateGauge.className = 'gate-gauge';
+  gateGauge.title =
+    'checkpoint frames remaining for the followed car';
+  gateGauge.setAttribute('role', 'progressbar');
+  gateGauge.setAttribute('aria-label', 'Checkpoint frames remaining');
+  gateGauge.setAttribute('aria-valuemin', '0');
+  gateGauge.setAttribute('aria-valuemax', String(config.CHECKPOINT_BUDGET_FRAMES));
+  const gateGaugeFill = document.createElement('div');
+  gateGaugeFill.className = 'gate-gauge-fill';
+  gateGauge.append(gateGaugeFill);
+  steerOverlay.append(wheelCanvas, pedal, readout, gateGauge);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
@@ -910,10 +917,18 @@ export default async (state: typeof defaultState) => {
       lapsEl.textContent = `lap ${Math.min(camTarget.laps + 1, config.LAPS_PER_SEED)}/${
         config.LAPS_PER_SEED
       }`;
-      const gateLeft =
-        config.CHECKPOINT_TIMEOUT -
-        (performance.now() - camTarget.checkpointSince);
-      gateTimer.textContent = `${Math.max(0, gateLeft / 1000).toFixed(2)} secs`;
+      const gateFraction = Math.max(
+        0,
+        Math.min(
+          1,
+          camTarget.checkpointFramesRemaining / config.CHECKPOINT_BUDGET_FRAMES,
+        ),
+      );
+      gateGaugeFill.style.width = `${gateFraction * 100}%`;
+      gateGauge.setAttribute(
+        'aria-valuenow',
+        String(camTarget.checkpointFramesRemaining),
+      );
     }
     lastFollowed = camTarget;
     state.camX = camX;

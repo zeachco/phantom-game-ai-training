@@ -328,15 +328,21 @@ ul:hover {
   color: rgba(255, 255, 255, 0.55);
   margin-left: 6px;
 }
-/* the gate countdown badge: same text size as the laps line */
-.gate-timer {
+/* the gate countdown gauge: frame fraction remaining */
+.gate-gauge {
   align-self: flex-end;
+  width: 110px;
+  height: 8px;
   margin-bottom: 28px;
-  padding: 5px 12px;
-  font-family: monospace;
-  font-size: 14px;
-  font-weight: bold;
-  color: #ff5fa2;
-  background: #f7f0dd;
-  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(247, 240, 221, 0.35);
+  border: 1px solid rgba(247, 240, 221, 0.7);
+  border-radius: 5px;
+}
+.gate-gauge-fill {
+  width: 100%;
+  height: 100%;
+  background: #ff5fa2;
+  border-radius: inherit;
+  transition: width 0.1s linear;
 }
