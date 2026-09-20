@@ -1,19 +1,6 @@
-# Speed indicator + left-only controls cluster (circuit)
+# Speed indicator and left controls cluster (circuit)
 
-The fixed bottom overlay is one left-side cluster — steering wheel,
-throttle pill, speed — leaving the right of the screen bottom clear for
-the map.
-
-- The speed indicator reads the followed car's velocity magnitude
-  (hypot of vx, vy), a live digital number with a small "u/f" label.
-  Raw value, no extra smoothing, same update cadence as the pedals.
-- The map seed shows as its own line on top (e.g. "race#12").
-- The followed car's lap progress on the current map (e.g. "lap 2/3")
-  shows just above the speed, on its own line.
-- Everything is display-only and mimics the followed car (AI, mixed or
-  human) in real time, swapping when the followed car changes.
-- The whole overlay hides while the followed car is dead or nothing is
-  followable, back on respawn.
-
-Supersedes the split "pedals on the other side" layout of
-drift-and-steering-ui.
+The fixed bottom overlay is a left-side cockpit cluster containing the wheel,
+throttle pill, race seed, lap number, speed and checkpoint timer. Speed is the
+followed car's 2D velocity magnitude; lap display uses human numbering (`1/3`
+through `3/3`). The overlay hides when nothing is followable.
