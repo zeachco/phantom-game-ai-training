@@ -27,7 +27,9 @@ sections pinch one edge down to 2 lanes over a smooth cosine transition
 pinch). Obstacles (20) are never placed where the full 3-lane width is
 missing — transitions included — and a block's gap to the road edge is
 either at least one car width (OBSTACLE_PASS_GAP) or none: blocks that
-would leave a sliver snap flush to the nearer edge.
+would leave a sliver snap flush to the nearer edge. Walls declared at 90°
+span across the road; multi-lane wall spans snap one projected edge to a
+road boundary.
 
 A car under CAR_STALL_SPEED (1 u/f) for CAR_STALL_TIMEOUT (5s) in a row
 times out and dies through the normal death path.

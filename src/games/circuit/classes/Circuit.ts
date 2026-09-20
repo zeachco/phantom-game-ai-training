@@ -191,6 +191,9 @@ export class Circuit {
       0.2,
       config.OBSTACLE_CIRCLE_CHANCE - seedDifficulty * 0.25,
     );
+    // Relative to the road, these describe the wall's long axis. The
+    // obstacle's local width axis is perpendicular to that axis, so a 90°
+    // wall must use the road's cross-road axis rather than its tangent.
     const wallAngles = [-Math.PI / 4, Math.PI / 4, Math.PI / 2];
 
     for (let i = 0; i < config.OBSTACLES; i++) {
@@ -217,10 +220,14 @@ export class Circuit {
         const minWidth = Math.min(24, maxWidth);
         width = minWidth + rng() * (maxWidth - minWidth);
 
+        // The wall's width is perpendicular to its declared long axis.
+        // Convert that axis to the obstacle rotation used by Obstacle, where
+        // local width is the x axis. A 90° wall therefore spans the road.
+        const obstacleAngle = relativeAngle - Math.PI / 2;
         // A diagonal wall's cross-road footprint is wider than its local
         // width. Reduce it if necessary so it cannot extend off the road.
-        const across = Math.abs(Math.cos(relativeAngle));
-        const along = Math.abs(Math.sin(relativeAngle));
+        const across = Math.abs(Math.cos(obstacleAngle));
+        const along = Math.abs(Math.sin(obstacleAngle));
         const fittingWidth =
           across > 0
             ? Math.max(1, (roadWidth - along * height) / across)
@@ -233,11 +240,12 @@ export class Circuit {
       const obstacleShape =
         shape === 'wall' && width > laneWidth ? 'line' : shape;
 
+      const obstacleHeight = obstacleShape === 'line' ? 0 : height;
       const crossHalf =
         shape === 'circle'
           ? width / 2
-          : (Math.abs(Math.cos(relativeAngle)) * width +
-              Math.abs(Math.sin(relativeAngle)) * height) /
+          : (Math.abs(Math.cos(relativeAngle - Math.PI / 2)) * width +
+              Math.abs(Math.sin(relativeAngle - Math.PI / 2)) * obstacleHeight) /
             2;
       const leftRoom = this.leftHalf[idx] - crossHalf;
       const rightRoom = this.rightHalf[idx] - crossHalf;
@@ -249,7 +257,11 @@ export class Circuit {
       const minWithGap = gap - rightRoom;
       const maxWithGap = leftRoom - gap;
       let off: number;
-      if (minWithGap <= maxWithGap && rng() > 0.25) {
+      if (obstacleShape === 'line') {
+        // Multi-lane walls block a continuous span, so never leave a narrow
+        // unusable strip beside the road edge: flush one projected edge.
+        off = rng() < 0.5 ? leftRoom : -rightRoom;
+      } else if (minWithGap <= maxWithGap && rng() > 0.25) {
         off = minWithGap + rng() * (maxWithGap - minWithGap);
       } else {
         off = rng() < 0.5 ? leftRoom : -rightRoom;
@@ -259,7 +271,9 @@ export class Circuit {
         new Obstacle(
           p.x + this.normals[idx].x * off,
           p.y + this.normals[idx].y * off,
-          roadAngle + relativeAngle,
+          shape === 'circle'
+            ? roadAngle
+            : roadAngle + relativeAngle - Math.PI / 2,
           width,
           obstacleShape === 'line' ? 0 : height,
           obstacleShape,
