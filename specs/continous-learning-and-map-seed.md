@@ -15,6 +15,10 @@ A map waits for three distinct finish identities (brain layer, mixed brain or
 human) to complete the required three laps. Finished cars freeze, then a
 short countdown precedes the next seeded map.
 
-Obstacles are round only, 12 per map, and preserve either a full car-width
-edge gap or no sliver. The Load models button is disabled in circuit and
-highway until archived models match the current sensor layout.
+The road defaults to three 60-unit lanes. Seeded sections smoothly change by
+one lane at a time between one and four lanes; only the closing lane's divider
+merges into a neighbor, while unaffected dividers stay separate. One-lane
+sections have no obstacles. Other sections use 12 round obstacles and
+preserve either a full car-width edge gap or no sliver. The Load models button
+is disabled in circuit and highway until archived models match the current
+sensor layout.

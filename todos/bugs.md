@@ -12,4 +12,3 @@ Only unfinished work remains here; completed behavior lives in `specs/`.
 - [ ] Change the Follow controls to a four-column grid.
 - [ ] Place the explanatory text beside the legend and make that text area vertically scrollable.
 - [ ] Color neural-network DOM borders by the selected brain group; keep mixed DOM elements light gray while the canvas follows the mixed selection color.
-- [ ] Keep 3 lanes as the default, allow only adjacent 1↔2↔3↔4 transitions, merge only the closing lane's divider into one neighbor, and keep round obstacles safe for the available width.
