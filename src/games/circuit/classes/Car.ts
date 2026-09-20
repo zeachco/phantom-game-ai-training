@@ -238,8 +238,10 @@ export class Car {
 
     if (gate !== -1) {
       if (gate === this.nextCheckpoint) {
-        this.brain.score +=
-          config.CHECKPOINT_SCORE / this.framesSinceLastCheckpoint;
+        this.brain.score += Math.max(
+          config.MIN_CHECKPOINT_SCORE,
+          config.CHECKPOINT_SCORE / this.framesSinceLastCheckpoint,
+        );
         this.framesSinceLastCheckpoint = 0;
         this.passedCheckpoint = true;
         this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;

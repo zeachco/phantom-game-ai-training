@@ -13,8 +13,8 @@ panel shows its brain.
   resampled at even arc length.
 - No traffic: gray, white-outlined circles and angled walls sit on the road
   instead, and driving off the road kills, so the road is the only place to be.
-- Score comes from checkpoint boosts, with each reward equal to `1000 /`
-  the frames taken since the previous checkpoint. Checkpoints are gates across
+- Score comes from checkpoint boosts, with each reward equal to the greater of
+  `10` and `1000 /` the frames taken since the previous checkpoint. Checkpoints are gates across
   the road, claimed in order around the loop, and a gate touched
   out of order subtracts its value, so a U-turn is a debt and donuts earn
   nothing. Every car also runs a 7 s countdown between gates: reach the next
