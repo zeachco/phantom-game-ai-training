@@ -474,7 +474,7 @@ export default async (state: typeof defaultState) => {
     );
   }
 
-  /** slot 0 clones the best untouched, slot k mutates (k/19) of the way */
+  /** slot 0 clones the best untouched; higher slots use less mutation */
   function spawnCar(group: Group, slot: number): Car {
     const spawn = circuit.getSpawn();
     const isMixed = group.isMixed;
@@ -501,7 +501,9 @@ export default async (state: typeof defaultState) => {
     if (group.best && car.brain) {
       car.brain.mutationIndex = slot;
       car.brain.mutationFactor =
-        slot === 0 ? 0 : (slot / (config.CARS_PER_GROUP - 1)) * maxMutation();
+        slot === 0
+          ? 0
+          : Math.max(Number.MIN_VALUE, maxMutation() / slot);
       try {
         car.brain.mutate(group.best.brain);
       } catch (err) {

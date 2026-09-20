@@ -6,7 +6,7 @@ class Config {
    *  corpse), so the map never holds more AI cars than this */
   public CAR_NB = 200;
   public MAX_MUTATION_LVL = 0.9;
-  public MIN_MUTATION_LVL = 0.0001;
+  public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly this many cars, slots 0..19 */
   public CARS_PER_GROUP = 20;
   /** laps over which the max mutation shrinks from MAX down to MIN */

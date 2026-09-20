@@ -3,8 +3,9 @@
 There are no generations. Each brain layer keeps a persistent pool of
 CARS_PER_GROUP (20) cars; the mixed pool (MIXED_CARS, 20) appears once
 saved experts exist. On any respawn the slot is refilled from a ladder:
-slot 0 clones the group's best brain, slot k mutates it by
-(k / 19) × the max mutation, and the max mutation decays over
+slot 0 clones the group's best brain untouched. Each slot k > 0 mutates it
+by the max mutation divided by k, clamped to Number.MIN_VALUE, so higher
+slots stay closer to the original; the max mutation decays over
 MUTATION_LAP_DECAY (50) laps.
 
 Promotion is live: the moment a car beats the group's promotion bar its
