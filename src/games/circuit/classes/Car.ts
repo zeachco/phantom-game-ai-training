@@ -60,6 +60,10 @@ export class Car {
   /** performance.now() of the last claimed gate: the next gate has to be
    *  reached within CHECKPOINT_TIMEOUT of it, or the car dies like a crash */
   public checkpointSince = 0;
+  /** performance.now() when the current lap started, zero while moving */
+  public lapStartedAt = 0;
+  /** performance.now() when the last completed lap finished */
+  public completedLapAt = 0;
   /** performance.now() when the current stall began, 0 while moving */
   private stallSince = 0;
   private img: HTMLImageElement;
@@ -99,6 +103,7 @@ export class Car {
     this.angle = angle;
     this.damaged = false;
     this.checkpointSince = performance.now();
+    this.lapStartedAt = performance.now();
 
     this.useAI = controlType == ControlType.AI;
 
@@ -224,6 +229,8 @@ export class Car {
         if (this.nextCheckpoint === n - 1) {
           this.completedLap = true;
           this.laps++;
+          this.completedLapAt = performance.now();
+          this.lapStartedAt = this.completedLapAt;
           if (this.laps >= config.LAPS_PER_SEED) this.finished = true;
         }
         this.nextCheckpoint = (this.nextCheckpoint + 1) % n;

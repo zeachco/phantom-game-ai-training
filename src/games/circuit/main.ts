@@ -553,6 +553,7 @@ export default async (state: typeof defaultState) => {
             : null,
           seedBest: null,
           scores: { current: seed, total: 0, seed: 0, history: {} },
+          lapTimes: {},
         };
         groups.push(mixedGroup);
       }
@@ -572,6 +573,7 @@ export default async (state: typeof defaultState) => {
           : null,
         seedBest: null,
         scores: { current: seed, total: 0, seed: 0, history: {} },
+        lapTimes: {},
       };
       groups.push(layerGroup);
     }
@@ -803,7 +805,15 @@ export default async (state: typeof defaultState) => {
       // human) have completed the required race distance. This gives every
       // competing structure a chance to finish before the track changes.
       for (const car of state.cars) {
-        if (car.completedLap) car.completedLap = false;
+        car.completedLap = false;
+        const group = groupOf(car);
+        if (group && car.useAI && car.completedLapAt > 0) {
+          const key = group.isMixed
+            ? 'mixed-' + group.pool.indexOf(car)
+            : car.label;
+          group.lapTimes[key] = group.lapTimes[key] || [];
+          group.lapTimes[key].push((car.completedLapAt - car.lapStartedAt) / 1000);
+        }
         if (car.laps >= config.LAPS_PER_SEED) {
           const brainIndex = car === state.human
             ? 'human'
