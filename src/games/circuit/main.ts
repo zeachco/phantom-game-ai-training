@@ -929,10 +929,13 @@ export default async (state: typeof defaultState) => {
         : `${index + 1}. —`;
     });
 
-    const finishers = [...completedBrainIndices].slice(0, finishRows.length);
+    const finishers = [...completedFinishes.entries()]
+      .sort(([, a], [, b]) => a.totalFrames - b.totalFrames)
+      .slice(0, finishRows.length);
     finishRows.forEach((row, index) => {
-      const identity = finishers[index];
-      const finish = identity && completedFinishes.get(identity);
+      const entry = finishers[index];
+      const identity = entry?.[0];
+      const finish = entry?.[1];
       row.style.color =
         (identity && brainIdentityColor(identity)) ||
         'rgba(255, 255, 255, 0.82)';
@@ -1046,8 +1049,12 @@ export default async (state: typeof defaultState) => {
             : car.brain instanceof MixedNetwork
             ? 'mixed'
             : String(car.brainLayers);
-          if (!completedBrainIndices.has(brainIndex)) {
-            completedBrainIndices.add(brainIndex);
+          completedBrainIndices.add(brainIndex);
+          const previousFinish = completedFinishes.get(brainIndex);
+          if (
+            !previousFinish ||
+            car.totalRaceFrames < previousFinish.totalFrames
+          ) {
             completedFinishes.set(brainIndex, {
               score: car.useAI ? car.brain.score : null,
               totalFrames: car.totalRaceFrames,
