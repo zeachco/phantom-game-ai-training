@@ -336,7 +336,6 @@ ul:hover {
   align-items: flex-end;
   gap: 28px;
   padding: 12px 24px;
-  pointer-events: none;
   z-index: 500;
   opacity: 1;
   transition: opacity 0.15s ease;
@@ -355,6 +354,7 @@ ul:hover {
   overflow: hidden;
   background: rgba(25, 52, 94, 0.55);
   border-radius: 8px;
+  will-change: transform;
 }
 .pedal-cap {
   position: absolute;
