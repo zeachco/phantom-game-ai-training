@@ -147,7 +147,8 @@ export default async (state: typeof defaultState) => {
   loadBtn.className = 'model-btn';
   loadBtn.textContent = 'Load models';
   loadBtn.disabled = true;
-  loadBtn.title = 'disabled for now: the default archive predates the current sensors';
+  loadBtn.title =
+    'disabled for now: the default archive predates the current sensors';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
@@ -223,7 +224,11 @@ export default async (state: typeof defaultState) => {
     if (value === 'mixed') {
       if (
         !confirm(
-          `Reset the saved weights of ${brainId(MIXED_LEVELS, undefined, true)}?`,
+          `Reset the saved weights of ${brainId(
+            MIXED_LEVELS,
+            undefined,
+            true,
+          )}?`,
         )
       )
         return;
@@ -416,12 +421,14 @@ export default async (state: typeof defaultState) => {
   // next gate
   const gateGauge = document.createElement('div');
   gateGauge.className = 'gate-gauge';
-  gateGauge.title =
-    'checkpoint frames remaining for the followed car';
+  gateGauge.title = 'checkpoint frames remaining for the followed car';
   gateGauge.setAttribute('role', 'progressbar');
   gateGauge.setAttribute('aria-label', 'Checkpoint frames remaining');
   gateGauge.setAttribute('aria-valuemin', '0');
-  gateGauge.setAttribute('aria-valuemax', String(config.CHECKPOINT_BUDGET_FRAMES));
+  gateGauge.setAttribute(
+    'aria-valuemax',
+    String(config.CHECKPOINT_BUDGET_FRAMES),
+  );
   const gateGaugeFill = document.createElement('div');
   gateGaugeFill.className = 'gate-gauge-fill';
   gateGauge.append(gateGaugeFill);
@@ -642,10 +649,7 @@ export default async (state: typeof defaultState) => {
       group.scores = loadScores(group, seed);
       // Keep the ghost fixed for this map. It combines the previous map high
       // with a stronger saved champion when one exists.
-      group.ghostScore = Math.max(
-        group.scores.phantom,
-        group.best?.score || 0,
-      );
+      group.ghostScore = Math.max(group.scores.phantom, group.best?.score || 0);
     }
 
     for (const group of groups) {
@@ -736,9 +740,7 @@ export default async (state: typeof defaultState) => {
     if (
       group.pool.length === 0 ||
       group.pool.some((car) => !car.damaged) ||
-      group.pool.some(
-        (car) => now - car.deathTime <= config.DEAD_LIFETIME,
-      )
+      group.pool.some((car) => now - car.deathTime <= config.DEAD_LIFETIME)
     )
       return;
 
@@ -923,9 +925,11 @@ export default async (state: typeof defaultState) => {
       row.style.color =
         entry?.group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)';
       row.textContent = entry
-        ? `${index + 1}. ${
-            brainId(entry.group.layer, undefined, entry.group.isMixed)
-          }  ${formatTimingFrames(entry.best)}`
+        ? `${index + 1}. ${brainId(
+            entry.group.layer,
+            undefined,
+            entry.group.isMixed,
+          )}  ${formatTimingFrames(entry.best)}`
         : `${index + 1}. —`;
     });
 
@@ -956,289 +960,298 @@ export default async (state: typeof defaultState) => {
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();
 
-  loop.play((_es, _dt) => {
-    if (followPad.once('Space')) setFollow(0);
-    for (let digit = 0; digit <= 9; digit++) {
-      if (followPad.once(`Digit${digit}`))
-        setFollow(digit === 0 ? 'mixed' : digit);
-    }
-
-    if (state.playing) {
-      const now = performance.now();
-      // a checkpoint pass is a save point: staged saves flush only then
-      let savePoint = false;
-      for (let i = 0; i < state.cars.length; i++) {
-        const car = state.cars[i];
-        const alive = !car.damaged;
-        car.update(state.obstacles, circuit);
-        const brain = car.brain;
-        if (brain instanceof MixedNetwork) {
-          car.setColor(mixedColor(brain));
-        }
-        if (alive && car.damaged) onDeath(car);
-        if (car.passedCheckpoint) {
-          car.passedCheckpoint = false;
-          savePoint = true;
-          const group = groupOf(car);
-          if (group) pendingSaves.add(group);
-        }
-      }
-      // the first drive input takes the camera to the human car
-      const h = state.human;
-      const driving =
-        !!h &&
-        (h.controls.throttle !== 0 ||
-          h.controls.left !== 0 ||
-          h.controls.right !== 0);
-      if (driving && !humanDriving) humanFollow = true;
-      humanDriving = driving;
-
-      // Human corpses are not part of a brain group, so clean them up on their
-      // own timer. AI corpses stay until their whole group can respawn.
-      for (let i = state.cars.length - 1; i >= 0; i--) {
-        const car = state.cars[i];
-        if (
-          !car.useAI &&
-          car.damaged &&
-          now - car.deathTime > config.DEAD_LIFETIME
-        )
-          state.cars.splice(i, 1);
+  loop.play(
+    (_es, _dt) => {
+      if (followPad.once('Space')) setFollow(0);
+      for (let digit = 0; digit <= 9; digit++) {
+        if (followPad.once(`Digit${digit}`))
+          setFollow(digit === 0 ? 'mixed' : digit);
       }
 
-      // A group keeps its fading corpses until every same-group car is dead,
-      // then the entire group respawns together. Each group is checked alone.
-      for (const group of groups) respawnGroup(group, now);
-
-      // the map high score is the max over the pool; the bar is the total
-      for (const car of state.cars) {
-        if (car.damaged || car.finished || !car.useAI) continue;
-        const group = groupOf(car);
-        if (!group) continue;
-        if (car.brain.score > group.scores.seed) {
-          group.scores.seed = car.brain.score;
-          group.seedBest = {
-            brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
-            score: car.brain.score,
-          };
-          pendingSaves.add(group);
-        }
-        if (
-          car.brain.score > group.scores.total &&
-          (!group.best || car.brain.score > group.best.score)
-        )
-          promote(group, car);
-      }
-
-      // A map advances only after three distinct brain structures (or the
-      // human) have completed the required race distance. This gives every
-      // competing structure a chance to finish before the track changes.
-      for (const car of state.cars) {
-        const completedLap = car.completedLap;
-        car.completedLap = false;
-        const group = groupOf(car);
-        if (completedLap && group && car.useAI && car.completedLapAt > 0) {
-          const key = group.isMixed
-            ? 'mixed-' + group.pool.indexOf(car)
-            : car.label;
-          group.lapTimes[key] = group.lapTimes[key] || [];
-          group.lapTimes[key].push(car.completedLapFrames);
-        }
-        if (car.laps >= config.LAPS_PER_SEED) {
-          const brainIndex = car === state.human
-            ? 'human'
-            : car.brain instanceof MixedNetwork
-            ? 'mixed'
-            : String(car.brainLayers);
-          completedBrainIndices.add(brainIndex);
-          const previousFinish = completedFinishes.get(brainIndex);
-          if (
-            !previousFinish ||
-            car.totalRaceFrames < previousFinish.totalFrames
-          ) {
-            completedFinishes.set(brainIndex, {
-              score: car.useAI ? car.brain.score : null,
-              totalFrames: car.totalRaceFrames,
-            });
+      if (state.playing) {
+        const now = performance.now();
+        // a checkpoint pass is a save point: staged saves flush only then
+        let savePoint = false;
+        for (let i = 0; i < state.cars.length; i++) {
+          const car = state.cars[i];
+          const alive = !car.damaged;
+          car.update(state.obstacles, circuit);
+          const brain = car.brain;
+          if (brain instanceof MixedNetwork) {
+            car.setColor(mixedColor(brain));
+          }
+          if (alive && car.damaged) onDeath(car);
+          if (car.passedCheckpoint) {
+            car.passedCheckpoint = false;
+            savePoint = true;
+            const group = groupOf(car);
+            if (group) pendingSaves.add(group);
           }
         }
-      }
-      if (completedBrainIndices.size >= 3 && !seedChangeAt) {
-        // Finishing is a save point. Only a finisher that beats its
-        // structure's saved champion is promoted and persisted.
-        for (const other of state.cars) {
-          if (!other.useAI || other.laps < config.LAPS_PER_SEED) continue;
-          const group = groupOf(other);
+        // the first drive input takes the camera to the human car
+        const h = state.human;
+        const driving =
+          !!h &&
+          (h.controls.throttle !== 0 ||
+            h.controls.left !== 0 ||
+            h.controls.right !== 0);
+        if (driving && !humanDriving) humanFollow = true;
+        humanDriving = driving;
+
+        // Human corpses are not part of a brain group, so clean them up on their
+        // own timer. AI corpses stay until their whole group can respawn.
+        for (let i = state.cars.length - 1; i >= 0; i--) {
+          const car = state.cars[i];
           if (
-            group &&
-            other.brain.score > group.scores.total &&
-            (!group.best || other.brain.score > group.best.score)
+            !car.useAI &&
+            car.damaged &&
+            now - car.deathTime > config.DEAD_LIFETIME
           )
-            promote(group, other);
+            state.cars.splice(i, 1);
         }
-        flushPendingSaves();
-        seedChangeAt = now + SEED_CHANGE_DELAY;
-        finishCountdown.hidden = false;
-      }
-      updateTimingBoard();
-      if (seedChangeAt) {
-        const remaining = Math.max(0, seedChangeAt - now);
-        finishCountdown.textContent = `next track in ${(remaining / 1000).toFixed(1)}s`;
-        if (remaining === 0) advanceSeed();
-      }
 
-      state.sortedCars = state.cars.sort(
-        (a, b) => b.brain.score - a.brain.score,
-      );
+        // A group keeps its fading corpses until every same-group car is dead,
+        // then the entire group respawns together. Each group is checked alone.
+        for (const group of groups) respawnGroup(group, now);
 
-      // crashes flush in onDeath, the map fold and the unload persist
-      // directly; the checkpoint pass is the only per-frame save point
-      if (savePoint) flushPendingSaves();
-    }
-    updateFollowButtons();
+        // the map high score is the max over the pool; the bar is the total
+        for (const car of state.cars) {
+          if (car.damaged || car.finished || !car.useAI) continue;
+          const group = groupOf(car);
+          if (!group) continue;
+          if (car.brain.score > group.scores.seed) {
+            group.scores.seed = car.brain.score;
+            group.seedBest = {
+              brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
+              score: car.brain.score,
+            };
+            pendingSaves.add(group);
+          }
+          if (
+            car.brain.score > group.scores.total &&
+            (!group.best || car.brain.score > group.best.score)
+          )
+            promote(group, car);
+        }
 
-    // the car canvas keeps whatever width the open panel leaves
-    const panelWidth = Math.round(
-      Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH),
-    );
-    const carWidth = panelOpen
-      ? window.innerWidth - panelWidth
-      : window.innerWidth;
-    resizeCanvas(carCanvas, carCtx, carWidth, window.innerHeight);
-    if (panelOpen) {
-      resizeCanvas(
-        networkCanvas,
-        networkCtx,
-        netWrap.clientWidth,
-        netWrap.clientHeight,
-      );
-    }
-    resizeCanvas(
-      statsCanvas,
-      statsCtx,
-      statsCanvas.clientWidth,
-      statsCanvas.clientHeight,
-    );
+        // A map advances only after three distinct brain structures (or the
+        // human) have completed the required race distance. This gives every
+        // competing structure a chance to finish before the track changes.
+        for (const car of state.cars) {
+          const completedLap = car.completedLap;
+          car.completedLap = false;
+          const group = groupOf(car);
+          if (completedLap && group && car.useAI && car.completedLapAt > 0) {
+            const key = group.isMixed
+              ? 'mixed-' + group.pool.indexOf(car)
+              : car.label;
+            group.lapTimes[key] = group.lapTimes[key] || [];
+            group.lapTimes[key].push(car.completedLapFrames);
+          }
+          if (car.laps >= config.LAPS_PER_SEED) {
+            const brainIndex =
+              car === state.human
+                ? 'human'
+                : car.brain instanceof MixedNetwork
+                ? 'mixed'
+                : String(car.brainLayers);
+            completedBrainIndices.add(brainIndex);
+            const previousFinish = completedFinishes.get(brainIndex);
+            if (
+              !previousFinish ||
+              car.totalRaceFrames < previousFinish.totalFrames
+            ) {
+              completedFinishes.set(brainIndex, {
+                score: car.useAI ? car.brain.score : null,
+                totalFrames: car.totalRaceFrames,
+              });
+            }
+          }
+        }
+        if (completedBrainIndices.size >= 3 && !seedChangeAt) {
+          // Finishing is a save point. Only a finisher that beats its
+          // structure's saved champion is promoted and persisted.
+          for (const other of state.cars) {
+            if (!other.useAI || other.laps < config.LAPS_PER_SEED) continue;
+            const group = groupOf(other);
+            if (
+              group &&
+              other.brain.score > group.scores.total &&
+              (!group.best || other.brain.score > group.best.score)
+            )
+              promote(group, other);
+          }
+          flushPendingSaves();
+          seedChangeAt = now + SEED_CHANGE_DELAY;
+          finishCountdown.hidden = false;
+        }
+        updateTimingBoard();
+        if (seedChangeAt) {
+          const remaining = Math.max(0, seedChangeAt - now);
+          finishCountdown.textContent = `next track in ${(
+            remaining / 1000
+          ).toFixed(1)}s`;
+          if (remaining === 0) advanceSeed();
+        }
 
-    const camTarget = followedCar();
-    if (state.playing && seedChangeAt) {
-      const spawn = circuit.getSpawn();
-      camX = spawn.x;
-      camY = spawn.y;
-      camSet = true;
-    } else if (state.playing && camTarget) {
-      if (!camSet) {
-        camX = camTarget.x;
-        camY = camTarget.y;
-        camSet = true;
-      }
-      // lead the target by 2 frames of true velocity so the 10% lerp stays centered
-      camX += (camTarget.x - 2 * camTarget.vx - camX) * 0.1;
-      camY += (camTarget.y - 2 * camTarget.vy - camY) * 0.1;
-    }
-    // the controls mimic the followed car, hidden while it is dead
-    steerOverlay.classList.toggle(
-      'hidden',
-      !camTarget || (lastFollowed && lastFollowed.damaged),
-    );
-    if (camTarget) {
-      const c = camTarget.controls;
-      const steer = Math.max(-1, Math.min(1, c.left - c.right));
-      wheelAngle +=
-        (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) *
-        config.STEER_UI_SMOOTH;
-      drawWheel();
-      const throttle = Math.max(-1, Math.min(1, c.throttle));
-      pedalCap.style.transform = `translateY(${
-        (1 - throttle) * config.STEER_UI_PEDAL_TRAVEL
-      }px)`;
-      speedoValue.textContent = Math.hypot(camTarget.vx, camTarget.vy).toFixed(
-        1,
-      );
-      lapsEl.textContent = `lap ${Math.min(camTarget.laps + 1, config.LAPS_PER_SEED)}/${
-        config.LAPS_PER_SEED
-      }`;
-      const gateFraction = Math.max(
-        0,
-        Math.min(
-          1,
-          camTarget.checkpointFramesRemaining / config.CHECKPOINT_BUDGET_FRAMES,
-        ),
-      );
-      gateGaugeFill.style.width = `${gateFraction * 100}%`;
-      gateGauge.setAttribute(
-        'aria-valuenow',
-        String(camTarget.checkpointFramesRemaining),
-      );
-    }
-    lastFollowed = camTarget;
-    state.camX = camX;
-    state.camY = camY;
-    carCtx.save();
-    carCtx.translate(carCanvas.width / 2 - camX, carCanvas.height / 2 - camY);
-
-    // the plane, only the visible part is painted
-    carCtx.fillStyle = config.PLANE_COLOR;
-    carCtx.fillRect(
-      camX - carCanvas.width / 2,
-      camY - carCanvas.height / 2,
-      carCanvas.width,
-      carCanvas.height,
-    );
-
-    circuit.draw(carCtx);
-    const nextCheckpoint = camTarget
-      ? circuit.checkpoints[camTarget.nextCheckpoint]
-      : undefined;
-    for (let i = 0; i < circuit.checkpoints.length; i++) {
-      circuit.checkpoints[i].draw(
-        carCtx,
-        circuit.checkpoints[i] === nextCheckpoint,
-      );
-    }
-    for (let i = 0; i < circuit.obstacles.length; i++) {
-      circuit.obstacles[i].draw(carCtx);
-    }
-    // the human car draws last, above every other car, no sensor fan
-    const corpseNow = performance.now();
-    for (let i = 0; i < state.cars.length; i++) {
-      const car = state.cars[i];
-      if (car === state.human) continue;
-      if (car.damaged) {
-        // fade from full opacity to 0 over DEAD_LIFETIME, ~0.8 at 1 s
-        carCtx.globalAlpha = Math.max(
-          0,
-          1 - (corpseNow - car.deathTime) / config.DEAD_LIFETIME,
+        state.sortedCars = state.cars.sort(
+          (a, b) => b.brain.score - a.brain.score,
         );
-      } else {
-        carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
+
+        // crashes flush in onDeath, the map fold and the unload persist
+        // directly; the checkpoint pass is the only per-frame save point
+        if (savePoint) flushPendingSaves();
       }
-      car.draw(carCtx, car === camTarget);
-    }
-    if (state.human) {
+      updateFollowButtons();
+
+      // the car canvas keeps whatever width the open panel leaves
+      const panelWidth = Math.round(
+        Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH),
+      );
+      const carWidth = panelOpen
+        ? window.innerWidth - panelWidth
+        : window.innerWidth;
+      resizeCanvas(carCanvas, carCtx, carWidth, window.innerHeight);
+      if (panelOpen) {
+        resizeCanvas(
+          networkCanvas,
+          networkCtx,
+          netWrap.clientWidth,
+          netWrap.clientHeight,
+        );
+      }
+      resizeCanvas(
+        statsCanvas,
+        statsCtx,
+        statsCanvas.clientWidth,
+        statsCanvas.clientHeight,
+      );
+
+      const camTarget = followedCar();
+      if (state.playing && seedChangeAt) {
+        const spawn = circuit.getSpawn();
+        camX = spawn.x;
+        camY = spawn.y;
+        camSet = true;
+      } else if (state.playing && camTarget) {
+        if (!camSet) {
+          camX = camTarget.x;
+          camY = camTarget.y;
+          camSet = true;
+        }
+        // lead the target by 2 frames of true velocity so the 10% lerp stays centered
+        camX += (camTarget.x - 2 * camTarget.vx - camX) * 0.1;
+        camY += (camTarget.y - 2 * camTarget.vy - camY) * 0.1;
+      }
+      // the controls mimic the followed car, hidden while it is dead
+      steerOverlay.classList.toggle(
+        'hidden',
+        !camTarget || (lastFollowed && lastFollowed.damaged),
+      );
+      if (camTarget) {
+        const c = camTarget.controls;
+        const steer = Math.max(-1, Math.min(1, c.left - c.right));
+        wheelAngle +=
+          (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) *
+          config.STEER_UI_SMOOTH;
+        drawWheel();
+        const throttle = Math.max(-1, Math.min(1, c.throttle));
+        pedalCap.style.transform = `translateY(${
+          (1 - throttle) * config.STEER_UI_PEDAL_TRAVEL
+        }px)`;
+        speedoValue.textContent = Math.hypot(
+          camTarget.vx,
+          camTarget.vy,
+        ).toFixed(1);
+        lapsEl.textContent = `lap ${Math.min(
+          camTarget.laps + 1,
+          config.LAPS_PER_SEED,
+        )}/${config.LAPS_PER_SEED}`;
+        const gateFraction = Math.max(
+          0,
+          Math.min(
+            1,
+            camTarget.checkpointFramesRemaining /
+              config.CHECKPOINT_BUDGET_FRAMES,
+          ),
+        );
+        gateGaugeFill.style.width = `${gateFraction * 100}%`;
+        gateGauge.setAttribute(
+          'aria-valuenow',
+          String(camTarget.checkpointFramesRemaining),
+        );
+      }
+      lastFollowed = camTarget;
+      state.camX = camX;
+      state.camY = camY;
+      carCtx.save();
+      carCtx.translate(carCanvas.width / 2 - camX, carCanvas.height / 2 - camY);
+
+      // the plane, only the visible part is painted
+      carCtx.fillStyle = config.PLANE_COLOR;
+      carCtx.fillRect(
+        camX - carCanvas.width / 2,
+        camY - carCanvas.height / 2,
+        carCanvas.width,
+        carCanvas.height,
+      );
+
+      circuit.draw(carCtx);
+      const nextCheckpoint = camTarget
+        ? circuit.checkpoints[camTarget.nextCheckpoint]
+        : undefined;
+      for (let i = 0; i < circuit.checkpoints.length; i++) {
+        circuit.checkpoints[i].draw(
+          carCtx,
+          circuit.checkpoints[i] === nextCheckpoint,
+        );
+      }
+      for (let i = 0; i < circuit.obstacles.length; i++) {
+        circuit.obstacles[i].draw(carCtx);
+      }
+      // the human car draws last, above every other car, no sensor fan
+      const corpseNow = performance.now();
+      for (let i = 0; i < state.cars.length; i++) {
+        const car = state.cars[i];
+        if (car === state.human) continue;
+        if (car.damaged) {
+          // fade from full opacity to 0 over DEAD_LIFETIME, ~0.8 at 1 s
+          carCtx.globalAlpha = Math.max(
+            0,
+            1 - (corpseNow - car.deathTime) / config.DEAD_LIFETIME,
+          );
+        } else {
+          carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
+        }
+        car.draw(carCtx, car === camTarget);
+      }
+      if (state.human) {
+        carCtx.globalAlpha = 1;
+        state.human.draw(carCtx, false);
+      }
       carCtx.globalAlpha = 1;
-      state.human.draw(carCtx, false);
-    }
-    carCtx.globalAlpha = 1;
 
-    carCtx.restore();
+      carCtx.restore();
 
-    drawScores(state, carCtx);
+      drawScores(state, carCtx);
 
-    const followed = camTarget?.brain;
-    if (panelOpen && followed) {
-      neuralVisualizer.renderNetwork(networkCtx, followed);
-    }
-    // The KeyS shortcut toggles the card, which is rendered beside the cockpit
-    // instead of over the network preview.
-    const statsOn = neuralVisualizer.renderStats;
-    statsCanvas.classList.toggle('hidden', !statsOn || !followed);
-    if (statsOn && followed) {
-      neuralVisualizer.renderStatsOverlay(statsCtx, followed);
-    }
-  }, {
-    maxFps: config.HUMAN_FPS_CAP,
-    shouldCap: () => config.HUMAN_FPS_CAP_ENABLED && humanFollow,
-  });
+      const followed = camTarget?.brain;
+      if (panelOpen && followed) {
+        neuralVisualizer.renderNetwork(networkCtx, followed);
+      }
+      // The KeyS shortcut toggles the card, which is rendered beside the cockpit
+      // instead of over the network preview.
+      const statsOn = neuralVisualizer.renderStats;
+      statsCanvas.classList.toggle('hidden', !statsOn || !followed);
+      if (statsOn && followed) {
+        neuralVisualizer.renderStatsOverlay(statsCtx, followed);
+      }
+    },
+    {
+      maxFps: config.HUMAN_FPS_CAP,
+      shouldCap: () => config.HUMAN_FPS_CAP_ENABLED && humanFollow,
+    },
+  );
 
   /** car buttons stay filled with their car color while the category
    *  races, and turn to an outline once its last car is dead */
@@ -1263,7 +1276,12 @@ export default async (state: typeof defaultState) => {
   }
 
   function followedCar(): Car | undefined {
-    if (humanFollow && state.human && !state.human.damaged && !state.human.finished)
+    if (
+      humanFollow &&
+      state.human &&
+      !state.human.damaged &&
+      !state.human.finished
+    )
       return state.human;
     const inCategory = (car: Car) =>
       !car.damaged &&
