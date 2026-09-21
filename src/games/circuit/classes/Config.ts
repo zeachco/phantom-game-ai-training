@@ -97,7 +97,7 @@ class Config {
   public STEER_UI_SMOOTH = 0.35;
   /** optional browser cap while a human is actively being followed */
   public HUMAN_FPS_CAP_ENABLED = true;
-  public HUMAN_FPS_CAP = 60;
+  public HUMAN_FPS_CAP = 90;
 
   // circuit, a radial curve r(theta) so the random waves can never
   // self-intersect, the map is bigger than the screen
