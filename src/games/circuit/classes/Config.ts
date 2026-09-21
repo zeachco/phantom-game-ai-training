@@ -151,7 +151,7 @@ class Config {
   // obstacles, round objects along the road, none in the start zone
   public OBSTACLES = 12;
   /** one car width (Car.width): the minimum gap between a block's side and
-   *  the road edge, otherwise the block snaps flush to the edge */
+   *  the road edge; edge-anchored blocks may extend half off the road */
   public OBSTACLE_PASS_GAP = 30;
 
   public get CAR_PER_LEVELS() {

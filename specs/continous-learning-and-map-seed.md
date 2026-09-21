@@ -23,6 +23,7 @@ simulation/render callbacks to 60 FPS. The road defaults to three 60-unit lanes.
 one lane at a time between one and four lanes; only the closing lane's divider
 merges into a neighbor, while unaffected dividers stay separate. One-lane
 sections have no obstacles. Other sections use 12 round obstacles and
-preserve either a full car-width edge gap or no sliver. The Load models button
+preserve either a full car-width edge gap or anchor to an edge with half the
+obstacle off-road. The Load models button
 is disabled in circuit and highway until archived models match the current
 sensor layout.

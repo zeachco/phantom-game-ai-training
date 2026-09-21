@@ -257,7 +257,8 @@ export class Circuit {
     }
 
     // Obstacles use the same seeded stream as the road and always remain
-    // round, leaving a useful lane around each one.
+    // round, leaving a useful lane around each one. Edge-anchored obstacles
+    // are centered on the boundary, so half of the obstacle can sit off-road.
     this.obstacles = [];
     const span = Math.max(1, last - first);
     const step = span / config.OBSTACLES;
@@ -284,16 +285,15 @@ export class Circuit {
       const gap = config.OBSTACLE_PASS_GAP;
       const minWithGap = gap - rightRoom;
       const maxWithGap = leftRoom - gap;
-      const off =
-        twoLaneRoad
-          ? rng() < 0.5
-            ? leftRoom
-            : -rightRoom
-          : minWithGap <= maxWithGap && rng() > 0.25
-            ? minWithGap + rng() * (maxWithGap - minWithGap)
-            : rng() < 0.5
-              ? leftRoom
-              : -rightRoom;
+      // Center edge-anchored obstacles on the boundary rather than placing
+      // their outer edge flush with it. This lets half the obstacle overlap
+      // the shoulder while the remaining road still has a full passable lane.
+      const edgeOffset = rng() < 0.5 ? leftHalf[idx] : -rightHalf[idx];
+      const off = twoLaneRoad
+        ? edgeOffset
+        : minWithGap <= maxWithGap && rng() > 0.25
+          ? minWithGap + rng() * (maxWithGap - minWithGap)
+          : edgeOffset;
 
       return new Obstacle(
         p.x + this.normals[idx].x * off,

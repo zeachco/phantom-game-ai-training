@@ -534,28 +534,40 @@ export default async (state: typeof defaultState) => {
     return car;
   }
 
+  function refreshExperts() {
+    // Always replace the cache, including when there are too few experts. If
+    // a line is reset, retaining the previous array keeps its old brains alive
+    // through the mixed network path.
+    experts = [];
+    if (!config.MIXED_ENABLED) return experts;
+
+    const { inputCount, outputCount } = getCircuitBrainDimensions();
+    const hydrated = hydrateExperts(
+      state.sortedModels,
+      inputCount,
+      outputCount,
+      config.MIXED_EXPERTS_PER_LAYER,
+    );
+    if (hydrated.length < config.MIXED_MIN_EXPERTS) {
+      console.debug(
+        `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${hydrated.length} available`,
+      );
+      return experts;
+    }
+    experts = hydrated;
+    return experts;
+  }
+
   /** the mixed pool only exists once there are experts to route to */
   function buildPools() {
     groups.length = 0;
     // Keep expert hydration tied to the dimensions Car actually gives every
     // brain, so changing sensors or Controls cannot silently disable mixed.
-    const { inputCount: inputNb, outputCount: outputNb } =
-      getCircuitBrainDimensions();
+    const hydrated = refreshExperts();
 
     // the mixed pool only exists once there are experts to route to
     if (config.MIXED_ENABLED) {
-      const hydrated = hydrateExperts(
-        state.sortedModels,
-        inputNb,
-        outputNb,
-        config.MIXED_EXPERTS_PER_LAYER,
-      );
-      if (hydrated.length < config.MIXED_MIN_EXPERTS) {
-        console.debug(
-          `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${hydrated.length} available`,
-        );
-      } else {
-        experts = hydrated;
+      if (hydrated.length >= config.MIXED_MIN_EXPERTS) {
         const mixedGroup: Group = {
           key: 'mixed',
           layer: MIXED_LEVELS,
@@ -620,13 +632,7 @@ export default async (state: typeof defaultState) => {
     saves[group.layer] = [brain];
     if (group.isMixed) {
       // future mixed spawns route to the fresh champions
-      const { inputCount, outputCount } = getCircuitBrainDimensions();
-      experts = hydrateExperts(
-        state.sortedModels,
-        inputCount,
-        outputCount,
-        config.MIXED_EXPERTS_PER_LAYER,
-      );
+      refreshExperts();
     }
   }
 
@@ -646,32 +652,34 @@ export default async (state: typeof defaultState) => {
 
   /** Clear one group's saved champion and replace only that group's cars. */
   function resetBrainGroup(value: number | 'mixed') {
-    const group = groups.find((candidate) =>
+    const groupIndex = groups.findIndex((candidate) =>
       value === 'mixed' ? candidate.isMixed : candidate.layer === value,
     );
-    if (!group) return;
+    if (groupIndex < 0) return;
 
-    const oldPool = new Set(group.pool);
-    const oldLiving = group.pool.filter((car) => !car.damaged).length;
+    const oldGroup = groups[groupIndex];
+    const oldPool = new Set(oldGroup.pool);
+    const oldLiving = oldGroup.pool.filter((car) => !car.damaged).length;
     state.cars = state.cars.filter((car) => !oldPool.has(car));
-    group.best = null;
-    group.seedBest = null;
-    group.lapTimes = {};
-    pendingSaves.delete(group);
+    // Replace the group object rather than only clearing its fields. Nothing
+    // holding the old group can accidentally persist its champion on unload.
+    const group: Group = {
+      ...oldGroup,
+      pool: [],
+      best: null,
+      seedBest: null,
+      lapTimes: {},
+    };
+    groups[groupIndex] = group;
+    pendingSaves.delete(oldGroup);
 
     if (group.isMixed) state.sortedMixed[group.layer] = [];
     else state.sortedModels[group.layer] = [];
 
-    // A regular brain may also be an expert for future mixed spawns.
-    if (!group.isMixed) {
-      const { inputCount, outputCount } = getCircuitBrainDimensions();
-      experts = hydrateExperts(
-        state.sortedModels,
-        inputCount,
-        outputCount,
-        config.MIXED_EXPERTS_PER_LAYER,
-      );
-    }
+    // A regular brain may also be an expert for future mixed spawns. This
+    // must replace the cache even when the reset leaves too few experts;
+    // otherwise old weights remain reachable from future mixed cars.
+    if (!group.isMixed) refreshExperts();
 
     group.pool = new Array(config.CARS_PER_GROUP);
     for (let slot = 0; slot < config.CARS_PER_GROUP; slot++) {
