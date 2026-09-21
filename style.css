@@ -416,3 +416,25 @@ ul:hover {
   border-radius: inherit;
   transition: width 0.1s linear;
 }
+/* the followed brain's stats card sits beside the cockpit, not in the sidebar */
+.circuit-stats {
+  flex: 0 0 240px;
+  align-self: flex-end;
+  width: 240px;
+  height: 260px;
+}
+.circuit-stats.hidden {
+  visibility: hidden;
+}
+
+@media (max-width: 760px) {
+  .steer-overlay {
+    gap: 12px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .circuit-stats {
+    flex-basis: 200px;
+    width: 200px;
+  }
+}

@@ -240,6 +240,12 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   constructor(public config: T) {}
 
   render(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+    this.renderNetwork(ctx, network);
+    if (this.renderStats) this.renderStatsOverlay(ctx, network);
+  }
+
+  /** Draw only the network, allowing a game to place its stats elsewhere. */
+  renderNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
@@ -248,8 +254,11 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     if (network instanceof MixedNetwork) network.replay();
 
     this.#drawBrain(ctx, network);
+  }
 
-    if (this.renderStats) this.#drawStats(ctx, network);
+  /** Draw only the network information card on a separate canvas. */
+  renderStatsOverlay(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+    this.#drawStats(ctx, network);
   }
 
   #layerColor(layer: number) {
@@ -379,7 +388,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     // the usage bars live inside the panel, the canvas around it is taken by
     // the two networks
     const barsHeight = mixed ? SELECTION_HEIGHT : 0;
-    const pWidth = Math.min(200, ctx.canvas.width * 0.6);
+    const pWidth = Math.min(200, ctx.canvas.width - MARGIN * 2);
     /** the lines are squeezed to the content box, not to the border */
     const contentWidth = pWidth - MARGIN * 2;
     const levelColor = mixed

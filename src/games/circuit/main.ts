@@ -96,9 +96,12 @@ export default async (state: typeof defaultState) => {
 
   const networkCanvas = createCanvas();
   networkCanvas.className = 'neural-canvas';
+  const statsCanvas = createCanvas();
+  statsCanvas.className = 'circuit-stats';
 
   const carCtx = carCanvas.getContext('2d');
   const networkCtx = networkCanvas.getContext('2d');
+  const statsCtx = statsCanvas.getContext('2d');
 
   const followPad = new GamePad(new Map());
   /** 0 follows the best score overall, 1-9 the best car of that brain layer */
@@ -310,14 +313,6 @@ export default async (state: typeof defaultState) => {
   });
   setFollow(0);
 
-  const statsBtn = document.createElement('button');
-  statsBtn.className = 'model-btn';
-  statsBtn.textContent = 'Stats';
-  statsBtn.setAttribute('aria-pressed', 'true');
-  statsBtn.onclick = () => {
-    neuralVisualizer.renderStats = !neuralVisualizer.renderStats;
-  };
-
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
   netWrap.style.flex = '1';
@@ -358,7 +353,7 @@ export default async (state: typeof defaultState) => {
 
   const actions = document.createElement('div');
   actions.className = 'model-actions';
-  actions.append(loadBtn, saveBtn, clearBtn, statsBtn);
+  actions.append(loadBtn, saveBtn, clearBtn);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -424,7 +419,9 @@ export default async (state: typeof defaultState) => {
   const gateGaugeFill = document.createElement('div');
   gateGaugeFill.className = 'gate-gauge-fill';
   gateGauge.append(gateGaugeFill);
-  steerOverlay.append(wheelCanvas, pedal, readout, gateGauge);
+  // The network remains in the sidebar, but its information card travels with
+  // the in-game cockpit so it is visible while the model panel is closed.
+  steerOverlay.append(wheelCanvas, pedal, readout, gateGauge, statsCanvas);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
@@ -1102,6 +1099,12 @@ export default async (state: typeof defaultState) => {
         netWrap.clientHeight,
       );
     }
+    resizeCanvas(
+      statsCanvas,
+      statsCtx,
+      statsCanvas.clientWidth,
+      statsCanvas.clientHeight,
+    );
 
     const camTarget = followedCar();
     if (state.playing && seedChangeAt) {
@@ -1210,14 +1213,14 @@ export default async (state: typeof defaultState) => {
 
     const followed = camTarget?.brain;
     if (panelOpen && followed) {
-      neuralVisualizer.render(networkCtx, followed);
+      neuralVisualizer.renderNetwork(networkCtx, followed);
     }
-    // the KeyS shortcut toggles the stats too, keep the button in sync
+    // The KeyS shortcut toggles the card, which is rendered beside the cockpit
+    // instead of over the network preview.
     const statsOn = neuralVisualizer.renderStats;
-    if (statsBtn.dataset.on !== String(statsOn)) {
-      statsBtn.dataset.on = String(statsOn);
-      statsBtn.classList.toggle('active', statsOn);
-      statsBtn.setAttribute('aria-pressed', String(statsOn));
+    statsCanvas.classList.toggle('hidden', !statsOn || !followed);
+    if (statsOn && followed) {
+      neuralVisualizer.renderStatsOverlay(statsCtx, followed);
     }
   }, {
     maxFps: config.HUMAN_FPS_CAP,
