@@ -47,7 +47,7 @@ class Config {
   public PLANE_COLOR = '#11150f';
   public ROAD_COLOR = '#1e2124';
   public LANE_COLOR = 'rgba(255, 255, 255, 0.4)';
-  public EDGE_COLOR = 'white';
+  public EDGE_COLORS = ['white', '#aa88bb'];
 
   // env, the sensor fan is a front arc: longest straight ahead, tapering
   // to the edges, so reach is one honest function of where a ray points

@@ -54,8 +54,7 @@ export class Circuit {
     const nonnegativeSeed = Math.max(0, this.seed);
     const difficulty = Math.min(
       1,
-      nonnegativeSeed /
-        (config.CIRCUIT_DIFFICULTY_SEED_BASE + nonnegativeSeed),
+      nonnegativeSeed / (config.CIRCUIT_DIFFICULTY_SEED_BASE + nonnegativeSeed),
     );
     // Random harmonics of the radius start as four low frequencies for wide
     // sweeping turns.  Extra waves use this same seeded stream, so maps stay
@@ -292,8 +291,8 @@ export class Circuit {
       const off = twoLaneRoad
         ? edgeOffset
         : minWithGap <= maxWithGap && rng() > 0.25
-          ? minWithGap + rng() * (maxWithGap - minWithGap)
-          : edgeOffset;
+        ? minWithGap + rng() * (maxWithGap - minWithGap)
+        : edgeOffset;
 
       return new Obstacle(
         p.x + this.normals[idx].x * off,
@@ -527,11 +526,15 @@ export class Circuit {
     for (let i = 0; i < this.lanePaths.length; i++) {
       ctx.stroke(this.lanePaths[i]);
     }
-    ctx.setLineDash([]);
+    ctx.setLineDash([25, 15]);
 
-    ctx.strokeStyle = config.EDGE_COLOR;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 12;
     for (let i = 0; i < this.edgePaths.length; i++) {
+      ctx.strokeStyle = config.EDGE_COLORS[0];
+      ctx.setLineDash([]);
+      ctx.stroke(this.edgePaths[i]);
+      ctx.setLineDash([35, 35]);
+      ctx.strokeStyle = config.EDGE_COLORS[1];
       ctx.stroke(this.edgePaths[i]);
     }
   }
