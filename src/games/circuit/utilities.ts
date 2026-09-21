@@ -13,10 +13,12 @@ import { Obstacle } from './classes/Obstacle';
 export interface GroupScores {
   /** the seed of the map the group is scoring on now */
   current: number;
-  /** the summarized overall score: each finished map keeps 10% of the running total */
+  /** cross-map score used only as the promotion gate */
   total: number;
   /** live high score on the current seed */
   seed: number;
+  /** high score from the previous map, used as the visible ghost */
+  phantom: number;
   /** one frozen high score per finished seed, keyed by the seed number */
   history: Record<string, number>;
 }
@@ -30,6 +32,8 @@ export interface Group {
   best: { brain: NeuralNetwork; score: number } | null;
   /** the brain that set the current map's high score, kept for progress */
   seedBest: { brain: NeuralNetwork; score: number } | null;
+  /** score shown for this group's ghost throughout the active map */
+  ghostScore: number;
   scores: GroupScores;
   /** per-car lap completion times in simulation frames, one entry per lap */
   lapTimes: Record<string, number[]>;
@@ -83,8 +87,10 @@ export function drawScores(
     ...state.groups,
     ...state.sortedCars.slice(0, config.SCORES_NB),
   ].sort((a, b) => {
-    const scoreA = a instanceof Car ? a.brain.score : a.scores.total;
-    const scoreB = b instanceof Car ? b.brain.score : b.scores.total;
+    // Running cars use their current score; ghosts use their fixed map score.
+    // The cross-map total is deliberately not part of scoreboard ordering.
+    const scoreA = a instanceof Car ? a.brain.score : a.ghostScore;
+    const scoreB = b instanceof Car ? b.brain.score : b.ghostScore;
     return scoreB - scoreA;
   });
 
@@ -115,14 +121,12 @@ export function drawScores(
             ? 'mixed'
             : String(ref.brainLayers)),
       );
-      const previousScore = group ? group.scores.total : 0;
+      const previousScore = group?.ghostScore || 0;
       const diff = ref.brain.score - previousScore;
       let emoji = '';
       let add = '';
-      if (ref.laps >= config.LAPS_PER_SEED) {
-        emoji = '🏆';
-      } else if (diff > 0) {
-        emoji = ref.damaged ? '💀' : '💚';
+      if (diff > 0) {
+        emoji = ref.damaged ? '🏆' : '💚';
         add = ` +${diff.toFixed(2)}`;
       } else {
         emoji = ref.damaged ? '💀' : '💜';
@@ -139,12 +143,10 @@ export function drawScores(
         ? blendColorScale([], config.MIXED_COLOR)
         : layerColor(ref.layer, config.MAX_NETWORK_LAYERS);
 
-      const emoji = ref.isMixed ? '🧭' : '👻';
+      const emoji = '👻';
       const name = ref.isMixed ? 'mixed' : `brain ${ref.layer}`;
       ctx.fillText(
-        `${emoji} ${name} Σ ${Math.round(ref.scores.total)} · map ${Math.round(
-          ref.scores.seed,
-        )}`,
+        `${emoji} ${name} ${Math.round(ref.ghostScore)}`,
         TL,
         FH * 4 + index * FH,
       );

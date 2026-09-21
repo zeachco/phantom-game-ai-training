@@ -34,7 +34,7 @@ panel shows its brain.
   seed input field changes it on demand, and any car completing
   LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
   the finishing brain is saved first, like a crash. Each finished map's high
-  score folds into the total with a 10% carry-over, so recent maps dominate.
+  score folds into the total with a 25% old-score carry-over, so recent maps dominate.
 
 car names are set as such:
 
@@ -45,8 +45,8 @@ car names are set as such:
 - 💀 car has crashed (the corpse fades out over 5 s)
 - 🏆 car has crashed with a higher score
 - 💜 car is racing
-- 💚 car is besting the best score
-- 👻 line total (the bar) + map high
+- 💚 car is beating its map ghost
+- 👻 previous-map best score for each line; ghost colors match the line
 - 🧭 mixed brain
 - 🏁 checkpoint, the followed car's next one glows
 - 🚧 gray obstacle (circle or wall)
