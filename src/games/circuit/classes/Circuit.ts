@@ -102,6 +102,15 @@ export class Circuit {
     }
     this.points = resample(coarse, config.CIRCUIT_SAMPLES);
 
+    // Alternate the opening bend by map index so the networks see both
+    // steering patterns. In canvas coordinates a positive tangent cross
+    // product is a right-hand bend for the car's heading convention.
+    const openingTurnIsRight = turnIsRight(this.points);
+    const shouldTurnRight = this.seed % 2 === 0;
+    if (openingTurnIsRight !== shouldTurnRight) {
+      for (const point of this.points) point.x = -point.x;
+    }
+
     const n = this.points.length;
     this.length = 0;
     for (let i = 0; i < n; i++) {
@@ -526,6 +535,18 @@ export class Circuit {
       ctx.stroke(this.edgePaths[i]);
     }
   }
+}
+
+/** In the canvas coordinate system, positive curvature turns the car right. */
+function turnIsRight(points: Vector[]) {
+  const a = points[0];
+  const b = points[1];
+  const c = points[2];
+  const abX = b.x - a.x;
+  const abY = b.y - a.y;
+  const bcX = c.x - b.x;
+  const bcY = c.y - b.y;
+  return abX * bcY - abY * bcX > 0;
 }
 
 /** re-paces a closed polyline so the points sit at even arc distances */
