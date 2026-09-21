@@ -36,9 +36,10 @@ panel shows its brain.
   the finishing brain is saved first, like a crash. Each finished map's high
   score folds into the total with a 25% old-score carry-over, so recent maps dominate.
 
-car names are set as such:
+car names use a capital brain ID followed by the mutation index:
 
-- `layers-slot` (there is no generation), e.g. `3-7` = 3-layer brain, slot 7.
+- `A3` = one hidden layer, mutation index 3.
+- `Z3` = mixed brain, mutation index 3.
 
 ### Score legend
 
@@ -47,7 +48,7 @@ car names are set as such:
 - 💜 car is racing
 - 💚 car is beating its map ghost
 - 👻 previous-map best score for each line; ghost colors match the line
-- 🧭 mixed brain
+- 🧭 Z
 - 🏁 checkpoint, the followed car's next one glows
 - 🚧 gray obstacle (circle or wall)
 - 🕹 human car, driven with the arrows or WASD

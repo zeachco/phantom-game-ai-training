@@ -23,6 +23,7 @@ import {
   mixedColor,
   Group,
   GroupScores,
+  brainId,
 } from './utilities';
 
 /** scores live under their own key per group, still inside the game prefix */
@@ -220,13 +221,18 @@ export default async (state: typeof defaultState) => {
 
   const resetBrainSaves = (value: number | 'mixed') => {
     if (value === 'mixed') {
-      if (!confirm('Reset the saved mixed brain weights?')) return;
+      if (
+        !confirm(
+          `Reset the saved weights of ${brainId(MIXED_LEVELS, undefined, true)}?`,
+        )
+      )
+        return;
       io.discardModel(MIXED_LEVELS, MIXED_KIND);
     } else if (value === 0) {
       if (!confirm('Reset all the saved circuit weights?')) return;
       io.discardGameModels();
     } else {
-      if (!confirm(`Reset the saved weights of brain ${value}?`)) return;
+      if (!confirm(`Reset the saved weights of ${brainId(value)}?`)) return;
       io.discardModel(value);
     }
     console.info(
@@ -281,17 +287,17 @@ export default async (state: typeof defaultState) => {
   followKeys.append(followLabel);
   (
     [
-      ['brain 1', 1],
-      ['brain 2', 2],
-      ['brain 3', 3],
-      ['brain 4', 4],
-      ['brain 5', 5],
-      ['brain 6', 6],
-      ['brain 7', 7],
-      ['brain 8', 8],
-      ['brain 9', 9],
+      [brainId(1), 1],
+      [brainId(2), 2],
+      [brainId(3), 3],
+      [brainId(4), 4],
+      [brainId(5), 5],
+      [brainId(6), 6],
+      [brainId(7), 7],
+      [brainId(8), 8],
+      [brainId(9), 9],
       ['all', 0],
-      ['mixed experts', 'mixed'],
+      [brainId(MIXED_LEVELS, undefined, true), 'mixed'],
     ] as [string, number | 'mixed'][]
   ).forEach(([label, value]) => {
     const btn = document.createElement('button');
@@ -333,7 +339,7 @@ export default async (state: typeof defaultState) => {
     '💚 car is beating its map ghost',
     '👻 previous-map best score for each line',
     '🕹 human car, driven with the arrows or WASD',
-    '🧭 mixed brain',
+    '🧭 Z',
     '🏁 next checkpoint glows',
     '🚧 gray obstacle (circle or wall)',
   ].forEach((line, i) => {
@@ -515,7 +521,7 @@ export default async (state: typeof defaultState) => {
       spawn.angle,
       ControlType.AI,
       config.CAR_MAX_SPEED,
-      isMixed ? '🧭' : `${group.layer}-${slot}`,
+      brainId(group.layer, slot, isMixed),
       isMixed
         ? config.MIXED_COLOR
         : getColorScale(group.layer / config.MAX_NETWORK_LAYERS),
@@ -869,10 +875,10 @@ export default async (state: typeof defaultState) => {
   function formatTimingFrames(frames: number) {
     const rounded = Math.max(0, Math.round(frames));
     if (rounded >= 1_000_000)
-      return `${(rounded / 1_000_000).toFixed(1).replace(/\.0$/, '')}m frames`;
+      return `${(rounded / 1_000_000).toFixed(1).replace(/\.0$/, '')}m f.`;
     if (rounded >= 1_000)
-      return `${(rounded / 1_000).toFixed(1).replace(/\.0$/, '')}k frames`;
-    return `${rounded} frames`;
+      return `${(rounded / 1_000).toFixed(1).replace(/\.0$/, '')}k f.`;
+    return `${rounded} f.`;
   }
 
   function formatTimingScore(score: number) {
@@ -885,9 +891,9 @@ export default async (state: typeof defaultState) => {
   }
 
   function brainIdentityLabel(identity: string) {
-    if (identity === 'mixed') return 'mixed';
+    if (identity === 'mixed') return brainId(MIXED_LEVELS, undefined, true);
     if (identity === 'human') return 'human';
-    return `brain ${identity}`;
+    return brainId(Number(identity));
   }
 
   function brainIdentityColor(identity: string) {
@@ -918,7 +924,7 @@ export default async (state: typeof defaultState) => {
         entry?.group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)';
       row.textContent = entry
         ? `${index + 1}. ${
-            entry.group.isMixed ? 'mixed' : `brain ${entry.group.layer}`
+            brainId(entry.group.layer, undefined, entry.group.isMixed)
           }  ${formatTimingFrames(entry.best)}`
         : `${index + 1}. —`;
     });

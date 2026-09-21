@@ -65,6 +65,15 @@ export const defaultState = {
 export const mixedColor = (brain: MixedNetwork) =>
   mixedNetworkColor(brain, config.MAX_NETWORK_LAYERS, config.MIXED_COLOR);
 
+export function brainId(
+  layer: number,
+  mutationIndex?: number,
+  isMixed = false,
+) {
+  const id = isMixed ? 'Z' : String.fromCharCode(64 + layer);
+  return mutationIndex == null ? id : `${id}${mutationIndex}`;
+}
+
 const FH = 12;
 const TL = 0;
 let gradient;
@@ -144,7 +153,7 @@ export function drawScores(
         : layerColor(ref.layer, config.MAX_NETWORK_LAYERS);
 
       const emoji = '👻';
-      const name = ref.isMixed ? 'mixed' : `brain ${ref.layer}`;
+      const name = brainId(ref.layer, undefined, ref.isMixed);
       ctx.fillText(
         `${emoji} ${name} ${Math.round(ref.ghostScore)}`,
         TL,
