@@ -478,6 +478,11 @@ export default async (state: typeof defaultState) => {
   let circuit = new Circuit(seed);
   /** distinct brain structures that finished on the current map */
   const completedBrainIndices = new Set<string>();
+  /** final score and total race frames for each completed identity */
+  const completedFinishes = new Map<
+    string,
+    { score: number | null; totalFrames: number }
+  >();
   /** set once the required finishers are present; the track changes later */
   let seedChangeAt = 0;
   const SEED_CHANGE_DELAY = 10_000;
@@ -735,6 +740,7 @@ export default async (state: typeof defaultState) => {
     raceEl.textContent = `race#${seed}`;
     circuit = new Circuit(seed);
     completedBrainIndices.clear();
+    completedFinishes.clear();
     seedChangeAt = 0;
     finishCountdown.hidden = true;
     state.circuit = circuit;
@@ -842,6 +848,15 @@ export default async (state: typeof defaultState) => {
     return `${rounded} frames`;
   }
 
+  function formatTimingScore(score: number) {
+    const rounded = Math.round(score);
+    if (Math.abs(rounded) >= 1_000_000)
+      return `${(rounded / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+    if (Math.abs(rounded) >= 1_000)
+      return `${(rounded / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+    return String(rounded);
+  }
+
   function brainIdentityLabel(identity: string) {
     if (identity === 'mixed') return 'mixed';
     if (identity === 'human') return 'human';
@@ -884,11 +899,14 @@ export default async (state: typeof defaultState) => {
     const finishers = [...completedBrainIndices].slice(0, finishRows.length);
     finishRows.forEach((row, index) => {
       const identity = finishers[index];
+      const finish = identity && completedFinishes.get(identity);
       row.style.color =
         (identity && brainIdentityColor(identity)) ||
         'rgba(255, 255, 255, 0.82)';
       row.textContent = identity
-        ? `${index + 1}. ${brainIdentityLabel(identity)}`
+        ? `${index + 1}. ${brainIdentityLabel(identity)}  ${
+            finish?.score == null ? '—' : formatTimingScore(finish.score)
+          } score  ${finish ? formatTimingFrames(finish.totalFrames) : '—'}`
         : `${index + 1}. —`;
     });
   }
@@ -992,7 +1010,13 @@ export default async (state: typeof defaultState) => {
             : car.brain instanceof MixedNetwork
             ? 'mixed'
             : String(car.brainLayers);
-          completedBrainIndices.add(brainIndex);
+          if (!completedBrainIndices.has(brainIndex)) {
+            completedBrainIndices.add(brainIndex);
+            completedFinishes.set(brainIndex, {
+              score: car.useAI ? car.brain.score : null,
+              totalFrames: car.totalRaceFrames,
+            });
+          }
         }
       }
       if (completedBrainIndices.size >= 3 && !seedChangeAt) {

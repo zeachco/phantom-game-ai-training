@@ -83,6 +83,8 @@ export class Car {
   public framesSinceLapStart = 0;
   /** simulation frames spent on the last completed lap */
   public completedLapFrames = 0;
+  /** simulation frames spent across all completed laps on this map */
+  public totalRaceFrames = 0;
   /** performance.now() when the current stall began, 0 while moving */
   private stallSince = 0;
   private img: HTMLImageElement;
@@ -259,6 +261,7 @@ export class Car {
           this.laps++;
           this.completedLapAt = performance.now();
           this.completedLapFrames = this.framesSinceLapStart;
+          this.totalRaceFrames += this.completedLapFrames;
           this.framesSinceLapStart = 0;
           this.lapStartedAt = this.completedLapAt;
           if (this.laps >= config.LAPS_PER_SEED) this.finished = true;
