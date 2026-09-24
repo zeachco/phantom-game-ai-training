@@ -1,11 +1,11 @@
 import {
-  lerp,
-  getAngle,
   angleOffset,
-  vecLength,
+  getAngle,
+  lerp,
   randInt,
+  vecLength,
 } from '../../../utilities/math';
-import { factionOffset, FACTIONS, MAX_FACTIONS } from '../factions';
+import { FACTIONS, factionOffset, MAX_FACTIONS } from '../factions';
 import { NeuralNetwork } from '../neural-network/NeuralNetwork';
 
 interface Target {

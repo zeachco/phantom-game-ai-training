@@ -1,8 +1,8 @@
-import { Segment } from './Segment';
-import { Path } from './Path';
 import { BoxGeometry, Mesh, MeshBasicMaterial } from 'three';
-import { NeuralInput } from './NeuralInput';
 import { rand, ratio } from '../../../utilities/math';
+import type { NeuralInput } from './NeuralInput';
+import type { Path } from './Path';
+import type { Segment } from './Segment';
 
 const geometry = new BoxGeometry();
 
@@ -102,7 +102,7 @@ export class Mob {
   }
 
   public waypoint(offset = 0): Segment {
-    let targetIndex = this.normalizedIndex(this.targetIndex + offset);
+    const targetIndex = this.normalizedIndex(this.targetIndex + offset);
     return this.path.segments[targetIndex];
   }
 

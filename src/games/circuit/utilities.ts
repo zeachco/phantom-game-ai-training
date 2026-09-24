@@ -1,12 +1,12 @@
 import { MixedNetwork } from '../../ai/Mixed';
-import { ModelsByLayerCount } from '../../ai/utils';
 import type { NeuralNetwork } from '../../ai/Network';
-import { blendColorScale, getColorScale } from '../../utilities/colors';
+import type { ModelsByLayerCount } from '../../ai/utils';
 import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
+import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
-import { Circuit } from './classes/Circuit';
+import type { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
-import { Obstacle } from './classes/Obstacle';
+import type { Obstacle } from './classes/Obstacle';
 
 /** summarized score per group: the total is the promotion bar, the seed
  *  entry is the live high score on the map the group is driving */

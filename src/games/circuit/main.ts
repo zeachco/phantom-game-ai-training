@@ -1,10 +1,10 @@
-import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import {
   hydrateExperts,
   MIXED_KIND,
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../ai/Mixed';
+import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import type { NeuralNetwork } from '../../ai/Network';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
@@ -14,16 +14,16 @@ import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car, getCircuitBrainDimensions } from './classes/Car';
-import { config } from './classes/Config';
 import { Circuit } from './classes/Circuit';
+import { config } from './classes/Config';
 import { ControlType } from './types';
 import {
+  brainId,
   defaultState,
   drawScores,
+  type Group,
+  type GroupScores,
   mixedColor,
-  Group,
-  GroupScores,
-  brainId,
 } from './utilities';
 
 /** scores live under their own key per group, still inside the game prefix */
@@ -565,53 +565,6 @@ export default async (state: typeof defaultState) => {
     return car;
   }
 
-  /** Branch the currently focused AI at its exact race position. Only the
-   *  network changes, with the smallest representable mutation. */
-  function spawnBoostClone(source: Car) {
-    if (!source.useAI || source.damaged || source.finished || !source.brain)
-      return;
-    const group = groupOf(source);
-    if (!group) return;
-
-    const slot = boostIndex++;
-    const isMixed = source.brain instanceof MixedNetwork;
-    const clone = new Car(
-      source.x,
-      source.y,
-      source.angle,
-      ControlType.AI,
-      source.maxSpeed,
-      brainId(group.layer, slot, isMixed),
-      source.color,
-      source.brainLayers,
-      isMixed
-        ? (inputCount, outputCount) =>
-            new MixedNetwork(inputCount, outputCount, experts, {
-              hiddenNodes: config.MIXED_HIDDEN_NODES,
-              mutationBoost: config.MIXED_MUTATION_BOOST,
-              resetChance: config.MIXED_RESET_CHANCE,
-            })
-        : undefined,
-    );
-    clone.cloneRaceStateFrom(source);
-    clone.brain.mutationIndex = slot;
-    // Match mutation slot 1 at the current training generation. This keeps
-    // BOOST on the same mutation schedule as the normal population instead of
-    // inventing a separate epsilon-scale mutation.
-    clone.brain.mutationFactor = maxMutation() / 100;
-    clone.brain.mutate(source.brain);
-    // mutate() copies weights/version, not the score: the branch starts with
-    // the exact score accumulated by the source at the branching point.
-    clone.brain.score = source.brain.score;
-    clone.brain.diff = source.brain.diff;
-    clone.brain.date = source.brain.date;
-
-    boostClones.add(clone);
-    state.cars.push(clone);
-    state.living++;
-    state.population++;
-  }
-
   function refreshExperts() {
     // Always replace the cache, including when there are too few experts. If
     // a line is reset, retaining the previous array keeps its old brains alive
@@ -1046,7 +999,9 @@ export default async (state: typeof defaultState) => {
         if (boostHeld) {
           const source = followedCar();
           if (source && source.laps < 2) {
-            spawnBoostClone(source);
+            for (let i = 0; i < 100; i++) {
+              spawnBoostClone(source);
+            }
           }
         }
         // a checkpoint pass is a save point: staged saves flush only then
@@ -1144,8 +1099,8 @@ export default async (state: typeof defaultState) => {
               car === state.human
                 ? 'human'
                 : car.brain instanceof MixedNetwork
-                ? 'mixed'
-                : String(car.brainLayers);
+                  ? 'mixed'
+                  : String(car.brainLayers);
             completedBrainIndices.add(brainIndex);
             const previousFinish = completedFinishes.get(brainIndex);
             if (
@@ -1380,8 +1335,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-        : true);
+          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+          : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged && !car.finished)

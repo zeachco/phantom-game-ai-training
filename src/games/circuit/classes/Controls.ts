@@ -33,12 +33,7 @@ export class Controls {
   /** what a key sets: throttle keys carry their sign, undefined when unbound */
   #keyToOutput(
     key: string,
-  ):
-    | 'throttle+'
-    | 'throttle-'
-    | 'left'
-    | 'right'
-    | undefined {
+  ): 'throttle+' | 'throttle-' | 'left' | 'right' | undefined {
     switch (key) {
       case 'ArrowUp':
       case 'w':

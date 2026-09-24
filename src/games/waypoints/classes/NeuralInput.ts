@@ -1,7 +1,7 @@
 import { BufferGeometry, Line, LineBasicMaterial, Vector3 } from 'three';
-import { GamePad } from '../../../utilities/inputs/Gamepad';
+import type { GamePad } from '../../../utilities/inputs/Gamepad';
 import { NeuralNetwork } from '../../number/neural-network/NeuralNetwork';
-import { Mob } from './Mob';
+import type { Mob } from './Mob';
 
 const SHOW_WP_NB = 2;
 const FILE_SAVE = 'waypoints_neural_8_2';

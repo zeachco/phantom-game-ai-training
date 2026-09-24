@@ -2,8 +2,8 @@ import { roundRect } from '../../utilities/canvas';
 import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
-import { Level, NeuralNetwork } from '../Network';
 import { MixedNetwork } from '../Mixed';
+import type { Level, NeuralNetwork } from '../Network';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);

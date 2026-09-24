@@ -1,4 +1,4 @@
-import { MeshBasicMaterial, RingGeometry, Mesh, Clock } from 'three';
+import { Clock, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
 import { rand } from '../../../utilities/math';
 
 const geometry = new RingGeometry();

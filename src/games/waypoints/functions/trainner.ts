@@ -1,4 +1,4 @@
-import { Mob } from '../classes/Mob';
+import type { Mob } from '../classes/Mob';
 
 // 1. cur wp dx
 // 2. cur wp dy

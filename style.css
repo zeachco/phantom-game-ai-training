@@ -109,7 +109,9 @@ ul:hover {
   border: none;
   border-radius: 0.5em;
   padding: 0.25em 0.75em;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
   text-transform: uppercase;
   color: #fff;
   background: rgba(25, 52, 94, 0.6);
@@ -151,7 +153,9 @@ ul:hover {
 
 .follow-keys span {
   grid-column: 1 / -1;
-  font: bold 0.7em Arial, sans-serif;
+  font:
+    bold 0.7em Arial,
+    sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.6);
@@ -161,7 +165,9 @@ ul:hover {
   border: 2px solid transparent;
   border-radius: 0.4em;
   padding: 0.25em 0;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
   color: #fff;
   background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
@@ -206,7 +212,9 @@ ul:hover {
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
   background: rgba(255, 255, 255, 0.08);
-  font: 0.72em Arial, sans-serif;
+  font:
+    0.72em Arial,
+    sans-serif;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
 }
@@ -220,7 +228,9 @@ ul:hover {
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
   background: rgba(255, 255, 255, 0.08);
-  font: 0.72em Arial, sans-serif;
+  font:
+    0.72em Arial,
+    sans-serif;
   color: rgba(255, 255, 255, 0.85);
 }
 
@@ -233,7 +243,9 @@ ul:hover {
 
 .side-panel-footer {
   margin-top: auto;
-  font: 0.7em Arial, sans-serif;
+  font:
+    0.7em Arial,
+    sans-serif;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
 }
@@ -251,7 +263,9 @@ ul:hover {
   border-radius: 0.4em;
   background: rgba(25, 52, 94, 0.85);
   color: #fff;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
 }
 .seed-controls button {
   width: 1.8em;
@@ -265,16 +279,6 @@ ul:hover {
 }
 .seed-controls button:hover {
   background: #fff;
-}
-.seed-controls .boost-button {
-  width: auto;
-  min-width: 5.5em;
-  padding: 0 0.8em;
-  background: #ffcf33;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  user-select: none;
-  touch-action: none;
 }
 .seed-controls .boost-button:hover,
 .seed-controls .boost-button:active {

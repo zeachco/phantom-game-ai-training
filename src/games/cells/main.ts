@@ -13,8 +13,10 @@ export default async () => {
   const vizualizer = new NeuralVisualizer(ctx);
   if (!ctx) throw new Error('no 2d context');
 
-  const GW = (canvas.width = window.innerWidth);
-  const GH = (canvas.height = window.innerHeight);
+  const GW = window.innerWidth;
+  const GH = window.innerHeight;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
   const loop = new GameLoop();
 
   let cells: Cell[] = [];
@@ -32,10 +34,8 @@ export default async () => {
     canvas.height = window.innerHeight;
 
     const factionTotal = new Array(MAX_FACTIONS).fill(0);
-    cells.forEach((cell, index) => {
+    cells.forEach((cell) => {
       factionTotal[cell.faction]++;
-      // if (cell.focused) humanControl(cell);
-      // else AIControl(cell)
       AIControl(cell);
 
       cell.update();
@@ -45,11 +45,6 @@ export default async () => {
       if (cell.x < 0) cell.x = GW;
       if (cell.y > GH) cell.y = 0;
       if (cell.y < 0) cell.y = GH;
-
-      // if (cell.x > GW) cell.x = GW
-      // if (cell.x < 0) cell.x = 0
-      // if (cell.y > GH) cell.y = GH
-      // if (cell.y < 0) cell.y = 0
     });
 
     factionTotal.forEach((total, index) => {
@@ -78,9 +73,10 @@ export default async () => {
       }
     });
 
-    cells.forEach((cell) => cell.updateTargets(cells, GW, GH));
+    cells.forEach((cell) => {
+      cell.updateTargets(cells, GW, GH);
+    });
     const scores = cells.concat().sort((a, b) => b.scorediff - a.scorediff);
-    (window as any).scores = scores;
     cells.forEach((cell) => {
       cell.focused = cell === scores[0];
       cell.draw(ctx);
@@ -113,13 +109,6 @@ export default async () => {
       ctx.fillText(`Press V for neural network visuals`, 0, GH);
     }
   });
-
-  function humanControl(cell: Cell) {
-    if (gamepad.get('ArrowUp')) cell.forward();
-    if (gamepad.get('ArrowLeft')) cell.turnLeft();
-    if (gamepad.get('ArrowRight')) cell.turnRight();
-    // if (gamepad.get('Space')) cell.attack()
-  }
 
   function AIControl(cell: Cell) {
     const inputs: number[] = [];

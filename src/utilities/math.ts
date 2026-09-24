@@ -111,7 +111,7 @@ export function polysIntersect(poly1: Vector[], poly2: Vector[]) {
 }
 
 export function easeInCirc(x: number): number {
-  return 1 - Math.sqrt(1 - Math.pow(x, 2));
+  return 1 - Math.sqrt(1 - x ** 2);
 }
 
 export function sum(...nbs: number[]) {

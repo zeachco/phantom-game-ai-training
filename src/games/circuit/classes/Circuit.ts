@@ -1,7 +1,7 @@
-import { mulberry32, Rng, Vector } from '../../../utilities/math';
+import { mulberry32, type Rng, type Vector } from '../../../utilities/math';
+import { Checkpoint } from './Checkpoint';
 import { config } from './Config';
 import { Obstacle } from './Obstacle';
-import { Checkpoint } from './Checkpoint';
 
 /** one boundary edge with its precomputed box, the sensor's wall */
 export interface Segment {
@@ -291,8 +291,8 @@ export class Circuit {
       const off = twoLaneRoad
         ? edgeOffset
         : minWithGap <= maxWithGap && rng() > 0.25
-        ? minWithGap + rng() * (maxWithGap - minWithGap)
-        : edgeOffset;
+          ? minWithGap + rng() * (maxWithGap - minWithGap)
+          : edgeOffset;
 
       return new Obstacle(
         p.x + this.normals[idx].x * off,

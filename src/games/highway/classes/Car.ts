@@ -1,12 +1,16 @@
-import { Controls } from './Controls';
 import { NeuralNetwork } from '../../../ai/Network';
-import { Sensor } from './Sensor';
-import { ControlType } from '../types';
-import carImg from '../assets/car.png';
-import { AABB, polysIntersect, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
+import {
+  type AABB,
+  polysIntersect,
+  type Vector,
+} from '../../../utilities/math';
+import carImg from '../assets/car.png';
+import { ControlType } from '../types';
 import { config } from './Config';
-import { DeathRay } from './DeathRay';
+import { Controls } from './Controls';
+import type { DeathRay } from './DeathRay';
+import { Sensor } from './Sensor';
 
 export class Car {
   public speed: number;

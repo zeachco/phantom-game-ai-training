@@ -1,4 +1,4 @@
-import { Scene, PerspectiveCamera, WebGLRenderer, Clock } from 'three';
+import { Clock, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { lerp } from '../../utilities/math';
 import { Mob } from './classes/Mob';
 import { NeuralInput } from './classes/NeuralInput';

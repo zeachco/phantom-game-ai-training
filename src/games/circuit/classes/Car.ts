@@ -1,13 +1,18 @@
-import { Controls } from './Controls';
 import { NeuralNetwork } from '../../../ai/Network';
-import { Sensor } from './Sensor';
-import { ControlType } from '../types';
-import carImg from '../assets/car.png';
-import { AABB, lerp, polysIntersect, Vector } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
+import {
+  type AABB,
+  lerp,
+  polysIntersect,
+  type Vector,
+} from '../../../utilities/math';
+import carImg from '../assets/car.png';
+import { ControlType } from '../types';
+import type { Circuit } from './Circuit';
 import { config } from './Config';
-import { Circuit } from './Circuit';
-import { Obstacle } from './Obstacle';
+import { Controls } from './Controls';
+import type { Obstacle } from './Obstacle';
+import { Sensor } from './Sensor';
 
 /** the gate line shades by misalignment, quantized so no string is built per frame */
 const GATE_COLORS = new Array(21).fill(0).map((_s, i) => {

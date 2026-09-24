@@ -1,4 +1,4 @@
-import { Ball } from './Ball';
+import type { Ball } from './Ball';
 
 export class CollisionBox {
   private collided = {} as { [key: number]: boolean };

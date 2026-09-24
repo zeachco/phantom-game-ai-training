@@ -93,7 +93,8 @@ export function fileUtilities(game = '') {
     const byKind: Record<string, NeuralNetwork[][]> = {};
     models.forEach((model) => {
       const kind = model.kind || DEFAULT_KIND;
-      const save = (byKind[kind] = byKind[kind] || []);
+      byKind[kind] = byKind[kind] || [];
+      const save = byKind[kind];
       const space = model.levels.length;
       const previous = save[space] || [];
       if (previous.length >= amountPerComplexity) return;
@@ -101,11 +102,11 @@ export function fileUtilities(game = '') {
     });
 
     console.info(`💾 Saving best ${amountPerComplexity} models...`);
-    Object.keys(byKind).forEach((kind) =>
-      byKind[kind].forEach((models, layersNb) =>
-        saveModels(layersNb, models, kind),
-      ),
-    );
+    Object.keys(byKind).forEach((kind) => {
+      byKind[kind].forEach((models, layersNb) => {
+        saveModels(layersNb, models, kind);
+      });
+    });
   }
 
   function loadAllModelLayers(maxLayer = 1, kind: string = DEFAULT_KIND) {

@@ -1,12 +1,12 @@
-import type { Car } from './Car';
 import {
   getIntersection,
   lerp,
   segmentHitsAABB,
-  Vector,
+  type Vector,
 } from '../../../utilities/math';
+import type { Car } from './Car';
 import { config } from './Config';
-import { DeathRay } from './DeathRay';
+import type { DeathRay } from './DeathRay';
 
 interface Reading {
   x: number;
@@ -37,15 +37,17 @@ export class Sensor {
     this.rays = [];
     this.readings = new Array(this.rayCount);
     for (let i = 0; i < this.rayCount; i++) {
-      const offset =
-        lerp(
-          config.SENSOR_ANGLE / 2,
-          -config.SENSOR_ANGLE / 2,
-          this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
-        );
+      const offset = lerp(
+        config.SENSOR_ANGLE / 2,
+        -config.SENSOR_ANGLE / 2,
+        this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
+      );
       this.#cosOff.push(Math.cos(offset));
       this.#sinOff.push(Math.sin(offset));
-      this.rays.push([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+      this.rays.push([
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ]);
     }
   }
 

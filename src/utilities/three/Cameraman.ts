@@ -1,4 +1,4 @@
-import { PerspectiveCamera, WebGLRenderer, Scene } from 'three';
+import { PerspectiveCamera, type Scene, WebGLRenderer } from 'three';
 
 export class Cameraman {
   public camera: PerspectiveCamera;

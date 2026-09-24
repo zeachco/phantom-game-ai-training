@@ -1,4 +1,3 @@
-import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import {
   expertSlotIds,
   hydrateExperts,
@@ -6,6 +5,7 @@ import {
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../ai/Mixed';
+import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { contrastText, getColorScale } from '../../utilities/colors';
@@ -54,7 +54,8 @@ export default async (state: typeof defaultState) => {
   loadBtn.className = 'model-btn';
   loadBtn.textContent = 'Load models';
   loadBtn.disabled = true;
-  loadBtn.title = 'disabled for now: the default archive predates the current sensors';
+  loadBtn.title =
+    'disabled for now: the default archive predates the current sensors';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
@@ -114,7 +115,9 @@ export default async (state: typeof defaultState) => {
   };
   clearBtn.onclick = () => {
     if (
-      !confirm('Clear the current training set? This removes the saved models of this game.')
+      !confirm(
+        'Clear the current training set? This removes the saved models of this game.',
+      )
     )
       return;
     io.discardGameModels();

@@ -1,4 +1,4 @@
-import { Vector } from '../../../utilities/math';
+import type { Vector } from '../../../utilities/math';
 
 /**
  * A gate across the road, claimed in order one per lap. The order is what

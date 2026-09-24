@@ -1,4 +1,4 @@
-import { Segment } from './Segment';
+import type { Segment } from './Segment';
 
 export class Path {
   constructor(public segments: Segment[] = []) {}

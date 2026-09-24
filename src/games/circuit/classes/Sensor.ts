@@ -1,7 +1,7 @@
+import { lerp, segmentHitsAABB, type Vector } from '../../../utilities/math';
 import type { Car } from './Car';
-import { lerp, segmentHitsAABB, Vector } from '../../../utilities/math';
-import { config } from './Config';
 import type { Segment } from './Circuit';
+import { config } from './Config';
 import type { Obstacle } from './Obstacle';
 
 interface Reading {
@@ -29,13 +29,17 @@ export class Sensor {
     this.rays = [];
     this.readings = new Array(this.rayCount);
     for (let i = 0; i < this.rayCount; i++) {
-      const t = this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1);
+      const t = this.rayCount === 1 ? 0.5 : i / (this.rayCount - 1);
       const offset = lerp(config.SENSOR_ANGLE / 2, -config.SENSOR_ANGLE / 2, t);
       this.#cosOff.push(Math.cos(offset));
       this.#sinOff.push(Math.sin(offset));
       // cosine bell: 1 straight ahead, 0 at the edges, smooth between
       this.#lengths.push(
-        lerp(config.SENSORS_EDGE_LENGTH, config.SENSORS_MAX_LENGTH, Math.cos((t - 0.5) * Math.PI)),
+        lerp(
+          config.SENSORS_EDGE_LENGTH,
+          config.SENSORS_MAX_LENGTH,
+          Math.cos((t - 0.5) * Math.PI),
+        ),
       );
       this.rays.push([
         { x: 0, y: 0 },

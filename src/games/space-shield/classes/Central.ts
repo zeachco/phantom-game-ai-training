@@ -1,4 +1,4 @@
-import { CircleGeometry, MeshMatcapMaterial, Mesh } from 'three';
+import { CircleGeometry, Mesh, MeshMatcapMaterial } from 'three';
 
 const geometry = new CircleGeometry(1, 8);
 const material = new MeshMatcapMaterial({

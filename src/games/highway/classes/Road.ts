@@ -1,4 +1,4 @@
-import { lerp, Vector } from '../../../utilities/math';
+import { lerp, type Vector } from '../../../utilities/math';
 
 export class Road {
   public left: number;

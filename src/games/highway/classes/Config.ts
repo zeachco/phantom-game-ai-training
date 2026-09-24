@@ -1,4 +1,4 @@
-import { ModelsByLayerCount } from '../../../ai/utils';
+import type { ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
   public CAR_NB = 200;
@@ -119,4 +119,4 @@ class Config {
   }
 }
 
-export const config = ((window as any).config = new Config());
+export const config = new Config();

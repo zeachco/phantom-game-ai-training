@@ -1,4 +1,4 @@
-import { NeuralNetwork } from '../games/cells/neural-network/NeuralNetwork';
+import type { NeuralNetwork } from '../games/cells/neural-network/NeuralNetwork';
 import { lerp } from '../utilities/math';
 import { CtxTxt } from '../utilities/text';
 

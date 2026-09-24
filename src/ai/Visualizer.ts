@@ -2,7 +2,7 @@ import { config } from '../games/highway/classes/Config';
 import { roundRect } from '../utilities/canvas';
 import { getColorScale } from '../utilities/colors';
 import { lerp } from '../utilities/math';
-import { Level, NeuralNetwork } from './Network';
+import type { Level, NeuralNetwork } from './Network';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
@@ -59,7 +59,7 @@ export class Visualizer {
         lerp(
           height - levelHeight,
           0,
-          network.levels.length == 1 ? 0.5 : i / (network.levels.length - 1),
+          network.levels.length === 1 ? 0.5 : i / (network.levels.length - 1),
         );
 
       ctx.setLineDash([7, 3]);
@@ -70,7 +70,7 @@ export class Visualizer {
         levelTop,
         width,
         levelHeight,
-        i == network.levels.length - 1 ? ['F', 'L', 'R', 'B'] : [],
+        i === network.levels.length - 1 ? ['F', 'L', 'R', 'B'] : [],
       );
     }
   }
@@ -146,7 +146,7 @@ export class Visualizer {
     return lerp(
       left,
       right,
-      nodes.length == 1 ? 0.5 : index / (nodes.length - 1),
+      nodes.length === 1 ? 0.5 : index / (nodes.length - 1),
     );
   }
 }

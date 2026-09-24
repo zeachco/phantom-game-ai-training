@@ -1,11 +1,11 @@
-import { MIXED_KIND, MixedNetwork } from '../../ai/Mixed';
-import { ModelsByLayerCount } from '../../ai/utils';
-import { getColorScale } from '../../utilities/colors';
+import { MIXED_KIND, type MixedNetwork } from '../../ai/Mixed';
+import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   layerColor,
   mixedNetworkColor,
   savedMixedNetworkColor,
 } from '../../utilities/ai/colors';
+import { getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
 

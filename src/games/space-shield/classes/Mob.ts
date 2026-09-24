@@ -1,5 +1,5 @@
-import { BoxGeometry, MeshBasicMaterial, Vector3, Mesh } from 'three';
-import { Central } from './Central';
+import { BoxGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three';
+import type { Central } from './Central';
 
 const geometry = new BoxGeometry();
 const V = Vector3;

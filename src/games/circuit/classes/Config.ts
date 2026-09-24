@@ -1,5 +1,3 @@
-import { ModelsByLayerCount } from '../../../ai/utils';
-
 class Config {
   // population
   /** number of AI car slots: each slot holds one car at a time (alive or a
@@ -8,7 +6,7 @@ class Config {
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly this many cars, slots 0..9 */
-  public CARS_PER_GROUP = 10;
+  public CARS_PER_GROUP = 100;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
@@ -159,4 +157,4 @@ class Config {
   }
 }
 
-export const config = ((window as any).config = new Config());
+export const config = new Config();
