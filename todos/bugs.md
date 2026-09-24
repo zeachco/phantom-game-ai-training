@@ -1,3 +1,3 @@
 # Active bugs and backlog
 
-No unfinished bugs. Completed behavior is documented in `specs/`.
+- [ ] For game circuit. Go through all biome errors and fix code
