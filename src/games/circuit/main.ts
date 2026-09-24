@@ -508,6 +508,13 @@ export default async (state: typeof defaultState) => {
   const SEED_CHANGE_DELAY = 10_000;
   const groups: Group[] = [];
   const pendingSaves = new Set<Group>();
+  /** one-shot boost clones are intentionally outside group pools: they never
+   *  participate in group respawns and disappear permanently on a crash */
+  const boostClones = new Set<Car>();
+  let boostIndex = config.CARS_PER_GROUP;
+  let boostHeld = false;
+  let lastBoostAt = 0;
+  const BOOST_INTERVAL_MS = 45;
 
   /** the ladder's top: shrinks with session progress (laps completed) */
   function maxMutation() {
@@ -557,6 +564,52 @@ export default async (state: typeof defaultState) => {
       }
     }
     return car;
+  }
+
+  /** Branch the currently focused AI at its exact race position. Only the
+   *  network changes, with the smallest representable mutation. */
+  function spawnBoostClone(source: Car) {
+    if (!source.useAI || source.damaged || source.finished || !source.brain) return;
+    const group = groupOf(source);
+    if (!group) return;
+
+    const slot = boostIndex++;
+    const isMixed = source.brain instanceof MixedNetwork;
+    const clone = new Car(
+      source.x,
+      source.y,
+      source.angle,
+      ControlType.AI,
+      source.maxSpeed,
+      brainId(group.layer, slot, isMixed),
+      source.color,
+      source.brainLayers,
+      isMixed
+        ? (inputCount, outputCount) =>
+            new MixedNetwork(inputCount, outputCount, experts, {
+              hiddenNodes: config.MIXED_HIDDEN_NODES,
+              mutationBoost: config.MIXED_MUTATION_BOOST,
+              resetChance: config.MIXED_RESET_CHANCE,
+            })
+        : undefined,
+    );
+    clone.cloneRaceStateFrom(source);
+    clone.brain.mutationIndex = slot;
+    // Match mutation slot 1 at the current training generation. This keeps
+    // BOOST on the same mutation schedule as the normal population instead of
+    // inventing a separate epsilon-scale mutation.
+    clone.brain.mutationFactor = maxMutation();
+    clone.brain.mutate(source.brain);
+    // mutate() copies weights/version, not the score: the branch starts with
+    // the exact score accumulated by the source at the branching point.
+    clone.brain.score = source.brain.score;
+    clone.brain.diff = source.brain.diff;
+    clone.brain.date = source.brain.date;
+
+    boostClones.add(clone);
+    state.cars.push(clone);
+    state.living++;
+    state.population++;
   }
 
   function refreshExperts() {
@@ -788,6 +841,9 @@ export default async (state: typeof defaultState) => {
       group.seedBest = null;
       saveScores(group);
     }
+    boostClones.clear();
+    boostIndex = config.CARS_PER_GROUP;
+    boostHeld = false;
     state.cars = groups.flatMap((g) => g.pool);
     if (state.human) {
       state.human.controls.dispose();
@@ -833,7 +889,25 @@ export default async (state: typeof defaultState) => {
   nextSeed.textContent = '>';
   nextSeed.title = 'Next map';
   nextSeed.onclick = () => applyUserSeed(seed + 1);
-  seedControls.append(previousSeed, seedLabel, seedValue, nextSeed);
+  const boostBtn = document.createElement('button');
+  boostBtn.type = 'button';
+  boostBtn.className = 'boost-button';
+  boostBtn.textContent = 'BOOST';
+  boostBtn.title =
+    'Hold to branch minimally mutated copies of the focused car at its current position';
+  boostBtn.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    boostBtn.setPointerCapture(event.pointerId);
+    boostHeld = true;
+    lastBoostAt = 0;
+  });
+  const releaseBoost = () => {
+    boostHeld = false;
+  };
+  boostBtn.addEventListener('pointerup', releaseBoost);
+  boostBtn.addEventListener('pointercancel', releaseBoost);
+  boostBtn.addEventListener('lostpointercapture', releaseBoost);
+  seedControls.append(previousSeed, seedLabel, seedValue, nextSeed, boostBtn);
   document.body.appendChild(seedControls);
 
   const timingBoard = document.createElement('section');
@@ -970,6 +1044,13 @@ export default async (state: typeof defaultState) => {
 
       if (state.playing) {
         const now = performance.now();
+        if (boostHeld && now - lastBoostAt >= BOOST_INTERVAL_MS) {
+          const source = followedCar();
+          if (source) {
+            spawnBoostClone(source);
+            lastBoostAt = now;
+          }
+        }
         // a checkpoint pass is a save point: staged saves flush only then
         let savePoint = false;
         for (let i = 0; i < state.cars.length; i++) {
@@ -1008,6 +1089,21 @@ export default async (state: typeof defaultState) => {
             now - car.deathTime > config.DEAD_LIFETIME
           )
             state.cars.splice(i, 1);
+        }
+
+        // Boost clones are one-shot trials. A losing clone never respawns;
+        // promotion still happens through the normal score path if it beats
+        // the source/champion before dying.
+        for (const clone of boostClones) {
+          if (
+            clone.damaged &&
+            now - clone.deathTime > config.DEAD_LIFETIME
+          ) {
+            boostClones.delete(clone);
+            const index = state.cars.indexOf(clone);
+            if (index >= 0) state.cars.splice(index, 1);
+            state.population--;
+          }
         }
 
         // A group keeps its fading corpses until every same-group car is dead,
@@ -1308,6 +1404,9 @@ export default async (state: typeof defaultState) => {
     state.obstacles = circuit.obstacles;
 
     buildPools();
+    boostClones.clear();
+    boostIndex = config.CARS_PER_GROUP;
+    boostHeld = false;
     state.cars = groups.flatMap((g) => g.pool);
 
     // the human car is always in the race, the keys are always its brain

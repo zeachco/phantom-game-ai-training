@@ -151,6 +151,60 @@ export class Car {
     this.img.onload = () => this.#paintMask();
   }
 
+  /** Copy every mutable race-state property recursively while preserving this
+   *  car's runtime identity (brain/sensor/controls/DOM resources). Nested
+   *  arrays and objects are rebuilt, so a clone never shares state pointers. */
+  cloneRaceStateFrom(source: Car) {
+    const skipped = new Set([
+      'brain',
+      'sensor',
+      'controls',
+      'img',
+      'mask',
+      'brainBuilder',
+      'label',
+      'color',
+      'brainLayers',
+      'useAI',
+    ]);
+
+    const copy = (value: any, seen = new WeakMap<object, any>()): any => {
+      if (value == null || typeof value !== 'object') return value;
+      if (seen.has(value)) return seen.get(value);
+
+      if (Array.isArray(value)) {
+        const clone: any[] = [];
+        seen.set(value, clone);
+        for (const item of value) clone.push(copy(item, seen));
+        return clone;
+      }
+
+      const clone = Object.create(Object.getPrototypeOf(value));
+      seen.set(value, clone);
+      for (const key of Object.keys(value)) clone[key] = copy(value[key], seen);
+      return clone;
+    };
+
+    for (const key of Object.keys(source)) {
+      if (skipped.has(key)) continue;
+      (this as any)[key] = copy((source as any)[key]);
+    }
+
+    // Controls are runtime objects with listeners, but their mutable values
+    // still branch from the source without sharing the Controls instance.
+    for (const key of Object.keys(source.controls)) {
+      const value = (source.controls as any)[key];
+      if (typeof value !== 'function')
+        (this.controls as any)[key] = copy(value);
+    }
+
+    // one-frame event flags belong to the source frame, not the new branch
+    this.completedLap = false;
+    this.passedCheckpoint = false;
+    this.damaged = false;
+    this.deathTime = 0;
+  }
+
   /** the accent can move at runtime, a mixed brain blends the brains it uses */
   setColor(color: string) {
     if (color === this.color) return;
