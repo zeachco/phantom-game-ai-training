@@ -513,7 +513,6 @@ export default async (state: typeof defaultState) => {
    *  participate in group respawns and disappear permanently on a crash */
   const boostClones = new Set<Car>();
   let boostIndex = config.CARS_PER_GROUP;
-  let boostHeld = false;
 
   /** the ladder's top: shrinks with session progress (laps completed) */
   function maxMutation() {
@@ -794,9 +793,6 @@ export default async (state: typeof defaultState) => {
       group.seedBest = null;
       saveScores(group);
     }
-    boostClones.clear();
-    boostIndex = config.CARS_PER_GROUP;
-    boostHeld = false;
     state.cars = groups.flatMap((g) => g.pool);
     if (state.human) {
       state.human.controls.dispose();
@@ -842,24 +838,7 @@ export default async (state: typeof defaultState) => {
   nextSeed.textContent = '>';
   nextSeed.title = 'Next map';
   nextSeed.onclick = () => applyUserSeed(seed + 1);
-  const boostBtn = document.createElement('button');
-  boostBtn.type = 'button';
-  boostBtn.className = 'boost-button';
-  boostBtn.textContent = 'BOOST';
-  boostBtn.title =
-    'Hold to branch minimally mutated copies of the focused car at its current position';
-  boostBtn.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
-    boostBtn.setPointerCapture(event.pointerId);
-    boostHeld = true;
-  });
-  const releaseBoost = () => {
-    boostHeld = false;
-  };
-  boostBtn.addEventListener('pointerup', releaseBoost);
-  boostBtn.addEventListener('pointercancel', releaseBoost);
-  boostBtn.addEventListener('lostpointercapture', releaseBoost);
-  seedControls.append(previousSeed, seedLabel, seedValue, nextSeed, boostBtn);
+  seedControls.append(previousSeed, seedLabel, seedValue, nextSeed);
   document.body.appendChild(seedControls);
 
   const timingBoard = document.createElement('section');
@@ -996,14 +975,6 @@ export default async (state: typeof defaultState) => {
 
       if (state.playing) {
         const now = performance.now();
-        if (boostHeld) {
-          const source = followedCar();
-          if (source && source.laps < 2) {
-            for (let i = 0; i < 100; i++) {
-              spawnBoostClone(source);
-            }
-          }
-        }
         // a checkpoint pass is a save point: staged saves flush only then
         let savePoint = false;
         for (let i = 0; i < state.cars.length; i++) {
@@ -1099,8 +1070,8 @@ export default async (state: typeof defaultState) => {
               car === state.human
                 ? 'human'
                 : car.brain instanceof MixedNetwork
-                  ? 'mixed'
-                  : String(car.brainLayers);
+                ? 'mixed'
+                : String(car.brainLayers);
             completedBrainIndices.add(brainIndex);
             const previousFinish = completedFinishes.get(brainIndex);
             if (
@@ -1335,8 +1306,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged && !car.finished)
@@ -1356,7 +1327,6 @@ export default async (state: typeof defaultState) => {
     buildPools();
     boostClones.clear();
     boostIndex = config.CARS_PER_GROUP;
-    boostHeld = false;
     state.cars = groups.flatMap((g) => g.pool);
 
     // the human car is always in the race, the keys are always its brain
