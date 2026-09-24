@@ -4,6 +4,7 @@ import type { ModelsByLayerCount } from './utils';
 
 /** storage namespace, mixed brains stay apart from the regular ones */
 export const MIXED_KIND = 'mixed';
+const MIN_MUT_FACTOR = 0.1;
 
 /** input -> hidden -> experts, picking a brain does not deserve more depth */
 export const MIXED_LEVELS = 2;
@@ -11,8 +12,6 @@ export const MIXED_LEVELS = 2;
 export interface MixedOptions {
   /** nodes of the single hidden layer of the selector */
   hiddenNodes?: number;
-  /** multiplier applied on the mutation factor, every expert is good at something */
-  mutationBoost?: number;
   /** odds [0-1] of rerolling every weight leading to one expert */
   resetChance?: number;
 }
@@ -30,7 +29,6 @@ export class MixedNetwork extends NeuralNetwork {
   public kind = MIXED_KIND;
   /** stable slot of each expert, stored to detect a library change between runs */
   public expertIds: string[] = [];
-  public mutationBoost = 5;
   public resetChance = 0.15;
   /** expert currently driving */
   public selectedIndex = 0;
@@ -80,7 +78,6 @@ export class MixedNetwork extends NeuralNetwork {
     this.#outputNb = outputNb;
     this.expertIds = expertSlotIds(this.#experts);
     this.selectionCounts = this.#experts.map(() => 0);
-    this.mutationBoost = options.mutationBoost ?? this.mutationBoost;
     this.resetChance = options.resetChance ?? this.resetChance;
   }
 
@@ -146,7 +143,10 @@ export class MixedNetwork extends NeuralNetwork {
   mutate(network: ModelsByLayerCount[number]) {
     this.#assertCompatible(network);
     // selectors need bigger jumps than a driving brain, no expert is a dead end
-    this.mutationFactor = Math.min(1, this.mutationFactor * this.mutationBoost);
+    this.mutationFactor = Math.min(
+      1,
+      Math.max(this.mutationFactor, MIN_MUT_FACTOR),
+    );
     super.mutate(network);
     this.#rerollExperts();
   }

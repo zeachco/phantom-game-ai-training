@@ -6,7 +6,7 @@ class Config {
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly this many cars, slots 0..9 */
-  public CARS_PER_GROUP = 100;
+  public CARS_PER_GROUP = 20;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
@@ -31,8 +31,6 @@ class Config {
   public MIXED_EXPERTS_PER_LAYER = 1;
   /** single hidden layer, it only has to route the inputs to the right brain */
   public MIXED_HIDDEN_NODES = 12;
-  /** mutations are boosted, every expert is good at something worth trying */
-  public MIXED_MUTATION_BOOST = 3;
   /** odds of rerolling every weight leading to one expert, scaled by the factor */
   public MIXED_RESET_CHANCE = 0.15;
   public MIXED_MAX_MUTATION_LVL = 0.3;

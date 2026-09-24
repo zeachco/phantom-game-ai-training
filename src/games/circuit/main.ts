@@ -509,10 +509,6 @@ export default async (state: typeof defaultState) => {
   const SEED_CHANGE_DELAY = 10_000;
   const groups: Group[] = [];
   const pendingSaves = new Set<Group>();
-  /** one-shot boost clones are intentionally outside group pools: they never
-   *  participate in group respawns and disappear permanently on a crash */
-  const boostClones = new Set<Car>();
-  let boostIndex = config.CARS_PER_GROUP;
 
   /** the ladder's top: shrinks with session progress (laps completed) */
   function maxMutation() {
@@ -542,7 +538,6 @@ export default async (state: typeof defaultState) => {
         ? (inputCount, outputCount) =>
             new MixedNetwork(inputCount, outputCount, experts, {
               hiddenNodes: config.MIXED_HIDDEN_NODES,
-              mutationBoost: config.MIXED_MUTATION_BOOST,
               resetChance: config.MIXED_RESET_CHANCE,
             })
         : undefined,
@@ -950,7 +945,7 @@ export default async (state: typeof defaultState) => {
         'rgba(255, 255, 255, 0.82)';
       row.textContent = identity
         ? `${index + 1}. ${brainIdentityLabel(identity)}  ${
-            finish?.score == null ? '—' : formatTimingScore(finish.score)
+            finish?.score === null ? '—' : formatTimingScore(finish.score)
           } score  ${finish ? formatTimingFrames(finish.totalFrames) : '—'}`
         : `${index + 1}. —`;
     });
@@ -1013,18 +1008,6 @@ export default async (state: typeof defaultState) => {
             now - car.deathTime > config.DEAD_LIFETIME
           )
             state.cars.splice(i, 1);
-        }
-
-        // Boost clones are one-shot trials. A losing clone never respawns;
-        // promotion still happens through the normal score path if it beats
-        // the source/champion before dying.
-        for (const clone of boostClones) {
-          if (clone.damaged && now - clone.deathTime > config.DEAD_LIFETIME) {
-            boostClones.delete(clone);
-            const index = state.cars.indexOf(clone);
-            if (index >= 0) state.cars.splice(index, 1);
-            state.population--;
-          }
         }
 
         // A group keeps its fading corpses until every same-group car is dead,
@@ -1325,8 +1308,6 @@ export default async (state: typeof defaultState) => {
     state.obstacles = circuit.obstacles;
 
     buildPools();
-    boostClones.clear();
-    boostIndex = config.CARS_PER_GROUP;
     state.cars = groups.flatMap((g) => g.pool);
 
     // the human car is always in the race, the keys are always its brain

@@ -132,7 +132,7 @@ export class Car {
     this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
     this.lapStartedAt = performance.now();
 
-    this.useAI = controlType == ControlType.AI;
+    this.useAI = controlType === ControlType.AI;
 
     this.controls = new Controls(controlType);
 
@@ -174,7 +174,7 @@ export class Car {
     ]);
 
     const copy = (value: any, seen = new WeakMap<object, any>()): any => {
-      if (value == null || typeof value !== 'object') return value;
+      if (value === null || typeof value !== 'object') return value;
       if (seen.has(value)) return seen.get(value);
 
       if (Array.isArray(value)) {
@@ -248,7 +248,7 @@ export class Car {
         const inputs = this.brainInputs;
         inputs.length = 0;
         for (const reading of this.sensor.readings) {
-          inputs.push(reading == null ? 0 : 1 - reading.offset);
+          inputs.push(reading === null ? 0 : 1 - reading.offset);
         }
         inputs.push(Math.min(1, Math.hypot(this.vx, this.vy) / this.maxSpeed));
         inputs.push(this.#velocityDelta());
