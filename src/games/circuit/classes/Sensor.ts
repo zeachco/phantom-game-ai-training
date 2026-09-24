@@ -128,10 +128,11 @@ export class Sensor {
     }
   }
 
-  /** the sensor coverage area, using the current effective ray endpoints */
+  /** the sensor coverage area, using the current eff fective ray endpoints */
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.beginPath();
+    ctx.setLineDash([]);
     const origin = this.rays[0][0];
     ctx.moveTo(origin.x, origin.y);
     for (let i = 0; i < this.rays.length; i++) {
