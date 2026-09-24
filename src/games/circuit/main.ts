@@ -23,7 +23,6 @@ import {
   drawScores,
   type Group,
   type GroupScores,
-  mixedColor,
 } from './utilities';
 
 /** scores live under their own key per group, still inside the game prefix */
@@ -222,15 +221,7 @@ export default async (state: typeof defaultState) => {
 
   const resetBrainSaves = (value: number | 'mixed') => {
     if (value === 'mixed') {
-      if (
-        !confirm(
-          `Reset the saved weights of ${brainId(
-            MIXED_LEVELS,
-            undefined,
-            true,
-          )}?`,
-        )
-      )
+      if (!confirm(`Reset the saved weights of ${brainId(0, undefined)}?`))
         return;
       io.discardModel(MIXED_LEVELS, MIXED_KIND);
     } else if (value === 0) {
@@ -302,7 +293,7 @@ export default async (state: typeof defaultState) => {
       [brainId(8), 8],
       [brainId(9), 9],
       ['all', 0],
-      [brainId(MIXED_LEVELS, undefined, true), 'mixed'],
+      [brainId(0, undefined), 'mixed'],
     ] as [string, number | 'mixed'][]
   ).forEach(([label, value]) => {
     const btn = document.createElement('button');
@@ -529,7 +520,7 @@ export default async (state: typeof defaultState) => {
       spawn.angle,
       ControlType.AI,
       config.CAR_MAX_SPEED,
-      brainId(group.layer, slot, isMixed),
+      brainId(group.layer, slot),
       isMixed
         ? config.MIXED_COLOR
         : getColorScale(group.layer / config.MAX_NETWORK_LAYERS),
@@ -595,7 +586,7 @@ export default async (state: typeof defaultState) => {
       if (hydrated.length >= config.MIXED_MIN_EXPERTS) {
         const mixedGroup: Group = {
           key: 'mixed',
-          layer: MIXED_LEVELS,
+          layer: 0,
           isMixed: true,
           pool: [],
           best: state.sortedMixed[MIXED_LEVELS]?.[0]
@@ -893,7 +884,7 @@ export default async (state: typeof defaultState) => {
   }
 
   function brainIdentityLabel(identity: string) {
-    if (identity === 'mixed') return brainId(MIXED_LEVELS, undefined, true);
+    if (identity === 'mixed') return brainId(0, undefined);
     if (identity === 'human') return 'human';
     return brainId(Number(identity));
   }
@@ -976,10 +967,6 @@ export default async (state: typeof defaultState) => {
           const car = state.cars[i];
           const alive = !car.damaged;
           car.update(state.obstacles, circuit);
-          const brain = car.brain;
-          if (brain instanceof MixedNetwork) {
-            car.setColor(mixedColor(brain));
-          }
           if (alive && car.damaged) onDeath(car);
           if (car.passedCheckpoint) {
             car.passedCheckpoint = false;

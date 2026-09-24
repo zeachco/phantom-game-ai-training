@@ -62,16 +62,9 @@ export const defaultState = {
   groups: [] as Group[],
 };
 
-export const mixedColor = (brain: MixedNetwork) =>
-  mixedNetworkColor(brain, config.MAX_NETWORK_LAYERS, config.MIXED_COLOR);
-
-export function brainId(
-  layer: number,
-  mutationIndex?: number,
-  isMixed = false,
-) {
-  const id = isMixed ? 'Z' : String.fromCharCode(64 + layer);
-  return typeof mutationIndex !== 'number' ? id : `${id}${mutationIndex}`;
+export function brainId(layer: number, mutationIndex?: number) {
+  const id = layer; //isMixed ? 'Z' : String.fromCharCode(64 + layer);
+  return typeof mutationIndex !== 'number' ? id : `${id}:${mutationIndex}`;
 }
 
 const FH = 12;
@@ -153,7 +146,7 @@ export function drawScores(
         : layerColor(ref.layer, config.MAX_NETWORK_LAYERS);
 
       const emoji = '👻';
-      const name = brainId(ref.layer, undefined, ref.isMixed);
+      const name = brainId(ref.layer, undefined);
       ctx.fillText(
         `${emoji} ${name} ${Math.round(ref.ghostScore)}`,
         TL,
