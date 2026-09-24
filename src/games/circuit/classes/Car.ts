@@ -346,10 +346,8 @@ export class Car {
       -1,
       Math.min(
         1,
-        Math.atan2(
-          hx * this.vy - hy * this.vx,
-          hx * this.vx + hy * this.vy,
-        ) / Math.PI,
+        Math.atan2(hx * this.vy - hy * this.vx, hx * this.vx + hy * this.vy) /
+          Math.PI,
       ),
     );
   }
@@ -431,13 +429,19 @@ export class Car {
     const steer = this.controls.left - this.controls.right;
     const target =
       steer *
-      lerp(config.CAR_YAW_SHARP, config.CAR_YAW_LAZY, Math.min(1, v / this.maxSpeed));
+      lerp(
+        config.CAR_YAW_SHARP,
+        config.CAR_YAW_LAZY,
+        Math.min(1, v / this.maxSpeed),
+      );
     this.va += (target - this.va) * config.CAR_YAW_RESPONSE;
     this.angle += this.va;
 
     // 2. decompose in new heading frame
-    const hx = -Math.sin(this.angle), hy = -Math.cos(this.angle);
-    const px = Math.cos(this.angle), py = -Math.sin(this.angle);
+    const hx = -Math.sin(this.angle),
+      hy = -Math.cos(this.angle);
+    const px = Math.cos(this.angle),
+      py = -Math.sin(this.angle);
     let vf = this.vx * hx + this.vy * hy;
     let vl = this.vx * px + this.vy * py;
 
@@ -452,7 +456,10 @@ export class Car {
 
     // 4. tire grip: lateral acceleration demands exceed grip limit, the lateral component persists
     const demand = v * Math.abs(this.va);
-    const over = Math.min(1, demand / (this.maxSpeed * config.CAR_GRIP_LIMIT_RATIO));
+    const over = Math.min(
+      1,
+      demand / (this.maxSpeed * config.CAR_GRIP_LIMIT_RATIO),
+    );
     const grip = lerp(config.CAR_GRIP, config.CAR_DRIFT_GRIP, over);
     vl *= 1 - grip;
 

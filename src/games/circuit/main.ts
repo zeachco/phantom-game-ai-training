@@ -405,6 +405,7 @@ export default async (state: typeof defaultState) => {
   lapsEl.textContent = `lap 0/${config.LAPS_PER_SEED}`;
   const finishCountdown = document.createElement('div');
   finishCountdown.className = 'finish-countdown';
+  finishCountdown.style.color = 'red';
   finishCountdown.hidden = true;
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
@@ -513,8 +514,6 @@ export default async (state: typeof defaultState) => {
   const boostClones = new Set<Car>();
   let boostIndex = config.CARS_PER_GROUP;
   let boostHeld = false;
-  let lastBoostAt = 0;
-  const BOOST_INTERVAL_MS = 45;
 
   /** the ladder's top: shrinks with session progress (laps completed) */
   function maxMutation() {
@@ -569,7 +568,8 @@ export default async (state: typeof defaultState) => {
   /** Branch the currently focused AI at its exact race position. Only the
    *  network changes, with the smallest representable mutation. */
   function spawnBoostClone(source: Car) {
-    if (!source.useAI || source.damaged || source.finished || !source.brain) return;
+    if (!source.useAI || source.damaged || source.finished || !source.brain)
+      return;
     const group = groupOf(source);
     if (!group) return;
 
@@ -598,7 +598,7 @@ export default async (state: typeof defaultState) => {
     // Match mutation slot 1 at the current training generation. This keeps
     // BOOST on the same mutation schedule as the normal population instead of
     // inventing a separate epsilon-scale mutation.
-    clone.brain.mutationFactor = maxMutation();
+    clone.brain.mutationFactor = maxMutation() / 100;
     clone.brain.mutate(source.brain);
     // mutate() copies weights/version, not the score: the branch starts with
     // the exact score accumulated by the source at the branching point.
@@ -899,7 +899,6 @@ export default async (state: typeof defaultState) => {
     event.preventDefault();
     boostBtn.setPointerCapture(event.pointerId);
     boostHeld = true;
-    lastBoostAt = 0;
   });
   const releaseBoost = () => {
     boostHeld = false;
@@ -1044,11 +1043,10 @@ export default async (state: typeof defaultState) => {
 
       if (state.playing) {
         const now = performance.now();
-        if (boostHeld && now - lastBoostAt >= BOOST_INTERVAL_MS) {
+        if (boostHeld) {
           const source = followedCar();
-          if (source) {
+          if (source && source.laps < 2) {
             spawnBoostClone(source);
-            lastBoostAt = now;
           }
         }
         // a checkpoint pass is a save point: staged saves flush only then
@@ -1095,10 +1093,7 @@ export default async (state: typeof defaultState) => {
         // promotion still happens through the normal score path if it beats
         // the source/champion before dying.
         for (const clone of boostClones) {
-          if (
-            clone.damaged &&
-            now - clone.deathTime > config.DEAD_LIFETIME
-          ) {
+          if (clone.damaged && now - clone.deathTime > config.DEAD_LIFETIME) {
             boostClones.delete(clone);
             const index = state.cars.indexOf(clone);
             if (index >= 0) state.cars.splice(index, 1);
