@@ -71,7 +71,7 @@ export function brainId(
   isMixed = false,
 ) {
   const id = isMixed ? 'Z' : String.fromCharCode(64 + layer);
-  return mutationIndex == null ? id : `${id}${mutationIndex}`;
+  return typeof mutationIndex !== 'number' ? id : `${id}${mutationIndex}`;
 }
 
 const FH = 12;
