@@ -13,6 +13,3 @@ When a group spawn, if it's the worse and there's another group that finished al
 Learning rate is 1.0/totalFrameForBestFinish, meaning that if the best score took 1000 frames to do, 0.001 is the factor for adjusting the hidden weights in back propagation at each frame the car is going through until crash or completion.
 when a brain group starts as the weakest, only one car is generated and mutation shows "learning from <best brain id>"
 
-### Scoreboard updates (todo)
-
-[tbd]
