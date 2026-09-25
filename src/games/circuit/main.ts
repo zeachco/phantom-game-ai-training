@@ -939,10 +939,6 @@ export default async (state: typeof defaultState) => {
 
   function formatTimingFrames(frames: number) {
     const rounded = Math.max(0, Math.round(frames));
-    if (rounded >= 1_000_000)
-      return `${(rounded / 1_000_000).toFixed(1).replace(/\.0$/, '')}m f.`;
-    if (rounded >= 1_000)
-      return `${(rounded / 1_000).toFixed(1).replace(/\.0$/, '')}k f.`;
     return `${rounded} f.`;
   }
 
