@@ -988,11 +988,7 @@ export default async (state: typeof defaultState) => {
       row.style.color =
         entry?.group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)';
       row.textContent = entry
-        ? `${index + 1}. ${brainId(
-            entry.group.layer,
-            undefined,
-            entry.group.isMixed,
-          )}  ${formatTimingFrames(entry.best)}`
+        ? `${index + 1}. ${brainId(entry.group.layer)}  ${formatTimingFrames(entry.best)}`
         : `${index + 1}. —`;
     });
 

@@ -405,7 +405,7 @@ export default async (state: typeof defaultState) => {
 
     console.debug(
       `🧭 Gen-${savedModel?.version ?? 0} Mutation ${
-        Math.round(mutationTarget * config.MIXED_MUTATION_BOOST * 10000) / 100
+        Math.round(mutationTarget * 10000) / 100
       }% | ${experts.length} experts: ${expertSlotIds(experts).join(', ')}`,
     );
 
@@ -424,7 +424,6 @@ export default async (state: typeof defaultState) => {
         (inputCount, outputCount) =>
           new MixedNetwork(inputCount, outputCount, experts, {
             hiddenNodes: config.MIXED_HIDDEN_NODES,
-            mutationBoost: config.MIXED_MUTATION_BOOST,
             resetChance: config.MIXED_RESET_CHANCE,
           }),
       );

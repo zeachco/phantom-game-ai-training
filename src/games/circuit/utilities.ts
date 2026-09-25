@@ -68,7 +68,7 @@ export const defaultState = {
 };
 
 export function brainId(layer: number, mutationIndex?: number) {
-  const id = layer; //isMixed ? 'Z' : String.fromCharCode(64 + layer);
+  const id = String(layer);
   return typeof mutationIndex !== 'number' ? id : `${id}:${mutationIndex}`;
 }
 
