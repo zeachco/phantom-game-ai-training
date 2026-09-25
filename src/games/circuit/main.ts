@@ -197,11 +197,20 @@ export default async (state: typeof defaultState) => {
   // driving the human car takes the camera; it gives it back on a crash or
   // a manual follow change
   let humanFollow = false;
+  /** the AI car the camera currently tracks and when it took it; a new
+   *  leader only takes over past FOLLOW_SWITCH_SCORE_GAP or once
+   *  FOLLOW_SWITCH_MIN_MS have elapsed, so a close duel stops flickering */
+  let followTarget: Car | undefined;
+  let followTargetSince = 0;
+  const FOLLOW_SWITCH_SCORE_GAP = 5;
+  const FOLLOW_SWITCH_MIN_MS = 5_000;
   let humanDriving = false;
 
   const setFollow = (value: number | 'mixed') => {
     follow = value;
     humanFollow = false;
+    // a manual change picks the category leader right away
+    followTarget = undefined;
     followKeys.querySelectorAll('button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.follow === String(value));
     });
@@ -1321,10 +1330,27 @@ export default async (state: typeof defaultState) => {
         : follow > 0
         ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
         : true);
-    return (
+    const leader =
       state.sortedCars.find(inCategory) ??
-      state.sortedCars.find((car) => !car.damaged && !car.finished)
-    );
+      state.sortedCars.find((car) => !car.damaged && !car.finished);
+    const now = performance.now();
+    const current = followTarget;
+    if (
+      current &&
+      current !== leader &&
+      leader &&
+      state.cars.includes(current) &&
+      inCategory(current) &&
+      leader.brain.score - current.brain.score <= FOLLOW_SWITCH_SCORE_GAP &&
+      now - followTargetSince < FOLLOW_SWITCH_MIN_MS
+    ) {
+      return current;
+    }
+    if (leader !== current) {
+      followTarget = leader;
+      followTargetSince = now;
+    }
+    return leader;
   }
 
   function initialize() {
@@ -1332,6 +1358,7 @@ export default async (state: typeof defaultState) => {
     state.playing = true;
     camSet = false;
     lastFollowed = undefined;
+    followTarget = undefined;
     state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
     state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
     state.circuit = circuit;
