@@ -512,7 +512,18 @@ export default async (state: typeof defaultState) => {
     );
   }
 
-  /** slot 0 clones the best untouched; higher slots use less mutation */
+  /** the ladder step of one slot: slot 0 clones the best untouched, higher
+   *  slots use less mutation. A finished group only refines a proven winner,
+   *  so its swarm sits below the bottom of the full ladder (as if every slot
+   *  were CARS_PER_GROUP) and is shrunk again by FINISHED_MUTATION_SCALE */
+  function slotMutation(group: Group, slot: number) {
+    if (slot === 0) return 0;
+    const divisor = group.mutationOnly
+      ? config.CARS_PER_GROUP / config.FINISHED_MUTATION_SCALE
+      : slot;
+    return Math.max(Number.MIN_VALUE, maxMutation() / divisor);
+  }
+
   function spawnCar(group: Group, slot: number): Car {
     const spawn = circuit.getSpawn();
     const isMixed = group.isMixed;
@@ -535,8 +546,7 @@ export default async (state: typeof defaultState) => {
     );
     if (group.best && car.brain) {
       car.brain.mutationIndex = slot;
-      car.brain.mutationFactor =
-        slot === 0 ? 0 : Math.max(Number.MIN_VALUE, maxMutation() / slot);
+      car.brain.mutationFactor = slotMutation(group, slot);
       try {
         car.brain.mutate(group.best.brain);
       } catch (err) {

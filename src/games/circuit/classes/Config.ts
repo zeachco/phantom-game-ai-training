@@ -19,6 +19,10 @@ class Config {
    *  mutation-only swarm of this many cars, on slots 1..FINISHED_CARS_PER_GROUP,
    *  so the untouched champion never re-enters that pool */
   public FINISHED_CARS_PER_GROUP = 5;
+  /** a finished group's cars mutate at the full ladder's bottom rung
+   *  (max / CARS_PER_GROUP) times this: the brain already wins, the swarm only
+   *  looks for a faster line */
+  public FINISHED_MUTATION_SCALE = 0.1;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
@@ -163,7 +167,7 @@ class Config {
    *  a glancing brush costs MIN, driving straight into it costs MAX. Leaving
    *  the road only kills, so the obstacle is always the costlier crash */
   public OBSTACLE_PENALTY_MIN = 1;
-  public OBSTACLE_PENALTY_MAX = 9;
+  public OBSTACLE_PENALTY_MAX = 5;
 
   public get CAR_PER_LEVELS() {
     return this.CAR_NB / this.MAX_NETWORK_LAYERS;
