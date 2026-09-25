@@ -74,7 +74,7 @@ function foldScores(scores: GroupScores, newSeed: number) {
     scores.seed,
   );
   scores.phantom = scores.seed;
-  scores.total = scores.total * 0.25 + scores.seed * 0.75;
+  scores.total = scores.total * 0.1 + scores.seed * 0.9;
   scores.current = newSeed;
   scores.seed = 0;
 }

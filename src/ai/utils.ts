@@ -181,3 +181,9 @@ export function fileUtilities(game = '') {
     return written;
   }
 }
+
+export function clamp(min: number, max: number, val: number) {
+  if (val < min) return min;
+  if (val > max) return max;
+  return val;
+}

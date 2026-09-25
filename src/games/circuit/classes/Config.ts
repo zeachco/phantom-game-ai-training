@@ -1,3 +1,11 @@
+import { CTRL_COLORS } from '../../../ai/utils';
+
+export function likelyLagsOnHeavyJs(): boolean {
+  const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
+  const memory = (navigator as any).deviceMemory ?? 8; // Chromium only, GiB, rounded to 0.25..8
+  return cores <= 4 || memory <= 4;
+}
+
 class Config {
   // population
   /** number of AI car slots: each slot holds one car at a time (alive or a
@@ -6,7 +14,7 @@ class Config {
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly this many cars, slots 0..9 */
-  public CARS_PER_GROUP = 50;
+  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 10 : 50;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
@@ -25,7 +33,7 @@ class Config {
   /** floor on the mutating mixed cars, the run needs a spread to arbitrate */
   public MIXED_MIN_CARS = 20;
   /** below that there is nothing to arbitrate, the run is skipped */
-  public MIXED_MIN_EXPERTS = 3;
+  public MIXED_MIN_EXPERTS = 2;
   /** how many saved brains per layer become selectable experts */
   public MIXED_EXPERTS_PER_LAYER = 1;
   /** single hidden layer, it only has to route the inputs to the right brain */
@@ -133,9 +141,7 @@ class Config {
   // around the loop, donuts in the open plane earn nothing
   public CHECKPOINTS = 32;
   /** base checkpoint reward, divided by frames taken since the last gate */
-  public CHECKPOINT_SCORE = 1000;
-  /** no checkpoint pass can award less than this floor */
-  public MIN_CHECKPOINT_SCORE = 10;
+  public CHECKPOINT_SCORE = 10;
   /** fixed debt for entering a checkpoint out of order */
   public WRONG_CHECKPOINT_PENALTY = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;

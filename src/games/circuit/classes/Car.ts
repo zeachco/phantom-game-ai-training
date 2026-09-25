@@ -1,5 +1,5 @@
 import { NeuralNetwork } from '../../../ai/Network';
-import { CTRL_COLORS } from '../../../ai/utils';
+import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import {
   type AABB,
@@ -257,17 +257,12 @@ export class Car {
       if (gate === this.nextCheckpoint) {
         this.brain.score += config.CHECKPOINT_SCORE;
         // spede bonus every 5 checkpoint
-        if (this.nextCheckpoint % 5 === 0) {
+        if (this.nextCheckpoint % 5 === 0 && this.nextCheckpoint !== 0) {
           this.brain.score += this.checkpointFramesRemaining / 1000;
         }
         // large speed bonus every laps
         if (this.nextCheckpoint === 0 && this.laps > 0) {
-          console.log(
-            `lap bonus ${this.framesSinceLapStart / 2000}`,
-            this.framesSinceLapStart,
-            this.framesSinceLastCheckpoint,
-          );
-          this.brain.score += this.framesSinceLapStart / 1000;
+          this.brain.score += this.framesSinceLapStart / 100;
         }
         this.framesSinceLastCheckpoint = 0;
         this.passedCheckpoint = true;
