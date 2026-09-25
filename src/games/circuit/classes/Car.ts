@@ -92,8 +92,8 @@ export class Car {
   public completedLapFrames = 0;
   /** simulation frames spent across all completed laps on this map */
   public totalRaceFrames = 0;
-  /** performance.now() when the current stall began, 0 while moving */
-  private stallSince = 0;
+  /** consecutive simulation frames spent under CAR_STALL_SPEED, 0 while moving */
+  private stallFrames = 0;
   private img: HTMLImageElement;
   private mask: HTMLCanvasElement;
   /** color the mask currently holds, it is only repainted when that moves */
@@ -135,6 +135,7 @@ export class Car {
     this.angle = angle;
     this.damaged = false;
     this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
+    this.stallFrames = 0;
     this.lapStartedAt = performance.now();
 
     this.useAI = controlType === ControlType.AI;
@@ -214,29 +215,28 @@ export class Car {
     }
   }
 
-  /** the gates in order carry the score; a gate touched out of order is a
-   *  debt charged once per entry */
-  /** a car under CAR_STALL_SPEED for CAR_STALL_TIMEOUT in a row has stalled */
   /** a car that misses its next gate for the frame budget dies, exactly like
    *  a collision */
   #checkCheckpointBudget() {
     return this.checkpointFramesRemaining <= 0;
   }
 
+  /** a car under CAR_STALL_SPEED for CAR_STALL_FRAMES consecutive simulation
+   *  frames has stalled: it dies and its brain pays STALL_PENALTY once. Any
+   *  frame at or above the speed threshold resets the streak. */
   #checkStall() {
-    const now = performance.now();
-    if (Math.hypot(this.vx, this.vy) < config.CAR_STALL_SPEED) {
-      if (this.stallSince === 0) {
-        this.stallSince = now;
-        return false;
-      }
-      if (now - this.stallSince > config.CAR_STALL_TIMEOUT) return true;
+    if (Math.hypot(this.vx, this.vy) >= config.CAR_STALL_SPEED) {
+      this.stallFrames = 0;
       return false;
     }
-    this.stallSince = 0;
-    return false;
+    this.stallFrames++;
+    if (this.stallFrames < config.CHECKPOINT_BUDGET_FRAMES) return false;
+    if (this.brain) this.brain.score -= config.STALL_PENALTY;
+    return true;
   }
 
+  /** the gates in order carry the score; a gate touched out of order is a
+   *  debt charged once per entry */
   #updateScore(circuit: Circuit) {
     if (this.finished) return;
     this.framesSinceLastCheckpoint++;

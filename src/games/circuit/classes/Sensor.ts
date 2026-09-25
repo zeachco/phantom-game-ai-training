@@ -28,17 +28,21 @@ export class Sensor {
 
     this.rays = [];
     this.readings = new Array(this.rayCount);
+    const halfAngle = config.SENSOR_ANGLE / 2;
     for (let i = 0; i < this.rayCount; i++) {
-      const t = this.rayCount === 1 ? 0.5 : i / (this.rayCount - 1);
-      const offset = lerp(config.SENSOR_ANGLE / 2, -config.SENSOR_ANGLE / 2, t);
+      // u runs -1 (left edge) .. 1 (right edge); the power warp keeps the
+      // edges in place and packs the rays in between toward the heading
+      const u = this.rayCount === 1 ? 0 : (2 * i) / (this.rayCount - 1) - 1;
+      const warped = Math.sign(u) * Math.abs(u) ** config.SENSOR_FORWARD_BIAS;
+      const offset = -warped * halfAngle;
       this.#cosOff.push(Math.cos(offset));
       this.#sinOff.push(Math.sin(offset));
-      // cosine bell: 1 straight ahead, 0 at the edges, smooth between
+      // cosine bell over the real angle: 1 straight ahead, 0 at the edges
       this.#lengths.push(
         lerp(
           config.SENSORS_EDGE_LENGTH,
           config.SENSORS_MAX_LENGTH,
-          Math.cos((t - 0.5) * Math.PI),
+          Math.cos((offset / halfAngle) * (Math.PI / 2)),
         ),
       );
       this.rays.push([

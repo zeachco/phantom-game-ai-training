@@ -32,9 +32,12 @@ class Config {
   /** corpses linger that long after the crash, fading to 0 opacity; a whole
    *  group respawns together once every member's corpse has expired */
   public DEAD_LIFETIME = 5000;
-  /** a car under this speed (u/f) is stalling; CAR_STALL_TIMEOUT of that in a row kills it */
+  /** a car under this speed (u/f) is stalling; CAR_STALL_FRAMES of that in
+   *  a row kills it */
   public CAR_STALL_SPEED = 1;
-  public CAR_STALL_TIMEOUT = 5000;
+  /** score lost when a car dies of a stall; steeper than the worst obstacle
+   *  hit so idling is never the cheaper way out */
+  public STALL_PENALTY = 9;
 
   // mixed: a brain that picks which trained brain drives
   public MIXED_ENABLED = true;
@@ -63,9 +66,13 @@ class Config {
 
   // env, the sensor fan is a front arc: longest straight ahead, tapering
   // to the edges, so reach is one honest function of where a ray points
-  public SENSORS = 17;
+  public SENSORS = 19;
   /** total fan spread centered on the heading, was a ~315 deg sweep */
   public SENSOR_ANGLE = (Math.PI / 180) * 120;
+  /** packs the rays toward the heading: 1 is even spacing, higher values
+   *  put more of the fan straight ahead where the car actually drives.
+   *  At 2 the middle third of the rays cover only ~5% of the arc */
+  public SENSOR_FORWARD_BIAS = 2;
   /** reach of the center ray, extended by 40% for earlier obstacle planning */
   public SENSORS_MAX_LENGTH = 336;
   /** reach of the edge rays, preserving the 60% edge-to-center profile */
@@ -154,7 +161,7 @@ class Config {
   public WRONG_CHECKPOINT_PENALTY = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;
   /** reference 60 FPS budget for reaching the next checkpoint (seven seconds) */
-  public CHECKPOINT_BUDGET_FRAMES = 420;
+  public CHECKPOINT_BUDGET_FRAMES = 220;
   /** full laps one car needs on a seed before the map advances */
   public LAPS_PER_SEED = 3;
 
