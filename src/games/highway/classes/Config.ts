@@ -1,4 +1,4 @@
-import type { ModelsByLayerCount } from '../../../ai/utils';
+import { CTRL_COLORS, type ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
   public CAR_NB = 200;
@@ -37,7 +37,8 @@ class Config {
   /** odds of rerolling every weight leading to one expert, scaled by the factor */
   public MIXED_RESET_CHANCE = 0.15;
   public MIXED_MAX_MUTATION_LVL = 0.3;
-  public MIXED_COLOR = '#ff69b4';
+  /** the mixed identity color, CTRL_COLORS[0]: mixed groups live on layer 0 */
+  public MIXED_COLOR = CTRL_COLORS[0];
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;

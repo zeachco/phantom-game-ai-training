@@ -8,7 +8,8 @@ import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import type { NeuralNetwork } from '../../ai/Network';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
-import { contrastText, getColorScale } from '../../utilities/colors';
+import { layerColor } from '../../utilities/ai/colors';
+import { contrastText } from '../../utilities/colors';
 import { createCanvas, resizeCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
@@ -207,7 +208,7 @@ export default async (state: typeof defaultState) => {
     // outline instead of repainting the panel continuously.
     const color =
       typeof value === 'number' && value > 0
-        ? getColorScale(value / config.MAX_NETWORK_LAYERS)
+        ? layerColor(value, config.MAX_NETWORK_LAYERS)
         : '#c4c4c4';
     networkCanvas.style.setProperty('--network-color', color);
   };
@@ -304,7 +305,7 @@ export default async (state: typeof defaultState) => {
     // gray because their effective color can change every frame.
     const color =
       typeof value === 'number' && value > 0
-        ? getColorScale(value / config.MAX_NETWORK_LAYERS)
+        ? layerColor(value, config.MAX_NETWORK_LAYERS)
         : '#c4c4c4';
     btn.style.setProperty('--btn-color', color);
     // black or white, whichever keeps the higher contrast on the car color
@@ -521,9 +522,7 @@ export default async (state: typeof defaultState) => {
       ControlType.AI,
       config.CAR_MAX_SPEED,
       brainId(group.layer, slot),
-      isMixed
-        ? config.MIXED_COLOR
-        : getColorScale(group.layer / config.MAX_NETWORK_LAYERS),
+      '', // the car derives its color from its brain layer
       group.layer,
       isMixed
         ? (inputCount, outputCount) =>

@@ -13,7 +13,7 @@ export function getRandomColor() {
 }
 
 export function getColorScale(
-  ratio,
+  ratio = 0,
   saturation = 1,
   lightness = 0.5,
   alpha = 1,

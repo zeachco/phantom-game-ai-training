@@ -1,5 +1,5 @@
+import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
 import { roundRect } from '../../utilities/canvas';
-import { blendColorScale, getColorScale } from '../../utilities/colors';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { MixedNetwork } from '../Mixed';
@@ -262,18 +262,12 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   }
 
   #layerColor(layer: number) {
-    return getColorScale(layer / this.config.MAX_NETWORK_LAYERS);
+    return layerColor(layer, this.config.MAX_NETWORK_LAYERS);
   }
 
   /** the accent a mixed car wears: its brains weighted by usage */
   #blendedColor(network: MixedNetwork) {
-    const shares = network.selectionShares;
-    return blendColorScale(
-      network.expertLayers.map((layer, i) => ({
-        ratio: layer / this.config.MAX_NETWORK_LAYERS,
-        weight: shares[i],
-      })),
-    );
+    return mixedNetworkColor(network, this.config.MAX_NETWORK_LAYERS, '#808080');
   }
 
   #createCursor(ctx: CanvasRenderingContext2D, width: number, fontHeight = FH) {

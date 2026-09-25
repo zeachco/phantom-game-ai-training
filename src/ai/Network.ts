@@ -5,6 +5,7 @@ import type { ModelsByLayerCount } from './utils';
 export const DEFAULT_KIND = 'neural';
 
 export class NeuralNetwork {
+  /** amount of generation passed */
   public version = 0;
   public levels: Level[];
   /** fatasy points given to train the model */

@@ -1,8 +1,8 @@
 import { MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
-import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
-import { blendColorScale, getColorScale } from '../../utilities/colors';
+import { layerColor } from '../../utilities/ai/colors';
+import { getColorScale } from '../../utilities/colors';
 import { Car } from './classes/Car';
 import type { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
@@ -142,7 +142,7 @@ export function drawScores(
       );
     } else {
       ctx.fillStyle = ref.isMixed
-        ? blendColorScale([], config.MIXED_COLOR)
+        ? config.MIXED_COLOR
         : layerColor(ref.layer, config.MAX_NETWORK_LAYERS);
 
       const emoji = '👻';

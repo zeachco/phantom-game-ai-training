@@ -8,7 +8,8 @@ import {
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
-import { contrastText, getColorScale } from '../../utilities/colors';
+import { layerColor } from '../../utilities/ai/colors';
+import { contrastText } from '../../utilities/colors';
 import { createCanvas, resizeCanvas } from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
@@ -228,7 +229,7 @@ export default async (state: typeof defaultState) => {
         ? config.MIXED_COLOR
         : value === 0
           ? undefined
-          : getColorScale(value / config.MAX_NETWORK_LAYERS);
+          : layerColor(value, config.MAX_NETWORK_LAYERS);
     if (color) {
       btn.style.setProperty('--btn-color', color);
       // black or white, whichever keeps the higher contrast on the car color
@@ -346,7 +347,7 @@ export default async (state: typeof defaultState) => {
           ControlType.AI,
           3,
           `${l} - 0 👶`,
-          getColorScale(l / config.MAX_NETWORK_LAYERS),
+          layerColor(l, config.MAX_NETWORK_LAYERS),
           l,
         );
         if (savedModel && car.brain) {
@@ -594,7 +595,7 @@ export default async (state: typeof defaultState) => {
         ControlType.KEYS,
         3,
         '🎥 Camera',
-        getColorScale(bestLayerNb / config.MAX_NETWORK_LAYERS),
+        layerColor(bestLayerNb, config.MAX_NETWORK_LAYERS),
         bestLayerNb,
       );
       console.log(`Death car is layer ${bestLayerNb}`);

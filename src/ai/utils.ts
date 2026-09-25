@@ -1,6 +1,20 @@
 import { isSameObject } from '../utilities/object';
 import { DEFAULT_KIND, type NeuralNetwork } from './Network';
 
+/** Utility for colors for controllers */
+export const CTRL_COLORS = [
+  '#ffffdd', // mixed
+  '#ff0000', // 1
+  '#8888ff', // 2
+  '#ffff00', // 3
+  '#00ff00', // 4
+  '#ff69ff', // 5
+  '#00ffff', // 6
+  '#ff8800', // 7
+  '#447722', // 8
+  '#aa22ff', // 9
+];
+
 /**
  * index is the layer amount
  * value is a list of sorted NeuralNetwork by score
