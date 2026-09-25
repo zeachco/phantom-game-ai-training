@@ -30,9 +30,9 @@ class Config {
   public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */
   public SPAWN_OFFSET = 150;
-  /** corpses linger that long after the crash, fading to 0 opacity; a whole
-   *  group respawns together once every member's corpse has expired */
-  public DEAD_LIFETIME = 5000;
+  /** corpses linger that long after the crash, fading from 0.5 to 0 opacity;
+   *  a whole group respawns together once every member's corpse has expired */
+  public DEAD_LIFETIME = 3000;
   /** a car under this speed (u/f) is stalling; CAR_STALL_FRAMES of that in
    *  a row kills it */
   public CAR_STALL_SPEED = 1;

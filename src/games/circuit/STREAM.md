@@ -25,7 +25,7 @@ panel shows its brain.
   checkpoint or the car dies like a collision (the followed car's remaining
   time shows in the "secs" badge of the bottom HUD).
 - There are no generations: a crash leaves the car as a corpse that fades out
-  over 5 s. A brain category waits until every car in its pool is dead and the
+  from 50% opacity to 0 over 3 s. A brain category waits until every car in its pool is dead and the
   corpses are gone, then respawns the whole pool together — slot 0 clones the
   group's best brain, the higher slots carry progressively bolder mutations.
   Once one of a group's cars crosses the finish line, that group is demoted: it
@@ -52,7 +52,7 @@ car names use a capital brain ID followed by the mutation index:
 
 ### Score legend
 
-- 💀 car has crashed (the corpse fades out over 5 s)
+- 💀 car has crashed (the corpse fades from 50% opacity to 0 over 3 s)
 - 🏆 car has crashed with a higher score
 - 💜 car is racing
 - 💚 car is leading its group on this track

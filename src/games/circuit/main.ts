@@ -340,7 +340,7 @@ export default async (state: typeof defaultState) => {
   legend.className = 'side-panel-legend';
   [
     'Score board',
-    '💀 crashed, fades out over 5s',
+    '💀 crashed, fades out over 3s from 50% opacity',
     '🏆 crashed with a higher score',
     '💜 car is racing',
     '💚 car is leading its group on this track',
@@ -1245,11 +1245,10 @@ export default async (state: typeof defaultState) => {
         const car = state.cars[i];
         if (car === state.human) continue;
         if (car.damaged) {
-          // fade from full opacity to 0 over DEAD_LIFETIME, ~0.8 at 1 s
-          carCtx.globalAlpha = Math.max(
-            0,
-            1 - (corpseNow - car.deathTime) / config.DEAD_LIFETIME,
-          );
+          // fade from 50% opacity to 0 over DEAD_LIFETIME
+          carCtx.globalAlpha =
+            0.5 *
+            Math.max(0, 1 - (corpseNow - car.deathTime) / config.DEAD_LIFETIME);
         } else {
           carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
         }
