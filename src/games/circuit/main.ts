@@ -50,9 +50,9 @@ function loadScores(group: Group, seed: number) {
     };
     return scores;
   }
-  // Older saves had no explicit previous-map ghost. Keep their global bar as
-  // the migration baseline rather than dropping the visible ghost to zero.
-  if (typeof scores.phantom !== 'number') scores.phantom = scores.total;
+  // Older saves had no explicit previous-map ghost. Start them with no
+  // ghost bias: the board is only about the current track.
+  if (typeof scores.phantom !== 'number') scores.phantom = 0;
   // a reload on a different seed folds what the previous page left pending
   if (scores.current !== seed) {
     foldScores(scores, seed);
@@ -65,8 +65,9 @@ function saveScores(group: Group) {
   localStorage.setItem(scoreKey(group), JSON.stringify(group.scores));
 }
 
-/** a new seed records the old map as a ghost and keeps 25% of the
- * old cross-map score, so recent maps still dominate the promotion bar */
+/** a new seed records the old map high as a record and restarts the bar at
+ *  zero. History lives in the weights the pools respawn from, never in a
+ *  cross-map score blend. */
 function foldScores(scores: GroupScores, newSeed: number) {
   const finished = String(scores.current);
   scores.history[finished] = Math.max(
@@ -74,7 +75,7 @@ function foldScores(scores: GroupScores, newSeed: number) {
     scores.seed,
   );
   scores.phantom = scores.seed;
-  scores.total = scores.total * 0.1 + scores.seed * 0.9;
+  scores.total = scores.seed;
   scores.current = newSeed;
   scores.seed = 0;
 }
@@ -333,8 +334,8 @@ export default async (state: typeof defaultState) => {
     '💀 crashed, fades out over 5s',
     '🏆 crashed with a higher score',
     '💜 car is racing',
-    '💚 car is beating its map ghost',
-    '👻 previous-map best score for each line',
+    '💚 car is leading its group on this track',
+    '👻 track record, frozen when its holder died',
     '🕹 human car, driven with the arrows or WASD',
     '🧭 Z',
     '🏁 next checkpoint glows',
@@ -348,7 +349,7 @@ export default async (state: typeof defaultState) => {
 
   const about = document.createElement('div');
   about.className = 'side-panel-about';
-  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; the promotion bar keeps 25% of its old score while the map score takes the other 75% so the AIs can train on a new scenario.`;
+  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; the car that sets a new high on the current track becomes its line's new champion, so the scoreboard never compares against previous tracks — training history lives in the weights.`;
 
   const footer = document.createElement('div');
   footer.className = 'side-panel-footer';
@@ -637,9 +638,9 @@ export default async (state: typeof defaultState) => {
 
     for (const group of groups) {
       group.scores = loadScores(group, seed);
-      // Keep the ghost fixed for this map. It combines the previous map high
-      // with a stronger saved champion when one exists.
-      group.ghostScore = Math.max(group.scores.phantom, group.best?.score || 0);
+      // No ghost bias from previous maps: the track starts with no ghost.
+      // The ghost is only saved later, when the record holder dies.
+      group.ghostScore = 0;
     }
 
     for (const group of groups) {
@@ -652,7 +653,7 @@ export default async (state: typeof defaultState) => {
     state.groups = groups;
   }
 
-  /** the moment a car beats the bar, its brain becomes the new best */
+  /** the moment a car sets a new high on this track, its brain becomes the new best */
   function promote(group: Group, car: Car) {
     // a snapshot: later changes to the promoting car cannot alter the best
     const brain = JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork;
@@ -744,6 +745,20 @@ export default async (state: typeof defaultState) => {
   function onDeath(car: Car) {
     state.living--;
     car.deathTime = performance.now();
+
+    // the ghost is only saved when the record holder dies: its frozen score
+    // becomes the chase target instead of doubling the live leader
+    if (car.useAI) {
+      const group = groupOf(car);
+      if (
+        group &&
+        group.scores.seed > 0 &&
+        car.brain.score >= group.scores.seed - Number.EPSILON
+      ) {
+        group.ghostScore = car.brain.score;
+        pendingSaves.add(group);
+      }
+    }
 
     // a crash is a save point: flush everything staged so far
     flushPendingSaves();
@@ -1000,7 +1015,9 @@ export default async (state: typeof defaultState) => {
         // then the entire group respawns together. Each group is checked alone.
         for (const group of groups) respawnGroup(group, now);
 
-        // the map high score is the max over the pool; the bar is the total
+        // the map high score is the max over the pool on this track only.
+        // Setting a new map high promotes immediately: the weights carry
+        // the training history, no cross-map bar gates the save.
         for (const car of state.cars) {
           if (car.damaged || car.finished || !car.useAI) continue;
           const group = groupOf(car);
@@ -1011,13 +1028,8 @@ export default async (state: typeof defaultState) => {
               brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
               score: car.brain.score,
             };
-            pendingSaves.add(group);
-          }
-          if (
-            car.brain.score > group.scores.total &&
-            (!group.best || car.brain.score > group.best.score)
-          )
             promote(group, car);
+          }
         }
 
         // A map advances only after three distinct brain structures (or the
@@ -1055,15 +1067,15 @@ export default async (state: typeof defaultState) => {
           }
         }
         if (completedBrainIndices.size >= 3 && !seedChangeAt) {
-          // Finishing is a save point. Only a finisher that beats its
-          // structure's saved champion is promoted and persisted.
+          // Finishing is a save point. A finisher holding its group's
+          // current-track high is promoted and persisted.
           for (const other of state.cars) {
             if (!other.useAI || other.laps < config.LAPS_PER_SEED) continue;
             const group = groupOf(other);
             if (
               group &&
-              other.brain.score > group.scores.total &&
-              (!group.best || other.brain.score > group.best.score)
+              group.scores.seed > 0 &&
+              other.brain.score >= group.scores.seed
             )
               promote(group, other);
           }

@@ -28,13 +28,15 @@ panel shows its brain.
   never holds more than CAR_NB (200) AI cars at once. The bottom HUD shows the
   three fastest brain groups by completed-lap timing, measured in simulation
   frames.
-- The moment a car beats its group's summarized total score, its brain is saved
+- The moment a car sets a new high on the current track, its brain is saved
   as the group's new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
   seed input field changes it on demand, and any car completing
   LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
   the finishing brain is saved first, like a crash. Each finished map's high
-  score folds into the total with a 25% old-score carry-over, so recent maps dominate.
+  is recorded in the group's history; the scoreboard and promotion never
+  compare against previous tracks or a blended cross-map total, training
+  history lives in the weights the pools respawn from.
 
 car names use a capital brain ID followed by the mutation index:
 
@@ -46,8 +48,8 @@ car names use a capital brain ID followed by the mutation index:
 - 💀 car has crashed (the corpse fades out over 5 s)
 - 🏆 car has crashed with a higher score
 - 💜 car is racing
-- 💚 car is beating its map ghost
-- 👻 previous-map best score for each line; ghost colors match the line
+- 💚 car is leading its group on this track
+- 👻 track record, frozen when its holder died; ghost colors match the line
 - 🧭 Z
 - 🏁 checkpoint, the followed car's next one glows
 - 🚧 gray obstacle (circle or wall)
