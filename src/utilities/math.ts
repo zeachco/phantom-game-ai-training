@@ -110,6 +110,38 @@ export function polysIntersect(poly1: Vector[], poly2: Vector[]) {
   return false;
 }
 
+/** closest point of a closed polygon's outline to a point, written into `out` */
+export function closestPointOnPolygon(
+  point: Vector,
+  poly: Vector[],
+  out: Vector = { x: 0, y: 0 },
+) {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const len2 = abx * abx + aby * aby;
+    const t =
+      len2 === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(1, ((point.x - a.x) * abx + (point.y - a.y) * aby) / len2),
+          );
+    const cx = a.x + abx * t;
+    const cy = a.y + aby * t;
+    const d2 = (cx - point.x) ** 2 + (cy - point.y) ** 2;
+    if (d2 < best) {
+      best = d2;
+      out.x = cx;
+      out.y = cy;
+    }
+  }
+  return out;
+}
+
 export function easeInCirc(x: number): number {
   return 1 - Math.sqrt(1 - x ** 2);
 }

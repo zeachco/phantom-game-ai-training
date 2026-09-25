@@ -13,6 +13,10 @@ panel shows its brain.
   resampled at even arc length.
 - No traffic: gray, white-outlined circles and angled walls sit on the road
   instead, and driving off the road kills, so the road is the only place to be.
+  Hitting an obstacle also kills, but it costs score on top: 1 to 9 points
+  depending on how head-on the movement vector meets the obstacle, so a
+  sideways brush is cheaper than driving straight into it, while going off
+  the road only costs the life.
 - Score comes from checkpoint boosts, with each reward equal to the greater of
   `10` and `1000 /` the frames taken since the previous checkpoint. Checkpoints are gates across
   the road, claimed in order around the loop, and a gate touched

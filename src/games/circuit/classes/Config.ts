@@ -159,6 +159,11 @@ class Config {
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge; edge-anchored blocks may extend half off the road */
   public OBSTACLE_PASS_GAP = 30;
+  /** score lost on an obstacle crash, scaled by how head-on the hit is:
+   *  a glancing brush costs MIN, driving straight into it costs MAX. Leaving
+   *  the road only kills, so the obstacle is always the costlier crash */
+  public OBSTACLE_PENALTY_MIN = 1;
+  public OBSTACLE_PENALTY_MAX = 9;
 
   public get CAR_PER_LEVELS() {
     return this.CAR_NB / this.MAX_NETWORK_LAYERS;

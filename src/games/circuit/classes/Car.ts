@@ -3,6 +3,7 @@ import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import {
   type AABB,
+  closestPointOnPolygon,
   lerp,
   polysIntersect,
   type Vector,
@@ -99,6 +100,8 @@ export class Car {
   private maskColor = '';
   private va = 0;
   private brainInputs: number[] = [];
+  /** scratch point for the obstacle hit, reused so no crash allocates */
+  private hitPoint: Vector = { x: 0, y: 0 };
   /** half diagonal and corner angle, both derived from the fixed size */
   private rad = Math.hypot(this.width, this.height) / 2;
   private alpha = Math.atan2(this.width, this.height);
@@ -336,10 +339,44 @@ export class Car {
         continue;
       }
       if (polysIntersect(this.polygon, obstacles[i].polygon)) {
+        if (this.brain) {
+          this.brain.score -= this.#obstaclePenalty(obstacles[i]);
+        }
         return true;
       }
     }
     return false;
+  }
+
+  /** score debt for an obstacle hit, between OBSTACLE_PENALTY_MIN and MAX:
+   *  the collision vector (car center to the nearest point of the obstacle)
+   *  is compared to the movement vector, a head-on hit costs the most and a
+   *  sideways brush the least. The crash kills either way. */
+  #obstaclePenalty(obstacle: Obstacle) {
+    const hit = closestPointOnPolygon(this, obstacle.polygon, this.hitPoint);
+    let nx = hit.x - this.x;
+    let ny = hit.y - this.y;
+    const nLen = Math.hypot(nx, ny);
+    let mx = this.vx;
+    let my = this.vy;
+    let mLen = Math.hypot(mx, my);
+    if (mLen < 1e-6) {
+      // no movement to compare against, fall back to the heading
+      mx = -Math.sin(this.angle);
+      my = -Math.cos(this.angle);
+      mLen = 1;
+    }
+    let directness = 0;
+    if (nLen > 1e-6) {
+      nx /= nLen;
+      ny /= nLen;
+      directness = clamp(0, 1, (mx * nx + my * ny) / mLen);
+    }
+    return lerp(
+      config.OBSTACLE_PENALTY_MIN,
+      config.OBSTACLE_PENALTY_MAX,
+      directness,
+    );
   }
 
   #createPolygon() {
