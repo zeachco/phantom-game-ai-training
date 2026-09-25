@@ -66,16 +66,20 @@ car names use a capital brain ID followed by the mutation index:
 
 A \"Human play\" checkbox in the panel spawns one brainless car driven with
 the arrows or WASD (up/W throttle, down/S brake-then-reverse, left/A and
-right/D steer). It is a watcher, not a participant in training: no network,
-no saves, no group — its score competes in the live list and it can be
-followed by the camera, but it never writes into the AI pipeline. Crashing
-respawns a fresh human car; unchecking removes it.
+right/D steer), or a DualShock controller (left stick steer, R2 throttle, L2
+brake-then-reverse). The controller uses the browser's standard Gamepad API
+mapping and its stick has a small deadzone. It is a watcher, not a participant
+in training: no network, no saves, no group — its score competes in the live
+list and it can be followed by the camera, but it never writes into the AI
+pipeline. Crashing respawns a fresh human car; unchecking removes it.
 
 ### Human play
 
 A "Human play" checkbox in the panel spawns one brainless car driven with
 the arrows or WASD (up/W throttle, down/S brake-then-reverse, left/A and
-right/D steer). It is a watcher, not a participant in training: no network,
-no saves, no group — its score competes in the live list and it can be
-followed by the camera, but it never writes into the AI pipeline. Crashing
-respawns a fresh human car; unchecking removes it.
+right/D steer), or a DualShock controller (left stick steer, R2 throttle, L2
+brake-then-reverse). The controller uses the browser's standard Gamepad API
+mapping and its stick has a small deadzone. It is a watcher, not a participant
+in training: no network, no saves, no group — its score competes in the live
+list and it can be followed by the camera, but it never writes into the AI
+pipeline. Crashing respawns a fresh human car; unchecking removes it.

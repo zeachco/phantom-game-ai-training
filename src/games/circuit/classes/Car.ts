@@ -186,6 +186,7 @@ export class Car {
 
   update(obstacles: Obstacle[], circuit: Circuit) {
     if (this.damaged) return;
+    this.controls.update();
     this.checkpointFramesRemaining--;
     this.#move();
     if (this.brain) this.#updateScore(circuit);

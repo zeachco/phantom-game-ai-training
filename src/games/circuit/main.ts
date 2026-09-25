@@ -116,7 +116,7 @@ export default async (state: typeof defaultState) => {
   /** the mixed brain's library, empty until the first saves exist */
   let experts: NeuralNetwork[] = [];
 
-  /** the human car: no brain, no group, no saves — the keys are the action */
+  /** the human car: no brain, no group, no saves — keyboard or DualShock is the action */
   function spawnHuman() {
     const spawn = circuit.getSpawn();
     const car = new Car(
@@ -345,7 +345,7 @@ export default async (state: typeof defaultState) => {
     '💜 car is racing',
     '💚 car is leading its group on this track',
     '👻 track record, frozen when its holder died',
-    '🕹 human car, driven with the arrows or WASD',
+    '🕹 human car, driven with arrows/WASD or a DualShock (left stick + L2/R2)',
     '🧭 Z',
     '🏁 next checkpoint glows',
     '🚧 gray obstacle (circle or wall)',
