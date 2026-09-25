@@ -162,7 +162,7 @@ class Config {
   public OBSTACLES = 12;
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge; edge-anchored blocks may extend half off the road */
-  public OBSTACLE_PASS_GAP = 30;
+  public OBSTACLE_PASS_GAP = 36;
   /** score lost on an obstacle crash, scaled by how head-on the hit is:
    *  a glancing brush costs MIN, driving straight into it costs MAX. Leaving
    *  the road only kills, so the obstacle is always the costlier crash */

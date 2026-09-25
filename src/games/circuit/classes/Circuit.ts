@@ -264,7 +264,7 @@ export class Circuit {
     const makeObstacle = (idx: number) => {
       const roadWidth = this.leftHalf[idx] + this.rightHalf[idx];
       // A single-lane section has no safe passing lane, so leave it empty.
-      if (roadWidth <= laneWidth + 1e-6) return null;
+      if (roadWidth <= laneWidth * 1.5) return null;
       const p = this.points[idx];
       const t = this.tangents[idx];
       const roadAngle = Math.atan2(-t.x, -t.y);
@@ -291,8 +291,8 @@ export class Circuit {
       const off = twoLaneRoad
         ? edgeOffset
         : minWithGap <= maxWithGap && rng() > 0.25
-          ? minWithGap + rng() * (maxWithGap - minWithGap)
-          : edgeOffset;
+        ? minWithGap + rng() * (maxWithGap - minWithGap)
+        : edgeOffset;
 
       return new Obstacle(
         p.x + this.normals[idx].x * off,
