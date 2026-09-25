@@ -589,6 +589,7 @@ export default async (state: typeof defaultState) => {
           layer: 0,
           isMixed: true,
           pool: [],
+          mutationOnly: false,
           best: state.sortedMixed[MIXED_LEVELS]?.[0]
             ? {
                 brain: state.sortedMixed[MIXED_LEVELS][0],
@@ -616,6 +617,7 @@ export default async (state: typeof defaultState) => {
         layer: l,
         isMixed: false,
         pool: [],
+        mutationOnly: false,
         best: state.sortedModels[l]?.[0]
           ? {
               brain: state.sortedModels[l][0],
@@ -699,6 +701,8 @@ export default async (state: typeof defaultState) => {
     const group: Group = {
       ...oldGroup,
       pool: [],
+      // an explicit reset rebuilds the whole ladder, the reduced swarm is over
+      mutationOnly: false,
       best: null,
       seedBest: null,
       lapTimes: {},
@@ -725,6 +729,20 @@ export default async (state: typeof defaultState) => {
     updateTimingBoard();
   }
 
+  /** the slots a group respawns into: its current ladder, or the small
+   *  mutation-only swarm once one of its cars crossed the line */
+  function spawnSlots(group: Group): number[] {
+    // A group that produced a finisher drops to slots 1..N. The reduced swarm
+    // persists until the group object is rebuilt (map change or explicit
+    // reset), so the untouched original never slips back through slot 0.
+    if (group.mutationOnly)
+      return Array.from(
+        { length: config.FINISHED_CARS_PER_GROUP },
+        (_v, slot) => slot + 1,
+      );
+    return group.pool.map((_car, slot) => slot);
+  }
+
   /** Respawn a whole brain group after every car in it has finished fading.
    *  Keeping this decision per group means one line never waits for another. */
   function respawnGroup(group: Group, now: number) {
@@ -735,9 +753,13 @@ export default async (state: typeof defaultState) => {
     )
       return;
 
+    // check the corpses before they are dropped: a finisher demotes its line
+    // to a mutation-only swarm of the next respawn, on this same map
+    if (group.pool.some((car) => car.finished)) group.mutationOnly = true;
+
     const corpses = new Set(group.pool);
     state.cars = state.cars.filter((car) => !corpses.has(car));
-    group.pool = group.pool.map((_corpse, slot) => spawnCar(group, slot));
+    group.pool = spawnSlots(group).map((slot) => spawnCar(group, slot));
     state.cars.push(...group.pool);
     state.living += group.pool.length;
   }

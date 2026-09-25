@@ -15,6 +15,10 @@ class Config {
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly this many cars, slots 0..9 */
   public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 10 : 50;
+  /** a group that has seen one of its cars cross the finish line respawns as a
+   *  mutation-only swarm of this many cars, on slots 1..FINISHED_CARS_PER_GROUP,
+   *  so the untouched champion never re-enters that pool */
+  public FINISHED_CARS_PER_GROUP = 5;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */

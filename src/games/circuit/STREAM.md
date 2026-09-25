@@ -24,10 +24,13 @@ panel shows its brain.
   over 5 s. A brain category waits until every car in its pool is dead and the
   corpses are gone, then respawns the whole pool together — slot 0 clones the
   group's best brain, the higher slots carry progressively bolder mutations.
-  Groups are independent, so one category never waits for another, and the map
-  never holds more than CAR_NB (200) AI cars at once. The bottom HUD shows the
-  three fastest brain groups by completed-lap timing, measured in simulation
-  frames.
+  Once one of a group's cars crosses the finish line, that group is demoted: it
+  respawns 5 cars on slots 1..5, every one of them a mutation, and the untouched
+  original is out of the pool for good (a map change or a manual reset rebuilds
+  the full ladder). Groups are independent, so one category never waits for
+  another, and the map never holds more than CAR_NB (200) AI cars at once. The
+  bottom HUD shows the three fastest brain groups by completed-lap timing,
+  measured in simulation frames.
 - The moment a car sets a new high on the current track, its brain is saved
   as the group's new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the

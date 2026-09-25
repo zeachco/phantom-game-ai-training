@@ -30,6 +30,9 @@ export interface Group {
   layer: number;
   isMixed: boolean;
   pool: Car[];
+  /** a finisher demotes the group to a small mutation-only swarm on slots 1..N;
+   *  it stays reduced until the group is rebuilt by a map change or a reset */
+  mutationOnly: boolean;
   /** snapshot of the champion brain + the score that promoted it */
   best: { brain: NeuralNetwork; score: number } | null;
   /** the brain that set the current map's high score, kept for progress */
