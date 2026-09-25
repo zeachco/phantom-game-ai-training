@@ -1,0 +1,1 @@
+import{C as o}from"./three.module.f10ad7af.js";class d{constructor(){this.clock=new o}play(s,e={}){const a=e.maxFps?1e3/e.maxFps:0;let c=performance.now();const r=t=>{var l;if(requestAnimationFrame(r),a>0&&((l=e.shouldCap)==null?void 0:l.call(e))&&t-c<a)return;c=t;const m=this.clock.getDelta(),n=this.clock.getElapsedTime();s(n,m)};r(performance.now())}}export{d as GameLoop};
