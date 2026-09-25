@@ -674,6 +674,20 @@ export default async (state: typeof defaultState) => {
     state.groups = groups;
   }
 
+  /** a score is only final once the car is dead or finished: the crash and
+   *  stall debts land in the same frame as the death, so judging a live car
+   *  would crown it before it pays. Called exactly once per car, when its
+   *  score can no longer move */
+  function settle(group: Group, car: Car) {
+    if (!car.useAI || car.brain.score <= group.scores.seed) return;
+    group.scores.seed = car.brain.score;
+    group.seedBest = {
+      brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
+      score: car.brain.score,
+    };
+    promote(group, car);
+  }
+
   /** the moment a car sets a new high on this track, its brain becomes the new best */
   function promote(group: Group, car: Car) {
     // a snapshot: later changes to the promoting car cannot alter the best
@@ -791,13 +805,16 @@ export default async (state: typeof defaultState) => {
     // becomes the chase target instead of doubling the live leader
     if (car.useAI) {
       const group = groupOf(car);
-      if (
-        group &&
-        group.scores.seed > 0 &&
-        car.brain.score >= group.scores.seed - Number.EPSILON
-      ) {
-        group.ghostScore = car.brain.score;
-        pendingSaves.add(group);
+      if (group) {
+        // the final score, penalties included, is what competes for the crown
+        settle(group, car);
+        if (
+          group.scores.seed > 0 &&
+          car.brain.score >= group.scores.seed - Number.EPSILON
+        ) {
+          group.ghostScore = car.brain.score;
+          pendingSaves.add(group);
+        }
       }
     }
 
@@ -1016,8 +1033,14 @@ export default async (state: typeof defaultState) => {
         for (let i = 0; i < state.cars.length; i++) {
           const car = state.cars[i];
           const alive = !car.damaged;
+          const racing = !car.finished;
           car.update(state.obstacles, circuit);
           if (alive && car.damaged) onDeath(car);
+          // a finisher's score freezes on its last gate: judge it now
+          if (racing && car.finished && !car.damaged) {
+            const group = groupOf(car);
+            if (group) settle(group, car);
+          }
           if (car.passedCheckpoint) {
             car.passedCheckpoint = false;
             savePoint = true;
@@ -1051,22 +1074,9 @@ export default async (state: typeof defaultState) => {
         // then the entire group respawns together. Each group is checked alone.
         for (const group of groups) respawnGroup(group, now);
 
-        // the map high score is the max over the pool on this track only.
-        // Setting a new map high promotes immediately: the weights carry
+        // the map high score is the max over final scores on this track
+        // only, judged in settle() at death and at finish: the weights carry
         // the training history, no cross-map bar gates the save.
-        for (const car of state.cars) {
-          if (car.damaged || car.finished || !car.useAI) continue;
-          const group = groupOf(car);
-          if (!group) continue;
-          if (car.brain.score > group.scores.seed) {
-            group.scores.seed = car.brain.score;
-            group.seedBest = {
-              brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
-              score: car.brain.score,
-            };
-            promote(group, car);
-          }
-        }
 
         // A map advances only after three distinct brain structures (or the
         // human) have completed the required race distance. This gives every
@@ -1103,18 +1113,8 @@ export default async (state: typeof defaultState) => {
           }
         }
         if (completedBrainIndices.size >= 3 && !seedChangeAt) {
-          // Finishing is a save point. A finisher holding its group's
-          // current-track high is promoted and persisted.
-          for (const other of state.cars) {
-            if (!other.useAI || other.laps < config.LAPS_PER_SEED) continue;
-            const group = groupOf(other);
-            if (
-              group &&
-              group.scores.seed > 0 &&
-              other.brain.score >= group.scores.seed
-            )
-              promote(group, other);
-          }
+          // Finishing is a save point: every finisher was already settled
+          // on its last gate, this persists the promotions it produced.
           flushPendingSaves();
           seedChangeAt = now + SEED_CHANGE_DELAY;
           finishCountdown.hidden = false;
