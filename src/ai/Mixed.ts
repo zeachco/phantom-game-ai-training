@@ -237,10 +237,10 @@ export function hydrateExperts(
   const experts: NeuralNetwork[] = [];
 
   saves.forEach((models) => {
-    if (!models || !models.length) return;
+    if (!models?.length) return;
     models.slice(0, perLayer).forEach((saved) => {
       // a mixed brain picking a mixed brain would only add indirection
-      if (!saved || !saved.levels?.length || saved.kind === MIXED_KIND) {
+      if (!saved?.levels?.length || saved.kind === MIXED_KIND) {
         return;
       }
       const expert = NeuralNetwork.hydrate(saved);

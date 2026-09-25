@@ -1,10 +1,4 @@
-import {
-  angleOffset,
-  getAngle,
-  lerp,
-  randInt,
-  vecLength,
-} from '../../../utilities/math';
+import { getAngle, randInt, vecLength } from '../../../utilities/math';
 import { FACTIONS, factionOffset, MAX_FACTIONS } from '../factions';
 import { NeuralNetwork } from '../neural-network/NeuralNetwork';
 
@@ -24,7 +18,7 @@ export class Cell {
 
   public faction: number = randInt(0, MAX_FACTIONS - 1);
 
-  public label = this.faction + '';
+  public label = `${this.faction}`;
   public x = 0;
   public y = 0;
   public vx = 0;

@@ -291,8 +291,8 @@ export class Circuit {
       const off = twoLaneRoad
         ? edgeOffset
         : minWithGap <= maxWithGap && rng() > 0.25
-        ? minWithGap + rng() * (maxWithGap - minWithGap)
-        : edgeOffset;
+          ? minWithGap + rng() * (maxWithGap - minWithGap)
+          : edgeOffset;
 
       return new Obstacle(
         p.x + this.normals[idx].x * off,

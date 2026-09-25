@@ -40,7 +40,7 @@ export class Sensor {
       const offset = lerp(
         config.SENSOR_ANGLE / 2,
         -config.SENSOR_ANGLE / 2,
-        this.rayCount == 1 ? 0.5 : i / (this.rayCount - 1),
+        this.rayCount === 1 ? 0.5 : i / (this.rayCount - 1),
       );
       this.#cosOff.push(Math.cos(offset));
       this.#sinOff.push(Math.sin(offset));
@@ -115,7 +115,7 @@ export class Sensor {
       }
     }
 
-    if (touches.length == 0) {
+    if (touches.length === 0) {
       return null;
     }
     let best = touches[0];

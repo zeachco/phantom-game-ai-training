@@ -1,4 +1,4 @@
-import { Clock, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { lerp } from '../../utilities/math';
 import { Mob } from './classes/Mob';
 import { NeuralInput } from './classes/NeuralInput';
@@ -15,7 +15,7 @@ export default () => {
     const path = new Path(
       pathConfig.segments.map(([x, y]) => new Segment(x, y)),
     );
-    path.segments.forEach((wp) => scene.add(wp.mesh));
+    for (const wp of path.segments) scene.add(wp.mesh);
     return path;
   });
 
@@ -42,7 +42,7 @@ export default () => {
   console.log({ EXP_MOBS_NB });
 
   paths.forEach((path) => {
-    for (var i = 0; i < EXP_MOBS_NB; i++) {
+    for (let i = 0; i < EXP_MOBS_NB; i++) {
       const mob = new Mob(path, onCheckpoint);
       scene.add(mob.mesh);
       mobs.push(mob);
@@ -56,9 +56,6 @@ export default () => {
       scene.add(nc.mesh);
     }
   });
-
-  const [player] = mobs;
-  const clock = new Clock();
 
   console.log(`Starting score at ${bestScore}`);
 
@@ -75,16 +72,15 @@ export default () => {
     // }
 
     // Apply matrix like this to rotate the camera.
-    const es = clock.getElapsedTime() * 0.1 * Math.PI;
     camera.position.set(-0, -25, 25);
 
     // Make camera look at the box.
     // camera.lookAt(player.mesh.position);
 
     renderer.render(scene, camera);
-    paths.forEach((path) => path.update());
-    mobs.forEach((mob) => mob.update());
-    neuralCtrls.forEach((viz) => viz.update());
+    for (const path of paths) path.update();
+    for (const mob of mobs) mob.update();
+    for (const viz of neuralCtrls) viz.update();
   }
   animate();
 

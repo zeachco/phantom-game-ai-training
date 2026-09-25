@@ -112,7 +112,10 @@ export class GamePad {
   private handleMouveMovement(ev: MouseEvent | WheelEvent) {
     if (ev instanceof WheelEvent) {
       this.set('MouseOZ', this.get('MouseZ'));
-      this.set('MouseZ', (ev as any).wheelDelta);
+      this.set(
+        'MouseZ',
+        (ev as WheelEvent & { wheelDelta?: number }).wheelDelta,
+      );
     } else {
       this.set('MouseOX', this.get('MouseX'));
       this.set('MouseOY', this.get('MouseY'));

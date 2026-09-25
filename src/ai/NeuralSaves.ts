@@ -4,7 +4,7 @@ export class NeuralSaves {
   public layers: NeuralNetwork[][];
   constructor(layers: NeuralNetwork[][] = []) {
     this.layers = layers.map((models) =>
-      models.map((m) => new NeuralNetwork(1, 1)),
+      models.map(() => new NeuralNetwork(1, 1)),
     );
   }
 
@@ -20,6 +20,6 @@ export class NeuralSaves {
   }
 
   public getModel(layer, index = 0): NeuralNetwork | undefined {
-    return this.layers[layer] && this.layers[layer][index];
+    return this.layers[layer]?.[index];
   }
 }

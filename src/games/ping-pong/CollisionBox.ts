@@ -36,7 +36,7 @@ export class CollisionBox {
     ctx.strokeRect(this.x - w / 2, this.y - h / 2, w, h);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(this.hp + '', this.x, this.y);
+    ctx.fillText(`${this.hp}`, this.x, this.y);
   }
 
   getCollitionNormal(ball: Ball, index) {

@@ -1,7 +1,9 @@
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-const apps = new Map<string, Function>([
+type GameModule = { default: (state: object) => unknown };
+
+const apps = new Map<string, () => Promise<unknown>>([
   ['highway', () => import(`./games/highway/main.js`)],
   ['circuit', () => import(`./games/circuit/main.js`)],
   ['ping-pong', () => import(`./games/ping-pong/index.js`)],
@@ -24,7 +26,7 @@ const app = apps.get(game);
 
 if (app) {
   const state = {};
-  app().then((mod) => mod.default(state));
+  app().then((mod) => (mod as GameModule).default(state));
 } else {
   console.log(apps);
 }

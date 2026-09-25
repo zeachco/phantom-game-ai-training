@@ -5,11 +5,13 @@ import { Player } from './Player';
 
 export default () => {
   const canvas = createCanvas();
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('no 2d context');
 
-  const GW = (canvas.width = 800);
-  const GH = (canvas.height = 600);
+  const GW = 800;
+  const GH = 600;
+  canvas.width = GW;
+  canvas.height = GH;
 
   const playerA = new Player();
   const playerB = new Player();
@@ -17,7 +19,7 @@ export default () => {
   const allBoxes: CollisionBox[] = [];
   const allBalls: Ball[] = [];
 
-  for (var i = 0; i < 10; i++) {
+  for (let i = 0; i < 10; i++) {
     const x = (Math.random() * GW) / 2 + GW / 4;
     const y = Math.random() * GH;
     const area = Math.random() * 150;
@@ -66,7 +68,7 @@ export default () => {
     }
 
     allBalls.forEach((ball, index) => {
-      allBoxes.forEach((box) => box.getCollitionNormal(ball, index));
+      for (const box of allBoxes) box.getCollitionNormal(ball, index);
       playerA.board.getCollitionNormal(ball, 'a');
       playerB.board.getCollitionNormal(ball, 'b');
       if (ball.y < 0 + ball.size / 2) ball.vy = Math.abs(ball.vy * ball.acc); // top

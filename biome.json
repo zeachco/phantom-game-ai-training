@@ -8,5 +8,8 @@
     "formatter": {
       "quoteStyle": "single"
     }
+  },
+  "files": {
+    "includes": ["**", "!**/presets/*.json"]
   }
 }

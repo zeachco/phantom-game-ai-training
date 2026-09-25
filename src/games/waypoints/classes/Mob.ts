@@ -1,5 +1,5 @@
 import { BoxGeometry, Mesh, MeshBasicMaterial } from 'three';
-import { rand, ratio } from '../../../utilities/math';
+import { ratio } from '../../../utilities/math';
 import type { NeuralInput } from './NeuralInput';
 import type { Path } from './Path';
 import type { Segment } from './Segment';

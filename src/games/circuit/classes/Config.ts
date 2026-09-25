@@ -2,7 +2,8 @@ import { CTRL_COLORS } from '../../../ai/utils';
 
 export function likelyLagsOnHeavyJs(): boolean {
   const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
-  const memory = (navigator as any).deviceMemory ?? 8; // Chromium only, GiB, rounded to 0.25..8
+  const memory =
+    (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8; // Chromium only, GiB, rounded to 0.25..8
   return cores <= 4 || memory <= 4;
 }
 

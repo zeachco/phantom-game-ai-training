@@ -1,4 +1,4 @@
-export default (state: any) => {
+export default (_state: unknown) => {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   document.body.appendChild(canvas);
@@ -45,8 +45,8 @@ export default (state: any) => {
 
     ctx.clearRect(0, 0, GW, GH);
 
-    for (var y = 0; y < gridY; y++) {
-      for (var x = 0; x < gridX; x++) {
+    for (let y = 0; y < gridY; y++) {
+      for (let x = 0; x < gridX; x++) {
         switch (matrix[y][x]) {
           case '0':
             if (gridY - y < invinsibleRows) break;
@@ -104,7 +104,7 @@ export default (state: any) => {
   function resetShip() {
     if (score > highScore) {
       highScore = score;
-      localStorage.setItem('highScore', highScore + '');
+      localStorage.setItem('highScore', `${highScore}`);
     }
     score = 0;
     invinsibleRows = TH;

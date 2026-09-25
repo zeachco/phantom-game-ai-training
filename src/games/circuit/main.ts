@@ -135,7 +135,7 @@ export default async (state: typeof defaultState) => {
   }
 
   const panel = document.createElement('aside');
-  panel.className = (panelOpen ? 'open ' : '') + 'side-panel';
+  panel.className = `${panelOpen ? 'open ' : ''}side-panel`;
   panel.style.width = `${PANEL_RATIO * 100}%`;
   panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
 
@@ -172,7 +172,7 @@ export default async (state: typeof defaultState) => {
       initialize();
     } catch (err) {
       if (err && err.message !== 'No file selected') {
-        alert((err && err.message) || 'Unable to load models');
+        alert(err?.message || 'Unable to load models');
       }
     }
   };
@@ -997,12 +997,7 @@ export default async (state: typeof defaultState) => {
     });
   }
   updateTimingBoard();
-
-  try {
-    initialize();
-  } catch (err) {
-    throw err;
-  }
+  initialize();
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();
 
@@ -1082,7 +1077,7 @@ export default async (state: typeof defaultState) => {
           const group = groupOf(car);
           if (completedLap && group && car.useAI && car.completedLapAt > 0) {
             const key = group.isMixed
-              ? 'mixed-' + group.pool.indexOf(car)
+              ? `mixed-${group.pool.indexOf(car)}`
               : car.label;
             group.lapTimes[key] = group.lapTimes[key] || [];
             group.lapTimes[key].push(car.completedLapFrames);
@@ -1092,8 +1087,8 @@ export default async (state: typeof defaultState) => {
               car === state.human
                 ? 'human'
                 : car.brain instanceof MixedNetwork
-                ? 'mixed'
-                : String(car.brainLayers);
+                  ? 'mixed'
+                  : String(car.brainLayers);
             completedBrainIndices.add(brainIndex);
             const previousFinish = completedFinishes.get(brainIndex);
             if (
@@ -1185,7 +1180,7 @@ export default async (state: typeof defaultState) => {
       // the controls mimic the followed car, hidden while it is dead
       steerOverlay.classList.toggle(
         'hidden',
-        !camTarget || (lastFollowed && lastFollowed.damaged),
+        !camTarget || lastFollowed?.damaged,
       );
       if (camTarget) {
         const c = camTarget.controls;
@@ -1328,8 +1323,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-        : true);
+          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+          : true);
     const leader =
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged && !car.finished);

@@ -32,7 +32,7 @@ export class Cameraman {
     });
   }
 
-  public update(es: number) {
+  public update(_es: number) {
     if (
       this.canvas.width !== this.canvas.clientWidth ||
       this.canvas.height !== this.canvas.clientHeight

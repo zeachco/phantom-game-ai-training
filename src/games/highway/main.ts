@@ -82,7 +82,7 @@ export default async (state: typeof defaultState) => {
       initialize();
     } catch (err) {
       if (err && err.message !== 'No file selected') {
-        alert((err && err.message) || 'Unable to load models');
+        alert(err?.message || 'Unable to load models');
       }
     }
   };
@@ -108,7 +108,7 @@ export default async (state: typeof defaultState) => {
       console.info(`Loaded pre-trained models: ${written.join(', ')}`);
       initialize();
     } catch (err) {
-      alert((err && err.message) || 'Unable to load pre-trained preset');
+      alert(err?.message || 'Unable to load pre-trained preset');
     } finally {
       presetBtn.disabled = false;
       presetBtn.textContent = 'Load pre-trained';
@@ -314,8 +314,7 @@ export default async (state: typeof defaultState) => {
       const configuredCars = config.CARS_PER_LAYERS[l];
       if (!configuredCars) continue;
 
-      const savedModel =
-        (state.sortedModels[l] && state.sortedModels[l][0]) ?? undefined;
+      const savedModel = state.sortedModels[l]?.[0] ?? undefined;
 
       const layerOriginScore = savedModel?.score || 0;
       const scoreAdvantage = layerOriginScore - worstScore;
@@ -450,12 +449,7 @@ export default async (state: typeof defaultState) => {
       cars.push(car);
     }
   }
-
-  try {
-    initialize();
-  } catch (err) {
-    throw err;
-  }
+  initialize();
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();
 
@@ -577,7 +571,7 @@ export default async (state: typeof defaultState) => {
           y,
           ControlType.DUMMY,
           speed,
-          name || index + '',
+          name || `${index}`,
         ),
     );
 

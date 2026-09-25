@@ -63,7 +63,7 @@ function weightBucket(weight: number) {
 function nodePositions(count: number, left: number, right: number) {
   const positions = new Array<number>(count);
   for (let i = 0; i < count; i++) {
-    positions[i] = lerp(left, right, count == 1 ? 0.5 : i / (count - 1));
+    positions[i] = lerp(left, right, count === 1 ? 0.5 : i / (count - 1));
   }
   return positions;
 }
@@ -142,8 +142,8 @@ function drawLinks(ctx: CanvasRenderingContext2D, layout: LevelLayout) {
       // an invisible link costs as much as a visible one, and they are the many
       if (!(Math.abs(weight) > MIN_LINK_WEIGHT)) continue;
       const bucket = weightBucket(weight);
-      const pairs = buckets[bucket] || (buckets[bucket] = []);
-      pairs.push(i, j);
+      buckets[bucket] ??= [];
+      buckets[bucket].push(i, j);
     }
   }
 
@@ -267,12 +267,16 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
   /** the accent a mixed car wears: its brains weighted by usage */
   #blendedColor(network: MixedNetwork) {
-    return mixedNetworkColor(network, this.config.MAX_NETWORK_LAYERS, '#808080');
+    return mixedNetworkColor(
+      network,
+      this.config.MAX_NETWORK_LAYERS,
+      '#808080',
+    );
   }
 
   #createCursor(ctx: CanvasRenderingContext2D, width: number, fontHeight = FH) {
     return function print(text: string, height = fontHeight) {
-      ctx.font = height + 'px Arial';
+      ctx.font = `${height}px Arial`;
       ctx.fillText(text, 0, 0, width);
       ctx.translate(0, height);
     };
@@ -407,7 +411,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.fillStyle = levelColor;
     ctx.textBaseline = 'hanging';
     ctx.textAlign = 'center';
-    lines.forEach((line) => print(line));
+    for (const line of lines) print(line);
     if (mixed) this.#drawSelection(ctx, mixed, contentWidth);
     ctx.restore();
   }
@@ -469,7 +473,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     for (let i = count - 1; i >= 0; i--) {
       const level = network.levels[i];
       const levelTop =
-        top + lerp(height - levelHeight, 0, count == 1 ? 0.5 : i / (count - 1));
+        top +
+        lerp(height - levelHeight, 0, count === 1 ? 0.5 : i / (count - 1));
       const nodes = Math.max(level.inputs.length, level.outputs.length);
 
       layouts.push({
@@ -482,7 +487,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
             : Math.min(RADIUS, width * 0.4),
         inputX: nodePositions(level.inputs.length, left, right),
         outputX: nodePositions(level.outputs.length, left, right),
-        labels: i == count - 1 ? outputLabels : NO_LABELS,
+        labels: i === count - 1 ? outputLabels : NO_LABELS,
       });
     }
 
@@ -541,7 +546,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       );
 
       if (!labels.length) continue;
-      ctx.font = Math.max(9, Math.round(radius)) + 'px Arial';
+      ctx.font = `${Math.max(9, Math.round(radius))}px Arial`;
       ctx.fillStyle = 'white';
       for (let n = 0; n < outputX.length; n++) {
         if (labels[n]) {

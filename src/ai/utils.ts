@@ -25,6 +25,7 @@ export type ModelsByLayerCount = (
       diff?: number;
       date?: string;
     })
+  // biome-ignore lint/suspicious/noExplicitAny: saved models are loosely typed (mixed brains add expertIds/selectionCounts, some callers pass a single item), tightening this needs a wider refactor
   | any
 )[];
 

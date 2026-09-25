@@ -1,5 +1,4 @@
 import type { NeuralNetwork } from '../games/cells/neural-network/NeuralNetwork';
-import { lerp } from '../utilities/math';
 import { CtxTxt } from '../utilities/text';
 
 export class NeuralVisualizer {
@@ -21,7 +20,7 @@ export class NeuralVisualizer {
   }
 
   public renderNetwork() {
-    const { text, ctx, gw, gh, network, entity } = this;
+    const { text, network, entity } = this;
     if (!network) return;
     const { inputs, outputs, hiddenLayers, layers } = network;
     text.reset();
@@ -71,9 +70,5 @@ export class NeuralVisualizer {
   }
   private get gh() {
     return this.ctx.canvas.height;
-  }
-
-  private getHue(value) {
-    return Math.round(lerp(270, 180, (value + 1) / 2));
   }
 }

@@ -1,5 +1,4 @@
-import { Clock, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
-import { rand } from '../../../utilities/math';
+import { Mesh, MeshBasicMaterial, RingGeometry } from 'three';
 
 const geometry = new RingGeometry();
 const material = new MeshBasicMaterial({
@@ -9,7 +8,6 @@ const material = new MeshBasicMaterial({
 
 export class Segment {
   public mesh: Mesh;
-  private clock = new Clock();
 
   constructor(
     public x: number,

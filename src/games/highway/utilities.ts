@@ -34,7 +34,7 @@ function previousSave(
 ) {
   const saves = isMixed(model) ? state.sortedMixed : state.sortedModels;
   const models = saves[model.levels.length];
-  return (models && models[0]) || undefined;
+  return models?.[0] || undefined;
 }
 
 export const mixedColor = (brain: MixedNetwork) =>
@@ -51,7 +51,7 @@ const modelColor = (model: ModelsByLayerCount[number]) =>
 
 const FH = 12;
 const TL = 0;
-let gradient;
+let gradient: CanvasGradient | undefined;
 
 function drawGradient(ctx: CanvasRenderingContext2D, x, y, w, h) {
   if (!gradient) {
@@ -87,7 +87,7 @@ export function drawScores(
   displayedScoreCars.forEach((ref, index) => {
     if (ref instanceof Car) {
       const previous = previousSave(state, ref.brain);
-      const previousScore = (previous && previous.score) || 0;
+      const previousScore = previous?.score || 0;
       const diff = ref.brain.score - previousScore;
       let emoji = '';
       let add = '';

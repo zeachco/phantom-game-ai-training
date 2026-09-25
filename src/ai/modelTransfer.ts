@@ -37,7 +37,7 @@ export function pickModelArchive(): Promise<ModelArchive> {
     input.type = 'file';
     input.accept = '.json,application/json';
     input.onchange = () => {
-      const file = input.files && input.files[0];
+      const file = input.files?.[0];
       if (!file) return reject(new Error('No file selected'));
       file.text().then((text) => {
         try {

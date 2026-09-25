@@ -68,7 +68,7 @@ export class Car {
     this.damaged = false;
     this.bornAt = performance.now();
 
-    this.useAI = controlType == ControlType.AI;
+    this.useAI = controlType === ControlType.AI;
 
     this.controls = new Controls(controlType);
 
@@ -102,7 +102,8 @@ export class Car {
     if (!this.img.complete || this.maskColor === this.color) return;
     this.maskColor = this.color;
 
-    const maskCtx = this.mask.getContext('2d')!;
+    const maskCtx = this.mask.getContext('2d');
+    if (!maskCtx) return;
     maskCtx.globalCompositeOperation = 'source-over';
     maskCtx.clearRect(0, 0, this.width, this.height);
     maskCtx.fillStyle = this.color;

@@ -4,6 +4,6 @@ export class Path {
   constructor(public segments: Segment[] = []) {}
 
   public update() {
-    this.segments.forEach((s) => s.update());
+    for (const s of this.segments) s.update();
   }
 }

@@ -1,4 +1,4 @@
-import { MixOperation, Scene } from 'three';
+import { Scene } from 'three';
 import { randInt } from '../../utilities/math';
 import { Mob } from './classes/Mob';
 
@@ -41,7 +41,7 @@ export default async () => {
     }
   });
 
-  function checkSpawner(es = 0, dt = 0) {
+  function checkSpawner(_es = 0, _dt = 0) {
     for (let n = 0; n < 10; n++) {
       if (pad.once(`spawn${n}`) || !randInt(0, 100)) {
         // console.log(`spawning mob #${n}`)

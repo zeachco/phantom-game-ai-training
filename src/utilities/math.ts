@@ -27,7 +27,7 @@ export function getIntersection(A: Vector, B: Vector, C: Vector, D: Vector) {
   const uTop = (C.y - A.y) * (A.x - B.x) - (C.x - A.x) * (A.y - B.y);
   const bottom = (D.y - C.y) * (B.x - A.x) - (D.x - C.x) * (B.y - A.y);
 
-  if (bottom != 0) {
+  if (bottom !== 0) {
     const t = tTop / bottom;
     const u = uTop / bottom;
     if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {

@@ -74,7 +74,7 @@ export function brainId(layer: number, mutationIndex?: number) {
 
 const FH = 12;
 const TL = 0;
-let gradient;
+let gradient: CanvasGradient | undefined;
 
 function drawGradient(ctx: CanvasRenderingContext2D, x, y, w, h) {
   if (!gradient) {

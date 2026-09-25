@@ -51,9 +51,9 @@ class Config {
 
   public autoDistributeByScores(saves: ModelsByLayerCount[]) {
     if (!this.AUTO_DISTRIBUTE_LAYERS) return;
-    const getModel = (layer) => saves[layer] && saves[layer][0];
+    const getModel = (layer) => saves[layer]?.[0];
     const layerScore = (models: ModelsByLayerCount[number]) =>
-      (models && models[0] && models[0].score) || 0;
+      models?.[0]?.score || 0;
 
     let totalScore = 0;
     for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
@@ -69,7 +69,7 @@ class Config {
     let remainingScore = totalScore;
 
     sortedLayers.forEach((models) => {
-      if (!models || !models[0]) return;
+      if (!models?.[0]) return;
       const layer = models[0].levels.length;
       const give = layer ? Math.round(remainingScore * 0.55) : 0;
       remainingScore -= give;
