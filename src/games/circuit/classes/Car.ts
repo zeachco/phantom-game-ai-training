@@ -4,6 +4,7 @@ import { getRandomColor } from '../../../utilities/colors';
 import {
   type AABB,
   closestPointOnPolygon,
+  getIntersection,
   lerp,
   polysIntersect,
   type Vector,
@@ -108,6 +109,12 @@ export class Car {
   private hasPrevSensors = false;
   /** scratch point for the obstacle hit, reused so no crash allocates */
   private hitPoint: Vector = { x: 0, y: 0 };
+  /** position one frame ago, the movement segment for the gate crossing test */
+  private prevX = 0;
+  private prevY = 0;
+  /** scratch endpoints for the movement segment, reused so no frame allocates */
+  private gateA: Vector = { x: 0, y: 0 };
+  private gateB: Vector = { x: 0, y: 0 };
   /** half diagonal and corner angle, both derived from the fixed size */
   private rad = Math.hypot(this.width, this.height) / 2;
   private alpha = Math.atan2(this.width, this.height);
@@ -130,6 +137,10 @@ export class Car {
     this.color = CTRL_COLORS[this.brainLayers] || getRandomColor();
     this.x = x;
     this.y = y;
+    // the crossing test compares against the last position, the first frame
+    // moves nowhere so no gate can be crossed spuriously
+    this.prevX = x;
+    this.prevY = y;
 
     this.speed = 0;
     this.vx = 0;
@@ -195,6 +206,8 @@ export class Car {
     if (this.damaged) return;
     this.controls.update();
     this.checkpointFramesRemaining--;
+    this.prevX = this.x;
+    this.prevY = this.y;
     this.#move();
     if (this.brain) this.#updateScore(circuit);
 
@@ -263,12 +276,33 @@ export class Car {
     const n = checkpoints.length;
     const r2 = config.CHECKPOINT_CLAIM_RADIUS ** 2;
 
+    // the claim circle only covers the middle of a wide road: a car hugging
+    // an edge can cross the gate line without ever entering it, so crossing
+    // the gate segment (previous position to current) also counts
+    const from = this.gateA;
+    from.x = this.prevX;
+    from.y = this.prevY;
+    const to = this.gateB;
+    to.x = this.x;
+    to.y = this.y;
+    const mMinX = Math.min(this.prevX, this.x);
+    const mMaxX = Math.max(this.prevX, this.x);
+    const mMinY = Math.min(this.prevY, this.y);
+    const mMaxY = Math.max(this.prevY, this.y);
+
     let gate = -1;
     for (let i = 0; i < n; i++) {
       const c = checkpoints[i];
       const dx = c.x - this.x;
       const dy = c.y - this.y;
-      if (dx * dx + dy * dy < r2) {
+      if (
+        dx * dx + dy * dy < r2 ||
+        (mMinX <= c.maxX &&
+          mMaxX >= c.minX &&
+          mMinY <= c.maxY &&
+          mMaxY >= c.minY &&
+          getIntersection(from, to, c.a, c.b) !== null)
+      ) {
         gate = i;
         break;
       }
