@@ -490,10 +490,6 @@ export class CircuitRace {
       this.seedChangeAt = now + 10_000;
     }
     if (this.seedChangeAt && now >= this.seedChangeAt) this.#advanceSeed();
-
-    this.state.sortedCars = this.state.cars.sort(
-      (a, b) => b.brain.score - a.brain.score,
-    );
     if (savePoint) this.flushPendingSaves();
   }
 
@@ -502,5 +498,12 @@ export class CircuitRace {
       if (group.best) this.io.saveBestModels([group.best.brain], 1);
       saveScores(group);
     }
+  }
+
+  /** Reorders the live car list by score. Only the throttled HUD reads the
+   *  order, so the per-frame update never pays for the sort. */
+  public refreshLeaderboard() {
+    this.state.cars.sort((a, b) => b.brain.score - a.brain.score);
+    this.state.sortedCars = this.state.cars;
   }
 }

@@ -122,6 +122,7 @@ export default async (state: typeof defaultState) => {
   const FOLLOW_SWITCH_SCORE_GAP = 5;
   const FOLLOW_SWITCH_MIN_MS = 5_000;
   let humanDriving = false;
+  let lastCountdownTenths = -1;
 
   const setFollow = (value: number | 'mixed') => {
     follow = value;
@@ -474,12 +475,18 @@ export default async (state: typeof defaultState) => {
       // all HUD and other DOM writes share a 20 FPS budget.
       const domUpdateDue = shouldUpdateDom(now);
       if (domUpdateDue) {
+        race.refreshLeaderboard();
         timingBoard.update();
         updateFollowButtons();
         if (race.seedChangeAt) {
           const remaining = Math.max(0, race.seedChangeAt - now);
           finishCountdown.hidden = false;
-          finishCountdown.textContent = `next track in ${(remaining / 1000).toFixed(1)}s`;
+          // the label changes at most once per tenth of a second
+          const tenths = Math.floor(remaining / 100);
+          if (tenths !== lastCountdownTenths) {
+            lastCountdownTenths = tenths;
+            finishCountdown.textContent = `next track in ${(tenths / 10).toFixed(1)}s`;
+          }
         }
       }
 
@@ -591,9 +598,23 @@ export default async (state: typeof defaultState) => {
       }
       // the human car draws last, above every other car, no sensor fan
       const corpseNow = performance.now();
+      // off-screen cars cost a transform and two blits for nothing
+      const viewMargin = 50;
+      const viewMinX = camX - carCanvas.width / 2 - viewMargin;
+      const viewMaxX = camX + carCanvas.width / 2 + viewMargin;
+      const viewMinY = camY - carCanvas.height / 2 - viewMargin;
+      const viewMaxY = camY + carCanvas.height / 2 + viewMargin;
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         if (car === state.human) continue;
+        const box = car.aabb;
+        if (
+          box.maxX < viewMinX ||
+          box.minX > viewMaxX ||
+          box.maxY < viewMinY ||
+          box.minY > viewMaxY
+        )
+          continue;
         if (car.damaged) {
           // fade from 50% opacity to 0 over DEAD_LIFETIME
           carCtx.globalAlpha =
@@ -634,19 +655,19 @@ export default async (state: typeof defaultState) => {
 
   /** car buttons stay filled with their car color while the category
    *  races, and turn to an outline once its last car is dead */
+  const runningCategories = new Set<string>();
   function updateFollowButtons() {
+    // one pass fills every category at once instead of one scan per button
+    runningCategories.clear();
+    for (const car of state.cars) {
+      if (car.damaged) continue;
+      runningCategories.add(
+        car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers),
+      );
+    }
     followBtns.forEach((info, btn) => {
       const running =
-        info.key === '0'
-          ? state.living > 0
-          : state.cars.some(
-              (car) =>
-                !car.damaged &&
-                (info.key === 'mixed'
-                  ? car.brain instanceof MixedNetwork
-                  : car.brainLayers === Number(info.key) &&
-                    !(car.brain instanceof MixedNetwork)),
-            );
+        info.key === '0' ? state.living > 0 : runningCategories.has(info.key);
       if (running === info.running) return;
       info.running = running;
       btn.classList.toggle('running', running);
@@ -670,9 +691,21 @@ export default async (state: typeof defaultState) => {
         : follow > 0
           ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
           : true);
-    const leader =
-      state.sortedCars.find(inCategory) ??
-      state.sortedCars.find((car) => !car.damaged && !car.finished);
+    // the leaderboard sort runs on HUD ticks only, so the camera target
+    // resolves the leader with a single max-score scan
+    let leader: Car | undefined;
+    for (const car of state.cars) {
+      if (inCategory(car) && (!leader || car.brain.score > leader.brain.score))
+        leader = car;
+    }
+    if (!leader) {
+      for (const car of state.cars) {
+        if (!car.damaged && !car.finished) {
+          leader = car;
+          break;
+        }
+      }
+    }
     const now = performance.now();
     const current = followTarget;
     if (

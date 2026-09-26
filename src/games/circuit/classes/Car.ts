@@ -23,6 +23,9 @@ const GATE_COLORS = new Array(21).fill(0).map((_s, i) => {
   return `rgb(255, ${v}, ${v})`;
 });
 
+/** squared stall threshold, the per-frame stall check needs no sqrt */
+const STALL_SPEED_SQ = config.CAR_STALL_SPEED * config.CAR_STALL_SPEED;
+
 /** Inputs appended after the sensor rays: speed, velocity delta, gate delta. */
 const EXTRA_BRAIN_INPUTS = 3;
 
@@ -60,6 +63,8 @@ export class Car {
   ];
   /** bounding box of the polygon, refreshed with it */
   public aabb: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  /** the label never changes, so it is pre-rendered and blitted */
+  private labelCanvas: HTMLCanvasElement;
   public width = 30;
   public height = 50;
   /** index of the next checkpoint to claim, the gates go around in order */
@@ -178,6 +183,20 @@ export class Car {
     this.mask.height = this.height;
 
     this.img.onload = () => this.#paintMask();
+
+    this.labelCanvas = document.createElement('canvas');
+    this.labelCanvas.width = this.width;
+    // the label straddles the sprite bottom (height - 22 in local space),
+    // past the sprite box, so the canvas grows 20px below it
+    this.labelCanvas.height = this.height + 20;
+    const labelCtx = this.labelCanvas.getContext('2d');
+    if (labelCtx) {
+      labelCtx.font = 'bold 11px serif';
+      labelCtx.textAlign = 'center';
+      labelCtx.textBaseline = 'middle';
+      labelCtx.fillStyle = 'rgba(0,0,0, 1)';
+      labelCtx.fillText(this.label, this.width * 0.5, this.height + 3);
+    }
   }
 
   /** the accent can move at runtime, a mixed brain blends the brains it uses */
@@ -231,7 +250,12 @@ export class Car {
         }
         this.hasPrevSensors = true;
         for (let i = 0; i < prev.length; i++) inputs.push(prev[i]);
-        inputs.push(Math.min(1, Math.hypot(this.vx, this.vy) / this.maxSpeed));
+        inputs.push(
+          Math.min(
+            1,
+            Math.sqrt(this.vx * this.vx + this.vy * this.vy) / this.maxSpeed,
+          ),
+        );
         inputs.push(this.#velocityDelta());
         inputs.push(this.gateDelta);
         // refresh the history after the brain has read it
@@ -256,7 +280,7 @@ export class Car {
    *  frames has stalled: it dies and its brain pays STALL_PENALTY once. Any
    *  frame at or above the speed threshold resets the streak. */
   #checkStall() {
-    if (Math.hypot(this.vx, this.vy) >= config.CAR_STALL_SPEED) {
+    if (this.vx * this.vx + this.vy * this.vy >= STALL_SPEED_SQ) {
       this.stallFrames = 0;
       return false;
     }
@@ -349,20 +373,15 @@ export class Car {
     this.gateDelta = this.#gateDelta(circuit);
   }
 
-  /** signed angle between the velocity vector and the front, in [-1, 1] */
+  /** signed angle between the velocity vector and the front, in [-1, 1];
+   *  atan2 needs no magnitudes, so the zero check is the only guard */
   #velocityDelta() {
-    const velocity = Math.hypot(this.vx, this.vy);
-    if (velocity === 0) return 0;
-    const hx = -Math.sin(this.angle);
-    const hy = -Math.cos(this.angle);
-    return Math.max(
-      -1,
-      Math.min(
-        1,
-        Math.atan2(hx * this.vy - hy * this.vx, hx * this.vx + hy * this.vy) /
-          Math.PI,
-      ),
-    );
+    const sinA = Math.sin(this.angle);
+    const cosA = Math.cos(this.angle);
+    const cross = cosA * this.vx - sinA * this.vy;
+    const dot = -sinA * this.vx - cosA * this.vy;
+    if (cross === 0 && dot === 0) return 0;
+    return Math.max(-1, Math.min(1, Math.atan2(cross, dot) / Math.PI));
   }
 
   /** signed angle between the heading and the next gate, in [-1, 1] */
@@ -472,7 +491,7 @@ export class Car {
 
   #move() {
     // 1. decompose old velocity in heading frame
-    const v = Math.hypot(this.vx, this.vy);
+    const v = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
     const steer = this.controls.left - this.controls.right;
     const target =
       steer *
@@ -514,7 +533,7 @@ export class Car {
     if (this.drifting) vf *= 1 - config.CAR_DRIFT_SPEED_LOSS;
 
     // 5. friction opposing motion
-    const vm = Math.hypot(vf, vl);
+    const vm = Math.sqrt(vf * vf + vl * vl);
     if (vm > 0) {
       const f = Math.max(0, vm - config.CAR_FRICTION) / vm;
       vf *= f;
@@ -524,7 +543,7 @@ export class Car {
     // 6. caps: forward ≤ maxSpeed, reverse ≥ -maxSpeed/2, total ≤ maxSpeed
     if (vf > this.maxSpeed) vf = this.maxSpeed;
     if (vf < -this.maxSpeed / 2) vf = -this.maxSpeed / 2;
-    const vm2 = Math.hypot(vf, vl);
+    const vm2 = Math.sqrt(vf * vf + vl * vl);
     if (vm2 > this.maxSpeed) {
       const s = this.maxSpeed / vm2;
       vf *= s;
@@ -582,11 +601,13 @@ export class Car {
       this.width,
       this.height,
     );
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 11px serif';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(0,0,0, 1)';
-    ctx.fillText(`${this.label}`, 0, this.height - 22);
+    ctx.drawImage(
+      this.labelCanvas,
+      -this.width * 0.5,
+      -this.height * 0.5,
+      this.width,
+      this.height + 20,
+    );
     ctx.restore();
   }
 }

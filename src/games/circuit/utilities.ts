@@ -139,6 +139,9 @@ const FH = 12;
 const TL = 0;
 let gradient: CanvasGradient | undefined;
 
+/** the board rows are rebuilt in place every tick, no new array per frame */
+const displayedScoreCars: (Car | Group)[] = [];
+
 function drawGradient(ctx: CanvasRenderingContext2D, x, y, w, h) {
   if (!gradient) {
     gradient = ctx.createLinearGradient(0, 0, w, 0);
@@ -156,14 +159,23 @@ export function drawScores(
   // Ghosts are frozen dead records: a ghost is only saved when the record
   // holder dies, and it stays hidden while a board car already shows that
   // score, so the leader is never doubled by its own ghost.
-  const topCars = state.sortedCars.slice(0, config.SCORES_NB);
-  const shownScores = new Set(topCars.map((car) => car.brain.score));
-  const displayedScoreCars: (Car | Group)[] = [
-    ...state.groups.filter(
-      (group) => group.ghostScore > 0 && !shownScores.has(group.ghostScore),
-    ),
-    ...topCars,
-  ].sort((a, b) => {
+  const topCars = state.sortedCars;
+  const topCount = Math.min(topCars.length, config.SCORES_NB);
+  displayedScoreCars.length = 0;
+  for (let g = 0; g < state.groups.length; g++) {
+    const group = state.groups[g];
+    if (group.ghostScore <= 0) continue;
+    let shown = false;
+    for (let i = 0; i < topCount; i++) {
+      if (topCars[i].brain.score === group.ghostScore) {
+        shown = true;
+        break;
+      }
+    }
+    if (!shown) displayedScoreCars.push(group);
+  }
+  for (let i = 0; i < topCount; i++) displayedScoreCars.push(topCars[i]);
+  displayedScoreCars.sort((a, b) => {
     // Current track only: running cars use their live score, ghosts use the
     // frozen dead record. Previous maps and the cross-map total never
     // take part in scoreboard ordering.
