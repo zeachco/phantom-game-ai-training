@@ -42,11 +42,12 @@ panel shows its brain.
   seed input field changes it on demand, and any car completing
   LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
   the finishing brain is saved first, like a crash. Each finished map's high
-  is recorded separately per seed, so returning to a track restores its
-  comparison bar; groups that finished that seed return with mutation runs
-  only. The scoreboard and promotion never compare against a blended
-  cross-map total, and training history lives in the weights the pools respawn
-  from.
+  is recorded separately per seed for HUD reference, but every generated map
+  starts with a fresh comparison bar, including when a seed is revisited, so
+  mutated brains have a reachable goal. Groups that finished that seed return
+  with mutation runs only. The scoreboard and promotion never compare against
+  a blended cross-map total, and training history lives in the weights the
+  pools respawn from.
 
 car names use a capital brain ID followed by the mutation index:
 

@@ -214,8 +214,8 @@ export class CircuitRace {
 
     for (const group of this.groups) {
       group.scores = loadScores(group, this.seed);
-      // A returning track has a saved record to show while its new mutations
-      // race; a first visit has no ghost score yet.
+      // Every generated track starts with a fresh active comparison. Earlier
+      // records remain in history for the HUD, not as a ghost or race goal.
       group.ghostScore = group.scores.seed;
       group.mutationOnly = group.scores.finished[String(this.seed)] === true;
       group.pool = this.#spawnSlots(group).map((slot) =>

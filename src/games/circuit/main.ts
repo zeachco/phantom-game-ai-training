@@ -280,7 +280,7 @@ export default async (state: typeof defaultState) => {
 
   const about = document.createElement('div');
   about.className = 'side-panel-about';
-  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; every seed keeps its own score, so returning to a track restores its record, and groups that already finished it continue with mutation runs only.`;
+  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; each seed keeps its former score as a HUD reference, but every generated track starts a fresh record so mutated brains have a reachable goal, and groups that already finished it continue with mutation runs only.`;
 
   const footer = document.createElement('div');
   footer.className = 'side-panel-footer';

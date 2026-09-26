@@ -106,14 +106,11 @@ export function loadScores(group: Group, seed: number): GroupScores {
   if (typeof scores.phantom !== 'number') scores.phantom = 0;
   if (typeof scores.current !== 'number') scores.current = seed;
   if (typeof scores.seed !== 'number') scores.seed = 0;
-  // A reload on a different seed folds the old live score, then restores the
-  // score already earned on the requested track instead of starting at zero.
+  // A newly generated/selected seed folds the old live score, but always
+  // starts a fresh comparison. The old score remains in history for the HUD.
   if (scores.current !== seed) {
     foldScores(scores, seed);
     saveScores(group, scores);
-  } else if (typeof scores.history[String(seed)] === 'number') {
-    // Keep a malformed/legacy current entry from hiding a known track record.
-    scores.seed = Math.max(scores.seed, scores.history[String(seed)]);
   }
   return scores;
 }
@@ -122,8 +119,8 @@ export function saveScores(group: Group, scores = group.scores) {
   localStorage.setItem(scoreKey(group), JSON.stringify(scores));
 }
 
-/** A new seed records the old map high and activates the record for the
- * requested map. History lives per track, never in a cross-map score blend. */
+/** A new seed records the old map high and starts a fresh comparison.
+ * History lives per track for HUD reference, never as a goal for the new run. */
 export function foldScores(scores: GroupScores, newSeed: number) {
   const previousSeed = String(scores.current);
   scores.history[previousSeed] = Math.max(
@@ -133,7 +130,9 @@ export function foldScores(scores: GroupScores, newSeed: number) {
   scores.phantom = scores.seed;
   scores.total = scores.seed;
   scores.current = newSeed;
-  scores.seed = scores.history[String(newSeed)] || 0;
+  // A returning track is a new training run: its former record is reference
+  // data only, so mutations can establish a reachable fresh record.
+  scores.seed = 0;
 }
 
 const FH = 12;
