@@ -66,7 +66,7 @@ export function fileUtilities(game = '') {
       const data = JSON.stringify(save);
       localStorage.setItem(namespace, data);
     } else if (isSameObject(models, olds, exclude)) {
-      console.info(`😬 ${name} is identical to previous version`);
+      // No save occurred, so keep the console quiet.
     } else {
       const save = models.map((m) => ({
         ...m,
@@ -116,7 +116,6 @@ export function fileUtilities(game = '') {
       save[space] = [...previous, model].sort((a, b) => b.score - a.score);
     });
 
-    console.info(`💾 Saving best ${amountPerComplexity} models...`);
     Object.keys(byKind).forEach((kind) => {
       byKind[kind].forEach((models, layersNb) => {
         saveModels(layersNb, models, kind);
