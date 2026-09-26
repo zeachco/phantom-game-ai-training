@@ -261,8 +261,26 @@ export class Circuit {
     this.obstacles = [];
     const span = Math.max(1, last - first);
     const step = span / config.OBSTACLES;
+    const roadWidthAt = (idx: number) =>
+      this.leftHalf[idx] + this.rightHalf[idx];
+    const hasLaneReductionAhead = (idx: number) => {
+      for (
+        let distance = 0;
+        distance <= config.OBSTACLE_REDUCTION_CLEARANCE;
+        distance++
+      ) {
+        const current = (idx + distance) % n;
+        const next = (current + 1) % n;
+        if (roadWidthAt(next) < roadWidthAt(current) - 1e-6) return true;
+      }
+      return false;
+    };
     const makeObstacle = (idx: number) => {
-      const roadWidth = this.leftHalf[idx] + this.rightHalf[idx];
+      // Leave a short approach clear so a car is never forced to pass an
+      // obstacle immediately before the road takes a lane away.
+      if (hasLaneReductionAhead(idx)) return null;
+
+      const roadWidth = roadWidthAt(idx);
       // A single-lane section has no safe passing lane, so leave it empty.
       if (roadWidth <= laneWidth * 1.5) return null;
       const p = this.points[idx];

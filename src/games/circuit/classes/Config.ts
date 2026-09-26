@@ -152,6 +152,8 @@ class Config {
   public ROAD_SECTION_LENGTH = 12;
   /** points of smooth cosine ease in and out */
   public ROAD_SECTION_TRANSITION = 8;
+  /** centerline samples kept clear before a lane reduction begins */
+  public OBSTACLE_REDUCTION_CLEARANCE = 2;
 
   // checkpoints, claimed in order so the only way to bank score is
   // around the loop, donuts in the open plane earn nothing
