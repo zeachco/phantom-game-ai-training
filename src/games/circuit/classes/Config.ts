@@ -159,8 +159,13 @@ class Config {
   // checkpoints, claimed in order so the only way to bank score is
   // around the loop, donuts in the open plane earn nothing
   public CHECKPOINTS = 32;
-  /** base checkpoint reward, divided by frames taken since the last gate */
+  /** flat reward for passing a checkpoint in order */
   public CHECKPOINT_SCORE = 10;
+  /** speed bonus for every gate but the lap gate:
+   *  CHECKPOINT_SPEED_BONUS / frames taken since the last gate */
+  public CHECKPOINT_SPEED_BONUS = 10;
+  /** lap bonus: LAP_SPEED_BONUS / frames taken on the lap */
+  public LAP_SPEED_BONUS = 120;
   /** fixed debt for entering a checkpoint out of order */
   public WRONG_CHECKPOINT_PENALTY = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;

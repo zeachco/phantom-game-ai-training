@@ -335,19 +335,19 @@ export class Car {
     if (gate !== -1) {
       if (gate === this.nextCheckpoint) {
         this.brain.score += config.CHECKPOINT_SCORE;
-        // spede bonus every 5 checkpoint
-        if (this.nextCheckpoint % 5 === 0 && this.nextCheckpoint !== 0) {
-          this.brain.score += this.checkpointFramesRemaining / 1000;
-        }
-        // large speed bonus every laps
-        if (this.nextCheckpoint === 0 && this.laps > 0) {
-          this.brain.score += this.framesSinceLapStart / 100;
-        }
+        const isLapGate = this.nextCheckpoint === n - 1;
+        // speed bonus on every gate but the lap gate, which is paid by the
+        // lap bonus instead: faster crossing earns more
+        if (!isLapGate)
+          this.brain.score +=
+            config.CHECKPOINT_SPEED_BONUS / this.framesSinceLastCheckpoint;
         this.framesSinceLastCheckpoint = 0;
         this.passedCheckpoint = true;
         this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
         // claiming the last gate wraps the index back to the start: a full lap
-        if (this.nextCheckpoint === n - 1) {
+        if (isLapGate) {
+          // large speed bonus every lap
+          this.brain.score += config.LAP_SPEED_BONUS / this.framesSinceLapStart;
           this.completedLap = true;
           this.laps++;
           this.completedLapAt = performance.now();
