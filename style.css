@@ -430,14 +430,20 @@ ul:hover {
   border-radius: inherit;
   transition: width 0.1s linear;
 }
-/* the followed brain's stats card sits beside the cockpit, not in the sidebar */
-.circuit-stats {
-  flex: 0 0 240px;
+/* the followed brain's stats, inline wrappable text beside the cockpit gauges */
+.brain-stats {
   align-self: flex-end;
-  width: 240px;
-  height: 260px;
+  max-width: 48vw;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+  font-family: monospace;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
 }
-.circuit-stats.hidden {
+.brain-stats.hidden {
   visibility: hidden;
 }
 
@@ -446,9 +452,5 @@ ul:hover {
     gap: 12px;
     padding-left: 12px;
     padding-right: 12px;
-  }
-  .circuit-stats {
-    flex-basis: 200px;
-    width: 200px;
   }
 }

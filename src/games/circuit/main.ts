@@ -1,5 +1,6 @@
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
+import type { NeuralNetwork } from '../../ai/Network';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -32,12 +33,9 @@ export default async (state: typeof defaultState) => {
 
   const networkCanvas = createCanvas();
   networkCanvas.className = 'neural-canvas';
-  const statsCanvas = createCanvas();
-  statsCanvas.className = 'circuit-stats';
 
   const carCtx = carCanvas.getContext('2d');
   const networkCtx = networkCanvas.getContext('2d');
-  const statsCtx = statsCanvas.getContext('2d');
 
   const followPad = new GamePad(new Map());
   /** 0 follows the best score overall, 1-9 the best car of that brain layer */
@@ -360,13 +358,18 @@ export default async (state: typeof defaultState) => {
   const gateGaugeFill = document.createElement('div');
   gateGaugeFill.className = 'gate-gauge-fill';
   gateGauge.append(gateGaugeFill);
-  // The network remains in the sidebar, but its information card travels with
-  // the in-game cockpit so it is visible while the model panel is closed.
-  steerOverlay.append(wheelCanvas, pedal, readout, gateGauge, statsCanvas);
+  // The network stays in the sidebar, but its stats travel with the in-game
+  // cockpit as inline text after the gate gauge, visible when the panel is closed.
+  const brainStats = document.createElement('div');
+  brainStats.className = 'brain-stats';
+  brainStats.title = 'followed brain stats';
+  steerOverlay.append(wheelCanvas, pedal, readout, gateGauge, brainStats);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
   let wheelAngle = 0;
+  // The loop's first tick is eager, so every state it reads must exist by then.
+  let lastStatsHtml = '';
 
   toggleBtn.onclick = () => {
     panelOpen = panel.classList.toggle('open');
@@ -486,13 +489,6 @@ export default async (state: typeof defaultState) => {
           netWrap.clientHeight,
         );
       }
-      resizeCanvas(
-        statsCanvas,
-        statsCtx,
-        statsCanvas.clientWidth,
-        statsCanvas.clientHeight,
-      );
-
       const camTarget = followedCar();
       if (state.playing && race.seedChangeAt) {
         const spawn = race.circuit.getSpawn();
@@ -608,13 +604,11 @@ export default async (state: typeof defaultState) => {
       if (panelOpen && followed) {
         neuralVisualizer.renderNetwork(networkCtx, followed);
       }
-      // The KeyS shortcut toggles the card, which is rendered beside the cockpit
-      // instead of over the network preview.
+      // The KeyS shortcut toggles the stats, now an inline DOM block in the cockpit.
       const statsOn = neuralVisualizer.renderStats;
-      statsCanvas.classList.toggle('hidden', !statsOn || !followed);
-      if (statsOn && followed) {
-        neuralVisualizer.renderStatsOverlay(statsCtx, followed);
-      }
+      brainStats.classList.toggle('hidden', !statsOn || !followed);
+      if (statsOn && followed && camTarget)
+        updateBrainStats(followed, camTarget);
     },
     {
       maxFps: config.HUMAN_FPS_CAP,
@@ -681,6 +675,62 @@ export default async (state: typeof defaultState) => {
       followTargetSince = now;
     }
     return leader;
+  }
+
+  /** Rebuild the inline stats block of the followed brain; the DOM is only
+   *  touched when the rendered text changes, so a steady frame is cheap. */
+  function updateBrainStats(network: NeuralNetwork, car: Car) {
+    const mixed = network instanceof MixedNetwork ? network : undefined;
+    const lines: { text?: string; html?: string }[] = [
+      { text: `Network ${network.id}` },
+    ];
+    if (network.mutationIndex === 0) {
+      lines.push({ text: 'Original model' });
+    } else {
+      lines.push({
+        text: `Mutation ${(network.mutationFactor * 100).toFixed(4)}%`,
+      });
+      lines.push({ text: `MutationIndex ${network.mutationIndex}` });
+    }
+    lines.push({ text: `Score ${Math.round(network.score)}` });
+    // Former record on this exact seed, from earlier visits to the track: the
+    // live score of the current race is `scores.seed`, history is per seed.
+    const groupKey = mixed ? 'mixed' : String(car.brainLayers);
+    const group = race.groups.find((candidate) => candidate.key === groupKey);
+    const previousBest = group?.scores.history[String(race.seed)];
+    if (typeof previousBest === 'number' && previousBest > 0) {
+      lines.push({ text: `PrevBest ${Math.round(previousBest)}` });
+    }
+    if (mixed?.selectorOutputs.length) {
+      // Softmax over the raw selector scores of the last pass gives the
+      // per-expert confidence the selector read out of the sensors.
+      const outputs = mixed.selectorOutputs;
+      const max = Math.max(...outputs);
+      const exps = outputs.map((value) => Math.exp(value - max));
+      const sum = exps.reduce((a, b) => a + b, 0);
+      const order = outputs
+        .map((_value, index) => index)
+        .sort((a, b) => exps[b] - exps[a]);
+      const chip = (index: number) => {
+        const expert = mixed.experts[index];
+        const color = layerColor(
+          expert.levels.length,
+          config.MAX_NETWORK_LAYERS,
+        );
+        const pct = Math.round((exps[index] / sum) * 100);
+        return `<span style="color: ${color}">${expert.id} ${pct}%</span>`;
+      };
+      lines.push({
+        html: `Driving ${chip(order[0])} · 2nd ${chip(order[1] ?? order[0])}`,
+      });
+    }
+    const html = lines
+      .map((line) => `<span>${line.html ?? line.text}</span>`)
+      .join('');
+    if (html !== lastStatsHtml) {
+      lastStatsHtml = html;
+      brainStats.innerHTML = html;
+    }
   }
 
   // A reload never loses more than the most recent promotions.
