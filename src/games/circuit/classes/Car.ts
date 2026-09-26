@@ -31,7 +31,9 @@ export function getCircuitBrainDimensions(rayCount = config.SENSORS) {
   // actual output channels consumed by Car.update().
   const controls = new Controls(ControlType.AI);
   return {
-    inputCount: rayCount + EXTRA_BRAIN_INPUTS,
+    // current rays then one previous frame of rays: the history block is how
+    // the weights tell that the car is moving
+    inputCount: rayCount * 2 + EXTRA_BRAIN_INPUTS,
     outputCount: Object.keys(controls).length,
   };
 }
@@ -100,6 +102,10 @@ export class Car {
   private maskColor = '';
   private va = 0;
   private brainInputs: number[] = [];
+  /** previous frame's ray values, the one-frame sensor history block */
+  private prevSensorInputs: number[] = [];
+  /** set after the first AI decision, until then the history is flat */
+  private hasPrevSensors = false;
   /** scratch point for the obstacle hit, reused so no crash allocates */
   private hitPoint: Vector = { x: 0, y: 0 };
   /** half diagonal and corner angle, both derived from the fixed size */
@@ -144,6 +150,7 @@ export class Car {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
+      this.prevSensorInputs = new Array<number>(this.sensor.rayCount).fill(0);
       const { inputCount, outputCount } = getCircuitBrainDimensions(
         this.sensor.rayCount,
       );
@@ -200,13 +207,22 @@ export class Car {
       this.sensor.update(obstacles, circuit.segments);
       if (this.useAI) {
         const inputs = this.brainInputs;
+        const prev = this.prevSensorInputs;
+        const readings = this.sensor.readings;
         inputs.length = 0;
-        for (const reading of this.sensor.readings) {
-          inputs.push(reading === null ? 0 : 1 - reading.offset);
+        for (let i = 0; i < readings.length; i++) {
+          const reading = readings[i];
+          const value = reading === null ? 0 : 1 - reading.offset;
+          if (!this.hasPrevSensors) prev[i] = value; // first frame: no motion yet
+          inputs.push(value);
         }
+        this.hasPrevSensors = true;
+        for (let i = 0; i < prev.length; i++) inputs.push(prev[i]);
         inputs.push(Math.min(1, Math.hypot(this.vx, this.vy) / this.maxSpeed));
         inputs.push(this.#velocityDelta());
         inputs.push(this.gateDelta);
+        // refresh the history after the brain has read it
+        for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);
         const [throttle, left, right] = outputs;
         // one signed float: gas positive, brake / reverse negative
