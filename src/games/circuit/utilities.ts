@@ -1,4 +1,4 @@
-import { MixedNetwork } from '../../ai/Mixed';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import { layerColor } from '../../utilities/ai/colors';
@@ -70,6 +70,59 @@ export const defaultState = {
 export function brainId(layer: number, mutationIndex?: number) {
   const id = String(layer);
   return typeof mutationIndex !== 'number' ? id : `${id}:${mutationIndex}`;
+}
+
+/** scores live under their own key per group, still inside the game prefix */
+export function scoreKey(group: Group) {
+  return group.isMixed
+    ? `circuit_score_${MIXED_KIND}_${MIXED_LEVELS}`
+    : `circuit_score_${group.layer}`;
+}
+
+export function loadScores(group: Group, seed: number): GroupScores {
+  let scores: GroupScores | null = null;
+  try {
+    scores = JSON.parse(localStorage.getItem(scoreKey(group)) || 'null');
+  } catch {
+    scores = null;
+  }
+  if (!scores || typeof scores.total !== 'number') {
+    return {
+      current: seed,
+      total: 0,
+      seed: 0,
+      phantom: 0,
+      history: {},
+    };
+  }
+  // Older saves had no explicit previous-map ghost. Start them with no
+  // ghost bias: the board is only about the current track.
+  if (typeof scores.phantom !== 'number') scores.phantom = 0;
+  // a reload on a different seed folds what the previous page left pending
+  if (scores.current !== seed) {
+    foldScores(scores, seed);
+    saveScores(group, scores);
+  }
+  return scores;
+}
+
+export function saveScores(group: Group, scores = group.scores) {
+  localStorage.setItem(scoreKey(group), JSON.stringify(scores));
+}
+
+/** a new seed records the old map high as a record and restarts the bar at
+ * zero. History lives in the weights the pools respawn from, never in a
+ * cross-map score blend. */
+export function foldScores(scores: GroupScores, newSeed: number) {
+  const finished = String(scores.current);
+  scores.history[finished] = Math.max(
+    scores.history[finished] || 0,
+    scores.seed,
+  );
+  scores.phantom = scores.seed;
+  scores.total = scores.seed;
+  scores.current = newSeed;
+  scores.seed = 0;
 }
 
 const FH = 12;
