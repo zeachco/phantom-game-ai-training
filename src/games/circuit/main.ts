@@ -5,7 +5,11 @@ import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
-import { createCanvas, resizeCanvas } from '../../utilities/dom';
+import {
+  createCanvas,
+  createUpdateLimiter,
+  resizeCanvas,
+} from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Car } from './classes/Car';
@@ -370,6 +374,7 @@ export default async (state: typeof defaultState) => {
   let wheelAngle = 0;
   // The loop's first tick is eager, so every state it reads must exist by then.
   let lastStatsHtml = '';
+  const shouldUpdateDom = createUpdateLimiter(20);
 
   toggleBtn.onclick = () => {
     panelOpen = panel.classList.toggle('open');
@@ -444,6 +449,7 @@ export default async (state: typeof defaultState) => {
 
   loop.play(
     (_es, _dt) => {
+      const now = performance.now();
       if (followPad.once('Space')) setFollow(0);
       for (let digit = 0; digit <= 9; digit++) {
         if (followPad.once(`Digit${digit}`))
@@ -451,7 +457,6 @@ export default async (state: typeof defaultState) => {
       }
 
       if (state.playing) {
-        const now = performance.now();
         race.update(now);
 
         // The first drive input takes the camera to the human car.
@@ -463,15 +468,20 @@ export default async (state: typeof defaultState) => {
             h.controls.right !== 0);
         if (driving && !humanDriving) humanFollow = true;
         humanDriving = driving;
+      }
 
+      // The simulation and canvases can run at their normal frame rate, but
+      // all HUD and other DOM writes share a 20 FPS budget.
+      const domUpdateDue = shouldUpdateDom(now);
+      if (domUpdateDue) {
         timingBoard.update();
+        updateFollowButtons();
         if (race.seedChangeAt) {
           const remaining = Math.max(0, race.seedChangeAt - now);
           finishCountdown.hidden = false;
           finishCountdown.textContent = `next track in ${(remaining / 1000).toFixed(1)}s`;
         }
       }
-      updateFollowButtons();
 
       // the car canvas keeps whatever width the open panel leaves
       const panelWidth = Math.round(
@@ -506,10 +516,12 @@ export default async (state: typeof defaultState) => {
         camY += (camTarget.y - 2 * camTarget.vy - camY) * 0.1;
       }
       // the controls mimic the followed car, hidden while it is dead
-      steerOverlay.classList.toggle(
-        'hidden',
-        !camTarget || lastFollowed?.damaged,
-      );
+      if (domUpdateDue) {
+        steerOverlay.classList.toggle(
+          'hidden',
+          !camTarget || lastFollowed?.damaged,
+        );
+      }
       if (camTarget) {
         const c = camTarget.controls;
         const steer = Math.max(-1, Math.min(1, c.left - c.right));
@@ -517,35 +529,37 @@ export default async (state: typeof defaultState) => {
           (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) *
           config.STEER_UI_SMOOTH;
         if (wheelCtx) drawSteeringWheel(wheelCtx, wheelAngle);
-        const throttle = Math.max(-1, Math.min(1, c.throttle));
-        pedalCap.style.transform = `translateY(${
-          (1 - throttle) * config.STEER_UI_PEDAL_TRAVEL
-        }px)`;
-        speedoValue.textContent = Math.hypot(
-          camTarget.vx,
-          camTarget.vy,
-        ).toFixed(1);
-        lapsEl.textContent = `lap ${Math.min(
-          camTarget.laps + 1,
-          config.LAPS_PER_SEED,
-        )}/${config.LAPS_PER_SEED}`;
-        lapFramesEl.textContent = `lap ${camTarget.framesSinceLapStart}f`;
-        totalFramesEl.textContent = `total ${
-          camTarget.totalRaceFrames + camTarget.framesSinceLapStart
-        }f`;
-        const gateFraction = Math.max(
-          0,
-          Math.min(
-            1,
-            camTarget.checkpointFramesRemaining /
-              config.CHECKPOINT_BUDGET_FRAMES,
-          ),
-        );
-        gateGaugeFill.style.width = `${gateFraction * 100}%`;
-        gateGauge.setAttribute(
-          'aria-valuenow',
-          String(camTarget.checkpointFramesRemaining),
-        );
+        if (domUpdateDue) {
+          const throttle = Math.max(-1, Math.min(1, c.throttle));
+          pedalCap.style.transform = `translateY(${
+            (1 - throttle) * config.STEER_UI_PEDAL_TRAVEL
+          }px)`;
+          speedoValue.textContent = Math.hypot(
+            camTarget.vx,
+            camTarget.vy,
+          ).toFixed(1);
+          lapsEl.textContent = `lap ${Math.min(
+            camTarget.laps + 1,
+            config.LAPS_PER_SEED,
+          )}/${config.LAPS_PER_SEED}`;
+          lapFramesEl.textContent = `lap ${camTarget.framesSinceLapStart}f`;
+          totalFramesEl.textContent = `total ${
+            camTarget.totalRaceFrames + camTarget.framesSinceLapStart
+          }f`;
+          const gateFraction = Math.max(
+            0,
+            Math.min(
+              1,
+              camTarget.checkpointFramesRemaining /
+                config.CHECKPOINT_BUDGET_FRAMES,
+            ),
+          );
+          gateGaugeFill.style.width = `${gateFraction * 100}%`;
+          gateGauge.setAttribute(
+            'aria-valuenow',
+            String(camTarget.checkpointFramesRemaining),
+          );
+        }
       }
       lastFollowed = camTarget;
       state.camX = camX;
@@ -605,10 +619,12 @@ export default async (state: typeof defaultState) => {
         neuralVisualizer.renderNetwork(networkCtx, followed);
       }
       // The KeyS shortcut toggles the stats, now an inline DOM block in the cockpit.
-      const statsOn = neuralVisualizer.renderStats;
-      brainStats.classList.toggle('hidden', !statsOn || !followed);
-      if (statsOn && followed && camTarget)
-        updateBrainStats(followed, camTarget);
+      if (domUpdateDue) {
+        const statsOn = neuralVisualizer.renderStats;
+        brainStats.classList.toggle('hidden', !statsOn || !followed);
+        if (statsOn && followed && camTarget)
+          updateBrainStats(followed, camTarget);
+      }
     },
     {
       maxFps: config.HUMAN_FPS_CAP,

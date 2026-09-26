@@ -10,7 +10,11 @@ import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
-import { createCanvas, resizeCanvas } from '../../utilities/dom';
+import {
+  createCanvas,
+  createUpdateLimiter,
+  resizeCanvas,
+} from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
@@ -290,6 +294,7 @@ export default async (state: typeof defaultState) => {
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
 
   const loop = new GameLoop();
+  const shouldUpdateDom = createUpdateLimiter(20);
   let ray: DeathRay;
   let carRay: DeathRay;
   let deathRays: DeathRay[];
@@ -453,6 +458,7 @@ export default async (state: typeof defaultState) => {
   updateFollowButtons();
 
   loop.play((_es, _dt) => {
+    const now = performance.now();
     if (followPad.once('Space')) setFollow(0);
     for (let digit = 0; digit <= 9; digit++) {
       if (followPad.once(`Digit${digit}`))
@@ -481,7 +487,8 @@ export default async (state: typeof defaultState) => {
       }
     }
     state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
-    updateFollowButtons();
+    const domUpdateDue = shouldUpdateDom(now);
+    if (domUpdateDue) updateFollowButtons();
 
     resizeCanvas(carCanvas, carCtx, carCanvas.width, window.innerHeight);
     resizeCanvas(
@@ -530,11 +537,13 @@ export default async (state: typeof defaultState) => {
       neuralVisualizer.render(networkCtx, followed);
     }
     // the KeyS shortcut toggles the stats too, keep the button in sync
-    const statsOn = neuralVisualizer.renderStats;
-    if (statsBtn.dataset.on !== String(statsOn)) {
-      statsBtn.dataset.on = String(statsOn);
-      statsBtn.classList.toggle('active', statsOn);
-      statsBtn.setAttribute('aria-pressed', String(statsOn));
+    if (domUpdateDue) {
+      const statsOn = neuralVisualizer.renderStats;
+      if (statsBtn.dataset.on !== String(statsOn)) {
+        statsBtn.dataset.on = String(statsOn);
+        statsBtn.classList.toggle('active', statsOn);
+        statsBtn.setAttribute('aria-pressed', String(statsOn));
+      }
     }
 
     if (!state.playing) {
