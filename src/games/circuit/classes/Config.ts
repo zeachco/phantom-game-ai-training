@@ -1,6 +1,7 @@
 import { CTRL_COLORS } from '../../../ai/utils';
 
 export function likelyLagsOnHeavyJs(): boolean {
+  if (location.href.includes('demo=true')) return true;
   const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
   const memory =
     (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8; // Chromium only, GiB, rounded to 0.25..8
@@ -15,7 +16,7 @@ class Config {
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly this many cars, slots 0..9 */
-  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 10 : 50;
+  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 8 : 50;
   /** a group that has seen one of its cars cross the finish line respawns as a
    *  mutation-only swarm of this many cars, on slots 1..FINISHED_CARS_PER_GROUP,
    *  so the untouched champion never re-enters that pool */
