@@ -389,12 +389,8 @@ ul:hover {
   align-items: flex-start;
   gap: 2px;
 }
-.race {
-  font-family: monospace;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
-}
-.laps {
+.laps,
+.frame-count {
   font-family: monospace;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);

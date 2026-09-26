@@ -318,13 +318,18 @@ export default async (state: typeof defaultState) => {
   // above the speed
   const readout = document.createElement('div');
   readout.className = 'readout';
-  const raceEl = document.createElement('div');
-  raceEl.className = 'race';
-  raceEl.title = 'current map seed';
   const lapsEl = document.createElement('div');
   lapsEl.className = 'laps';
   lapsEl.title = 'laps on this map';
   lapsEl.textContent = `lap 0/${config.LAPS_PER_SEED}`;
+  const lapFramesEl = document.createElement('div');
+  lapFramesEl.className = 'frame-count';
+  lapFramesEl.title = 'simulation frames on the current lap';
+  lapFramesEl.textContent = 'lap 0f';
+  const totalFramesEl = document.createElement('div');
+  totalFramesEl.className = 'frame-count';
+  totalFramesEl.title = 'simulation frames on this map';
+  totalFramesEl.textContent = 'total 0f';
   const finishCountdown = document.createElement('div');
   finishCountdown.className = 'finish-countdown';
   finishCountdown.style.color = 'red';
@@ -339,7 +344,7 @@ export default async (state: typeof defaultState) => {
   speedoUnit.className = 'speedo-unit';
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
-  readout.append(raceEl, finishCountdown, lapsEl, speedo);
+  readout.append(finishCountdown, lapsEl, lapFramesEl, totalFramesEl, speedo);
   // the gate countdown: frame budget left for the followed car to claim its
   // next gate
   const gateGauge = document.createElement('div');
@@ -384,7 +389,6 @@ export default async (state: typeof defaultState) => {
     return match ? parseInt(match[1], 10) : 0;
   })();
   writeSeed(seed);
-  raceEl.textContent = `race#${seed}`;
   const race = new CircuitRace(state, io, seed, {
     onReset: () => {
       camSet = false;
@@ -397,7 +401,6 @@ export default async (state: typeof defaultState) => {
     },
     onSeedChanged: (nextSeed) => {
       writeSeed(nextSeed);
-      raceEl.textContent = `race#${nextSeed}`;
       seedValue.textContent = String(nextSeed);
       finishCountdown.hidden = true;
       camSet = false;
@@ -530,6 +533,10 @@ export default async (state: typeof defaultState) => {
           camTarget.laps + 1,
           config.LAPS_PER_SEED,
         )}/${config.LAPS_PER_SEED}`;
+        lapFramesEl.textContent = `lap ${camTarget.framesSinceLapStart}f`;
+        totalFramesEl.textContent = `total ${
+          camTarget.totalRaceFrames + camTarget.framesSinceLapStart
+        }f`;
         const gateFraction = Math.max(
           0,
           Math.min(
