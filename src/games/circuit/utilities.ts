@@ -23,6 +23,8 @@ export interface GroupScores {
   phantom: number;
   /** one frozen high score per finished seed, keyed by the seed number */
   history: Record<string, number>;
+  /** groups that have completed this seed use mutations when they return */
+  finished: Record<string, boolean>;
 }
 
 export interface Group {
@@ -31,7 +33,7 @@ export interface Group {
   isMixed: boolean;
   pool: Car[];
   /** a finisher demotes the group to a small mutation-only swarm on slots 1..N;
-   *  it stays reduced until the group is rebuilt by a map change or a reset */
+   *  the state is remembered per seed so returning to that track stays reduced */
   mutationOnly: boolean;
   /** snapshot of the champion brain + the score that promoted it */
   best: { brain: NeuralNetwork; score: number } | null;
@@ -93,15 +95,25 @@ export function loadScores(group: Group, seed: number): GroupScores {
       seed: 0,
       phantom: 0,
       history: {},
+      finished: {},
     };
   }
-  // Older saves had no explicit previous-map ghost. Start them with no
-  // ghost bias: the board is only about the current track.
+  // Older saves predate the per-seed history and completion marker.
+  if (!scores.history || typeof scores.history !== 'object')
+    scores.history = {};
+  if (!scores.finished || typeof scores.finished !== 'object')
+    scores.finished = {};
   if (typeof scores.phantom !== 'number') scores.phantom = 0;
-  // a reload on a different seed folds what the previous page left pending
+  if (typeof scores.current !== 'number') scores.current = seed;
+  if (typeof scores.seed !== 'number') scores.seed = 0;
+  // A reload on a different seed folds the old live score, then restores the
+  // score already earned on the requested track instead of starting at zero.
   if (scores.current !== seed) {
     foldScores(scores, seed);
     saveScores(group, scores);
+  } else if (typeof scores.history[String(seed)] === 'number') {
+    // Keep a malformed/legacy current entry from hiding a known track record.
+    scores.seed = Math.max(scores.seed, scores.history[String(seed)]);
   }
   return scores;
 }
@@ -110,19 +122,18 @@ export function saveScores(group: Group, scores = group.scores) {
   localStorage.setItem(scoreKey(group), JSON.stringify(scores));
 }
 
-/** a new seed records the old map high as a record and restarts the bar at
- * zero. History lives in the weights the pools respawn from, never in a
- * cross-map score blend. */
+/** A new seed records the old map high and activates the record for the
+ * requested map. History lives per track, never in a cross-map score blend. */
 export function foldScores(scores: GroupScores, newSeed: number) {
-  const finished = String(scores.current);
-  scores.history[finished] = Math.max(
-    scores.history[finished] || 0,
+  const previousSeed = String(scores.current);
+  scores.history[previousSeed] = Math.max(
+    scores.history[previousSeed] || 0,
     scores.seed,
   );
   scores.phantom = scores.seed;
   scores.total = scores.seed;
   scores.current = newSeed;
-  scores.seed = 0;
+  scores.seed = scores.history[String(newSeed)] || 0;
 }
 
 const FH = 12;

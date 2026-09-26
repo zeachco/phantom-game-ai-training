@@ -179,6 +179,7 @@ export class CircuitRace {
           seed: 0,
           phantom: 0,
           history: {},
+          finished: {},
         },
         lapTimes: {},
       });
@@ -205,6 +206,7 @@ export class CircuitRace {
           seed: 0,
           phantom: 0,
           history: {},
+          finished: {},
         },
         lapTimes: {},
       });
@@ -212,11 +214,13 @@ export class CircuitRace {
 
     for (const group of this.groups) {
       group.scores = loadScores(group, this.seed);
-      group.ghostScore = 0;
-      group.pool = new Array(config.CARS_PER_GROUP);
-      for (let slot = 0; slot < config.CARS_PER_GROUP; slot++) {
-        group.pool[slot] = this.#spawnCar(group, slot);
-      }
+      // A returning track has a saved record to show while its new mutations
+      // race; a first visit has no ghost score yet.
+      group.ghostScore = group.scores.seed;
+      group.mutationOnly = group.scores.finished[String(this.seed)] === true;
+      group.pool = this.#spawnSlots(group).map((slot) =>
+        this.#spawnCar(group, slot),
+      );
     }
     this.state.groups = this.groups;
   }
@@ -246,6 +250,12 @@ export class CircuitRace {
       score: car.brain.score,
     };
     this.#promote(group, car);
+  }
+
+  #markFinished(group: Group) {
+    group.mutationOnly = true;
+    group.scores.finished[String(this.seed)] = true;
+    this.#pendingSaves.add(group);
   }
 
   public flushPendingSaves() {
@@ -297,7 +307,10 @@ export class CircuitRace {
         { length: config.FINISHED_CARS_PER_GROUP },
         (_value, slot) => slot + 1,
       );
-    return group.pool.map((_car, slot) => slot);
+    return Array.from(
+      { length: config.CARS_PER_GROUP },
+      (_value, slot) => slot,
+    );
   }
 
   #respawnGroup(group: Group, now: number) {
@@ -416,7 +429,10 @@ export class CircuitRace {
       if (alive && car.damaged) this.#onDeath(car);
       if (racing && car.finished && !car.damaged) {
         const group = this.#groupOf(car);
-        if (group) this.#settle(group, car);
+        if (group) {
+          this.#settle(group, car);
+          this.#markFinished(group);
+        }
       }
       if (car.passedCheckpoint) {
         car.passedCheckpoint = false;

@@ -30,8 +30,9 @@ panel shows its brain.
   group's best brain, the higher slots carry progressively bolder mutations.
   Once one of a group's cars crosses the finish line, that group is demoted: it
   respawns 5 cars on slots 1..5, every one of them a mutation, and the untouched
-  original is out of the pool for good (a map change or a manual reset rebuilds
-  the full ladder). Groups are independent, so one category never waits for
+  original is out of the pool for good. Returning to a previously completed
+  seed restores that group's mutation-only pool; a new seed starts its own
+  ladder. Groups are independent, so one category never waits for
   another, and the map never holds more than CAR_NB (200) AI cars at once. The
   bottom HUD shows the three fastest brain groups by completed-lap timing,
   measured in simulation frames.
@@ -41,9 +42,11 @@ panel shows its brain.
   seed input field changes it on demand, and any car completing
   LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
   the finishing brain is saved first, like a crash. Each finished map's high
-  is recorded in the group's history; the scoreboard and promotion never
-  compare against previous tracks or a blended cross-map total, training
-  history lives in the weights the pools respawn from.
+  is recorded separately per seed, so returning to a track restores its
+  comparison bar; groups that finished that seed return with mutation runs
+  only. The scoreboard and promotion never compare against a blended
+  cross-map total, and training history lives in the weights the pools respawn
+  from.
 
 car names use a capital brain ID followed by the mutation index:
 
