@@ -4,7 +4,8 @@
 
 A closed loop of road, bigger than the screen, with random left and right
 turns. The camera follows the best scoring car around the loop while the
-panel shows its brain.
+panel shows its brain. Manual car/player following rotates the world around
+the followed car and shifts the camera ahead to show more of the track.
 
 ## how it works
 

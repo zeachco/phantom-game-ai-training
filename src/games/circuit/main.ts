@@ -34,6 +34,8 @@ if (config.CLEAR_STORAGE) io.discardModels();
  * the map keeps whatever is left */
 const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
+/** world-space distance ahead of the car in forced follow mode */
+const CAMERA_AHEAD_DISTANCE = 200;
 
 export default async (state: typeof defaultState) => {
   const carCanvas = createCanvas();
@@ -50,6 +52,8 @@ export default async (state: typeof defaultState) => {
   const followPad = new GamePad(new Map());
   /** 0 follows the best score overall, 1-9 the best car of that brain layer */
   let follow: number | 'mixed' = 0;
+  /** manual/player follow enables the rotating, ahead-of-car camera mode */
+  let followForced = false;
   /** world x/y mapped to the screen center, lerps so target switches animate */
   let camX = 0;
   let camY = 0;
@@ -146,8 +150,9 @@ export default async (state: typeof defaultState) => {
   let humanDriving = false;
   let lastCountdownTenths = -1;
 
-  const setFollow = (value: number | 'mixed') => {
+  const setFollow = (value: number | 'mixed', forced = true) => {
     follow = value;
+    followForced = forced;
     humanFollow = false;
     // a manual change picks the category leader right away
     followTarget = undefined;
@@ -269,7 +274,7 @@ export default async (state: typeof defaultState) => {
     followBtns.set(btn, { key: String(value) });
     armReset(btn, value, () => setFollow(value));
   });
-  setFollow(0);
+  setFollow(0, false);
 
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
@@ -524,7 +529,7 @@ export default async (state: typeof defaultState) => {
   loop.play(
     (_es, _dt) => {
       const now = performance.now();
-      if (followPad.once('Space')) setFollow(0);
+      if (followPad.once('Space')) setFollow(0, false);
       for (let digit = 0; digit <= 9; digit++) {
         if (followPad.once(`Digit${digit}`))
           setFollow(digit === 0 ? 'mixed' : digit);
@@ -581,20 +586,35 @@ export default async (state: typeof defaultState) => {
         );
       }
       const camTarget = followedCar();
+      const carUpFollow = followForced || humanFollow;
+      const cameraAngle =
+        carUpFollow && camTarget
+          ? camTarget.vx !== 0 || camTarget.vy !== 0
+            ? Math.atan2(-camTarget.vx, -camTarget.vy)
+            : camTarget.angle
+          : 0;
       if (state.playing && race.seedChangeAt) {
         const spawn = race.circuit.getSpawn();
         camX = spawn.x;
         camY = spawn.y;
         camSet = true;
       } else if (state.playing && camTarget) {
+        const followX = carUpFollow
+          ? camTarget.x - Math.sin(cameraAngle) * CAMERA_AHEAD_DISTANCE
+          : camTarget.x - 2 * camTarget.vx;
+        const followY = carUpFollow
+          ? camTarget.y - Math.cos(cameraAngle) * CAMERA_AHEAD_DISTANCE
+          : camTarget.y - 2 * camTarget.vy;
         if (!camSet) {
-          camX = camTarget.x;
-          camY = camTarget.y;
+          camX = followX;
+          camY = followY;
           camSet = true;
         }
-        // lead the target by 2 frames of true velocity so the 10% lerp stays centered
-        camX += (camTarget.x - 2 * camTarget.vx - camX) * 0.1;
-        camY += (camTarget.y - 2 * camTarget.vy - camY) * 0.1;
+        // Keep the camera ahead of the car in car-up mode so more of the
+        // upcoming track is visible. In fixed-world mode, the small velocity
+        // lead keeps the target visually centered.
+        camX += (followX - camX) * 0.1;
+        camY += (followY - camY) * 0.1;
       }
       // the controls mimic the followed car, hidden while it is dead
       if (domUpdateDue) {
@@ -659,16 +679,13 @@ export default async (state: typeof defaultState) => {
       state.camX = camX;
       state.camY = camY;
       carCtx.save();
-      carCtx.translate(carCanvas.width / 2 - camX, carCanvas.height / 2 - camY);
-
-      // the plane, only the visible part is painted
+      // Paint the screen-space background before rotating the world, otherwise
+      // the corners of a rotated viewport can expose the old frame.
       carCtx.fillStyle = config.PLANE_COLOR;
-      carCtx.fillRect(
-        camX - carCanvas.width / 2,
-        camY - carCanvas.height / 2,
-        carCanvas.width,
-        carCanvas.height,
-      );
+      carCtx.fillRect(0, 0, carCanvas.width, carCanvas.height);
+      carCtx.translate(carCanvas.width / 2, carCanvas.height / 2);
+      carCtx.rotate(cameraAngle);
+      carCtx.translate(-camX, -camY);
 
       race.circuit.draw(carCtx);
       const nextCheckpoint = camTarget
@@ -687,10 +704,18 @@ export default async (state: typeof defaultState) => {
       const corpseNow = performance.now();
       // off-screen cars cost a transform and two blits for nothing
       const viewMargin = 50;
-      const viewMinX = camX - carCanvas.width / 2 - viewMargin;
-      const viewMaxX = camX + carCanvas.width / 2 + viewMargin;
-      const viewMinY = camY - carCanvas.height / 2 - viewMargin;
-      const viewMaxY = camY + carCanvas.height / 2 + viewMargin;
+      // A rotated screen rectangle has a larger axis-aligned world bounding
+      // box. Keep this culling conservative so cars never pop in at corners.
+      const sinCamera = Math.abs(Math.sin(cameraAngle));
+      const cosCamera = Math.abs(Math.cos(cameraAngle));
+      const viewHalfWidth =
+        (carCanvas.width * cosCamera + carCanvas.height * sinCamera) / 2;
+      const viewHalfHeight =
+        (carCanvas.width * sinCamera + carCanvas.height * cosCamera) / 2;
+      const viewMinX = camX - viewHalfWidth - viewMargin;
+      const viewMaxX = camX + viewHalfWidth + viewMargin;
+      const viewMinY = camY - viewHalfHeight - viewMargin;
+      const viewMaxY = camY + viewHalfHeight + viewMargin;
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         if (car === state.human) continue;
@@ -762,6 +787,8 @@ export default async (state: typeof defaultState) => {
   }
 
   function followedCar(): Car | undefined {
+    // Once the race enters its finish countdown, stop following any finisher.
+    if (race.seedChangeAt) return undefined;
     const now = performance.now();
     const freshFinish = (car: Car) =>
       car.finished &&
