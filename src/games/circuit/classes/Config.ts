@@ -13,7 +13,7 @@ class Config {
   /** number of AI car slots: each slot holds one car at a time (alive or a
    *  corpse), so the map never holds more AI cars than this */
   public CAR_NB = 200;
-  public MAX_MUTATION_LVL = 0.9;
+  public MAX_MUTATION_LVL = 0.5;
   public MIN_MUTATION_LVL = Number.MIN_VALUE;
   /** every brain category runs a pool of exactly thist and push many cars, slots 0..9 */
   public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 15 : 50;
@@ -24,7 +24,7 @@ class Config {
   /** a finished group's cars mutate at the full ladder's bottom rung
    *  (max / CARS_PER_GROUP) times this: the brain already wins, the swarm only
    *  looks for a faster line */
-  public FINISHED_MUTATION_SCALE = 0.1;
+  public FINISHED_MUTATION_SCALE = 0.5;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
