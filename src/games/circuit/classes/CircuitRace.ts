@@ -39,6 +39,11 @@ export class CircuitRace {
     string,
     { score: number | null; totalFrames: number }
   >();
+  /** fastest split for each checkpoint on the current track */
+  #bestCheckpointFrames: number[] = [];
+  /** fastest completed lap and finish on the current track */
+  #bestLapFrames = Infinity;
+  #bestFinishFrames = Infinity;
   #pendingSaves = new Set<Group>();
   #onHumanCrash?: () => void;
   #onSeedChanged?: (seed: number) => void;
@@ -231,6 +236,40 @@ export class CircuitRace {
     return this.groups.find((group) => group.key === key);
   }
 
+  /** Record a checkpoint split before it can become the new reference. */
+  #recordCheckpointTiming(car: Car) {
+    const index = car.completedCheckpointIndex;
+    if (index < 0) return;
+
+    const frames = car.completedCheckpointFrames;
+    const best = this.#bestCheckpointFrames[index];
+    car.lastCheckpointIndex = index;
+    car.lastCheckpointFrames = frames;
+    car.lastCheckpointDelta = typeof best === 'number' ? frames - best : null;
+    if (typeof best !== 'number' || frames < best)
+      this.#bestCheckpointFrames[index] = frames;
+    car.completedCheckpointIndex = -1;
+  }
+
+  /** Record a completed lap against the best lap seen on this track. */
+  #recordLapTiming(car: Car) {
+    const frames = car.completedLapFrames;
+    car.lastLapDelta = Number.isFinite(this.#bestLapFrames)
+      ? frames - this.#bestLapFrames
+      : null;
+    if (frames < this.#bestLapFrames) this.#bestLapFrames = frames;
+  }
+
+  /** Record the final total before it becomes the new track reference. */
+  #recordFinishTiming(car: Car) {
+    const frames = car.totalRaceFrames;
+    car.lastFinishFrames = frames;
+    car.lastFinishDelta = Number.isFinite(this.#bestFinishFrames)
+      ? frames - this.#bestFinishFrames
+      : null;
+    if (frames < this.#bestFinishFrames) this.#bestFinishFrames = frames;
+  }
+
   #promote(group: Group, car: Car) {
     const brain = JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork;
     group.best = { brain, score: car.brain.score };
@@ -368,6 +407,9 @@ export class CircuitRace {
     this.circuit = new Circuit(this.seed);
     this.#completedBrainIndices.clear();
     this.#completedFinishes.clear();
+    this.#bestCheckpointFrames = [];
+    this.#bestLapFrames = Infinity;
+    this.#bestFinishFrames = Infinity;
     this.seedChangeAt = 0;
     this.state.circuit = this.circuit;
     this.state.obstacles = this.circuit.obstacles;
@@ -400,6 +442,9 @@ export class CircuitRace {
   }
 
   public initialize() {
+    this.#bestCheckpointFrames = [];
+    this.#bestLapFrames = Infinity;
+    this.#bestFinishFrames = Infinity;
     Object.assign(this.state, defaultState);
     this.state.playing = true;
     this.state.sortedModels = this.io.loadAllModelLayers(
@@ -426,6 +471,9 @@ export class CircuitRace {
       const alive = !car.damaged;
       const racing = !car.finished;
       car.update(this.state.obstacles, this.circuit);
+      this.#recordCheckpointTiming(car);
+      if (car.completedLap) this.#recordLapTiming(car);
+      if (racing && car.finished && !car.damaged) this.#recordFinishTiming(car);
       if (alive && car.damaged) this.#onDeath(car);
       if (racing && car.finished && !car.damaged) {
         const group = this.#groupOf(car);

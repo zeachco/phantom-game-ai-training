@@ -77,6 +77,13 @@ export class Car {
   public finished = false;
   /** set for one frame when the car claims an in-order checkpoint */
   public passedCheckpoint = false;
+  /** checkpoint event consumed by CircuitRace to build split deltas */
+  public completedCheckpointIndex = -1;
+  public completedCheckpointFrames = 0;
+  /** most recently completed checkpoint split and its current-track delta */
+  public lastCheckpointIndex = -1;
+  public lastCheckpointFrames = 0;
+  public lastCheckpointDelta: number | null = null;
   /** gate the car is currently inside, -1 in none, charges out-of-order entries */
   public insideGate = -1;
   /** position of the next gate and the signed delta, refreshed for the viz */
@@ -98,8 +105,13 @@ export class Car {
   public framesSinceLapStart = 0;
   /** simulation frames spent on the last completed lap */
   public completedLapFrames = 0;
+  /** delta against the current-track best when the last lap was completed */
+  public lastLapDelta: number | null = null;
   /** simulation frames spent across all completed laps on this map */
   public totalRaceFrames = 0;
+  /** final total and delta when this car completes the required laps */
+  public lastFinishFrames = 0;
+  public lastFinishDelta: number | null = null;
   /** consecutive simulation frames spent under CAR_STALL_SPEED, 0 while moving */
   private stallFrames = 0;
   private img: HTMLImageElement;
@@ -344,6 +356,8 @@ export class Car {
         if (!isLapGate)
           this.brain.score +=
             config.CHECKPOINT_SPEED_BONUS / this.framesSinceLastCheckpoint;
+        this.completedCheckpointIndex = gate;
+        this.completedCheckpointFrames = this.framesSinceLastCheckpoint;
         this.framesSinceLastCheckpoint = 0;
         this.passedCheckpoint = true;
         this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;

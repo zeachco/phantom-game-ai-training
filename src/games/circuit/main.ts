@@ -121,6 +121,8 @@ export default async (state: typeof defaultState) => {
   let followTargetSince = 0;
   const FOLLOW_SWITCH_SCORE_GAP = 5;
   const FOLLOW_SWITCH_MIN_MS = 5_000;
+  /** keep the just-finished focus long enough for its timing row to be read */
+  const FINISH_FOCUS_MS = 3_000;
   let humanDriving = false;
   let lastCountdownTenths = -1;
 
@@ -333,6 +335,47 @@ export default async (state: typeof defaultState) => {
   totalFramesEl.className = 'frame-count';
   totalFramesEl.title = 'simulation frames on this map';
   totalFramesEl.textContent = 'total 0f';
+
+  type TimingLine = {
+    element: HTMLDivElement;
+    label: HTMLSpanElement;
+    value: HTMLSpanElement;
+    delta: HTMLSpanElement;
+  };
+  const makeTimingLine = (label: string, title: string): TimingLine => {
+    const element = document.createElement('div');
+    element.className = 'timing-line';
+    element.title = title;
+    const labelEl = document.createElement('span');
+    labelEl.className = 'timing-label';
+    labelEl.textContent = label;
+    const value = document.createElement('span');
+    value.className = 'timing-value';
+    value.textContent = '—';
+    const delta = document.createElement('span');
+    delta.className = 'timing-delta';
+    element.append(labelEl, value, delta);
+    return { element, label: labelEl, value, delta };
+  };
+  const checkpointTiming = makeTimingLine(
+    'cp',
+    'latest checkpoint split in simulation frames; delta is against the track best',
+  );
+  const lapTiming = makeTimingLine(
+    'lap',
+    'latest completed lap in simulation frames; delta is against the track best',
+  );
+  const finishTiming = makeTimingLine(
+    'finish',
+    'final race time in simulation frames; delta is against the track best',
+  );
+  const timingDeltas = document.createElement('div');
+  timingDeltas.className = 'timing-deltas';
+  timingDeltas.append(
+    checkpointTiming.element,
+    lapTiming.element,
+    finishTiming.element,
+  );
   const finishCountdown = document.createElement('div');
   finishCountdown.className = 'finish-countdown';
   finishCountdown.style.color = 'red';
@@ -347,7 +390,14 @@ export default async (state: typeof defaultState) => {
   speedoUnit.className = 'speedo-unit';
   speedoUnit.textContent = 'u/f';
   speedo.append(speedoValue, speedoUnit);
-  readout.append(finishCountdown, lapsEl, lapFramesEl, totalFramesEl, speedo);
+  readout.append(
+    finishCountdown,
+    lapsEl,
+    lapFramesEl,
+    totalFramesEl,
+    timingDeltas,
+    speedo,
+  );
   // the gate countdown: frame budget left for the followed car to claim its
   // next gate
   const gateGauge = document.createElement('div');
@@ -554,6 +604,7 @@ export default async (state: typeof defaultState) => {
           totalFramesEl.textContent = `total ${
             camTarget.totalRaceFrames + camTarget.framesSinceLapStart
           }f`;
+          updateFocusedTiming(camTarget);
           const gateFraction = Math.max(
             0,
             Math.min(
@@ -676,11 +727,16 @@ export default async (state: typeof defaultState) => {
   }
 
   function followedCar(): Car | undefined {
+    const now = performance.now();
+    const freshFinish = (car: Car) =>
+      car.finished &&
+      car.completedLapAt > 0 &&
+      now - car.completedLapAt < FINISH_FOCUS_MS;
     if (
       humanFollow &&
       state.human &&
       !state.human.damaged &&
-      !state.human.finished
+      (!state.human.finished || freshFinish(state.human))
     )
       return state.human;
     const inCategory = (car: Car) =>
@@ -706,8 +762,10 @@ export default async (state: typeof defaultState) => {
         }
       }
     }
-    const now = performance.now();
     const current = followTarget;
+    // Let the just-finished target remain focused briefly so its final timing
+    // and delta are visible before the camera picks another racer.
+    if (current && !current.damaged && freshFinish(current)) return current;
     if (
       current &&
       current !== leader &&
@@ -728,6 +786,45 @@ export default async (state: typeof defaultState) => {
 
   /** Rebuild the inline stats block of the followed brain; the DOM is only
    *  touched when the rendered text changes, so a steady frame is cheap. */
+  function updateTimingLine(
+    line: TimingLine,
+    frames: number | null,
+    delta: number | null,
+  ) {
+    line.value.textContent =
+      frames === null ? '—' : String(Math.max(0, Math.round(frames)));
+    line.delta.textContent =
+      delta === null ? '' : `(${delta > 0 ? '+' : ''}${Math.round(delta)})`;
+    line.delta.style.color =
+      delta === null
+        ? ''
+        : delta < 0
+          ? '#70e08a'
+          : delta > 0
+            ? '#ff7070'
+            : 'rgba(255, 255, 255, 0.55)';
+  }
+
+  function updateFocusedTiming(car: Car) {
+    checkpointTiming.label.textContent =
+      car.lastCheckpointIndex < 0 ? 'cp' : `cp${car.lastCheckpointIndex + 1}`;
+    updateTimingLine(
+      checkpointTiming,
+      car.lastCheckpointIndex < 0 ? null : car.lastCheckpointFrames,
+      car.lastCheckpointIndex < 0 ? null : car.lastCheckpointDelta,
+    );
+    updateTimingLine(
+      lapTiming,
+      car.laps < 1 ? null : car.completedLapFrames,
+      car.laps < 1 ? null : car.lastLapDelta,
+    );
+    updateTimingLine(
+      finishTiming,
+      car.lastFinishFrames > 0 ? car.lastFinishFrames : null,
+      car.lastFinishFrames > 0 ? car.lastFinishDelta : null,
+    );
+  }
+
   function updateBrainStats(network: NeuralNetwork, car: Car) {
     const mixed = network instanceof MixedNetwork ? network : undefined;
     const lines: { text?: string; html?: string }[] = [
