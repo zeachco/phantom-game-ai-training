@@ -30,9 +30,14 @@ export class Checkpoint {
     ctx.beginPath();
     ctx.moveTo(this.a.x, this.a.y);
     ctx.lineTo(this.b.x, this.b.y);
+    ctx.setLineDash([8, 2]);
+    ctx.lineWidth = 8;
     if (next) {
       const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 250);
-      ctx.strokeStyle = `rgba(255, 220, 0, ${pulse})`;
+      ctx.strokeStyle =
+        this.index === 0
+          ? `rgba(255, 0, 0, ${pulse})`
+          : `rgba(255, 220, 0, ${pulse})`;
       ctx.lineWidth = 6;
     } else {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
