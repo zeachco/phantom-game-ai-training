@@ -1,21 +1,24 @@
 import type { AABB, Vector } from '../../../utilities/math';
 
 export type ObstacleShape = 'circle' | 'wall';
+export type ObstacleType = 'static' | 'moving';
 
 const OBSTACLE_FILL = '#666';
 const OBSTACLE_OUTLINE = '#fff';
-const OBSTACLE_ACCENT = '#e33';
+const OBSTACLE_FLASH_RED = '#f44';
+const OBSTACLE_FLASH_YELLOW = '#ffdf3f';
 const CIRCLE_SIDES = 24;
 
 /**
- * A solid obstacle on the road. It never moves, so its polygon and box are
- * built once in the constructor and reused by the damage check and the rays.
+ * A solid obstacle on the road. Its polygon and box are reused by the damage
+ * check and the rays, and are rebuilt when a moving obstacle changes position.
  * Circles use a polygon approximation for collision and sensor consistency,
  * while their canvas rendering remains round.
  */
 export class Obstacle {
   public polygon: Vector[];
   public aabb: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  public warningFlash = false;
 
   constructor(
     public x: number,
@@ -24,6 +27,7 @@ export class Obstacle {
     public width: number,
     public height: number,
     public shape: ObstacleShape,
+    public type: ObstacleType = 'static',
   ) {
     const sides = shape === 'circle' ? CIRCLE_SIDES : 4;
     this.polygon = new Array(sides).fill(0).map(() => ({ x: 0, y: 0 }));
@@ -70,6 +74,14 @@ export class Obstacle {
     box.maxY = maxY;
   }
 
+  /** Move this obstacle while keeping collision and sensor geometry in sync. */
+  setPosition(x: number, y: number, angle: number) {
+    this.x = x;
+    this.y = y;
+    this.angle = angle;
+    this.#corners();
+  }
+
   #path(ctx: CanvasRenderingContext2D) {
     ctx.beginPath();
     if (this.shape === 'circle') {
@@ -102,7 +114,9 @@ export class Obstacle {
     ctx.strokeStyle = OBSTACLE_OUTLINE;
     ctx.stroke();
     ctx.lineDashOffset = 4;
-    ctx.strokeStyle = OBSTACLE_ACCENT;
+    ctx.strokeStyle = this.warningFlash
+      ? OBSTACLE_FLASH_RED
+      : OBSTACLE_FLASH_YELLOW;
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;

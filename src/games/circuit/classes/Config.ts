@@ -168,6 +168,14 @@ class Config {
   // obstacles, round objects along the road, none in the start zone
   public OBSTACLES_MIN = 4;
   public OBSTACLES_MAX = 32;
+  /** moving obstacles scale from none at difficulty zero to ten at max */
+  public MOVING_OBSTACLES_MAX = 10;
+  /** moving obstacles are twenty percent smaller than regular obstacles */
+  public MOVING_OBSTACLE_SCALE = 0.8;
+  /** fraction of the road crossed per simulation frame, left to right */
+  public MOVING_OBSTACLE_SPEED = 0.0025;
+  /** warning color phase advance per simulation frame for every obstacle */
+  public OBSTACLE_FLASH_SPEED = 0.1;
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge; edge-anchored blocks may extend half off the road */
   public OBSTACLE_PASS_GAP = 36;

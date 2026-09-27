@@ -13,6 +13,13 @@ export interface Segment {
   maxY: number;
 }
 
+interface MovingObstacleState {
+  obstacle: Obstacle;
+  index: number;
+  progress: number;
+  direction: 1 | -1;
+}
+
 /**
  * The looped track. The centerline is a radial curve r(theta), every ray from
  * the map center crosses it exactly once, so the random harmonics carve left
@@ -38,6 +45,8 @@ export class Circuit {
   public edgePaths: Path2D[] = [];
   /** obstacles placed along the circuit, seeded with the same random stream */
   public obstacles: Obstacle[] = [];
+  #movingObstacles: MovingObstacleState[] = [];
+  #obstacleFlashPhase = 0;
   /** centerline candidates for the per-car road membership query */
   #roadGrid = new Map<number, number[]>();
   #roadGridMinX = 0;
@@ -259,11 +268,17 @@ export class Circuit {
     // round, leaving a useful lane around each one. Edge-anchored obstacles
     // are centered on the boundary, so half of the obstacle can sit off-road.
     this.obstacles = [];
+    this.#movingObstacles = [];
+    this.#obstacleFlashPhase = 0;
     const span = Math.max(1, last - first);
     const obstacleCount = Math.round(
       config.OBSTACLES_MIN +
         difficulty * (config.OBSTACLES_MAX - config.OBSTACLES_MIN),
     );
+    const movingObstacleTarget = Math.round(
+      difficulty * config.MOVING_OBSTACLES_MAX,
+    );
+    let movingObstacleCount = 0;
     // Treat one checkpoint interval as a road section. At low difficulty,
     // obstacle centers are kept at least two sections apart; as difficulty
     // rises that gap eases down to one section, allowing the count to grow
@@ -308,7 +323,11 @@ export class Circuit {
       const maxWidth = Math.max(1, roadWidth - laneWidth);
       const minDiameter = Math.min(laneWidth * 0.7, maxWidth);
       const maxDiameter = Math.min(laneWidth * 0.8, maxWidth);
-      const width = minDiameter + rng() * (maxDiameter - minDiameter);
+      const moving =
+        movingObstacleCount < movingObstacleTarget &&
+        roadWidth >= laneWidth * 3 - 1e-6;
+      const size = moving ? config.MOVING_OBSTACLE_SCALE : 1;
+      const width = (minDiameter + rng() * (maxDiameter - minDiameter)) * size;
       const crossHalf = width / 2;
       const leftRoom = this.leftHalf[idx] - crossHalf;
       const rightRoom = this.rightHalf[idx] - crossHalf;
@@ -325,12 +344,15 @@ export class Circuit {
       // their outer edge flush with it. This lets half the obstacle overlap
       // the shoulder while the remaining road still has a full passable lane.
       const edgeOffset = rng() < 0.5 ? leftHalf[idx] : -rightHalf[idx];
-      const off = twoLaneRoad
-        ? edgeOffset
-        : minWithGap <= maxWithGap && rng() > 0.25
-          ? minWithGap + rng() * (maxWithGap - minWithGap)
-          : edgeOffset;
+      const off = moving
+        ? leftHalf[idx] - crossHalf
+        : twoLaneRoad
+          ? edgeOffset
+          : minWithGap <= maxWithGap && rng() > 0.25
+            ? minWithGap + rng() * (maxWithGap - minWithGap)
+            : edgeOffset;
 
+      if (moving) movingObstacleCount++;
       return new Obstacle(
         p.x + this.normals[idx].x * off,
         p.y + this.normals[idx].y * off,
@@ -338,6 +360,7 @@ export class Circuit {
         width,
         width,
         'circle',
+        moving ? 'moving' : 'static',
       );
     };
 
@@ -362,7 +385,19 @@ export class Circuit {
         obstacle = makeObstacle(idx);
         if (obstacle) obstacleIndices.push(idx);
       }
-      if (obstacle) this.obstacles.push(obstacle);
+      if (obstacle) {
+        this.obstacles.push(obstacle);
+        if (obstacle.type === 'moving') {
+          const state = {
+            obstacle,
+            index: obstacleIndices[obstacleIndices.length - 1],
+            progress: rng(),
+            direction: 1 as const,
+          };
+          this.#movingObstacles.push(state);
+          this.#positionMovingObstacle(state);
+        }
+      }
     }
 
     const loopPath = (pts: Vector[]) => {
@@ -412,6 +447,43 @@ export class Circuit {
         }
       }
       this.lanePaths.push(path);
+    }
+  }
+
+  #positionMovingObstacle(state: MovingObstacleState) {
+    const index = state.index;
+    const halfWidth = state.obstacle.width / 2;
+    const from = this.leftHalf[index] - halfWidth;
+    const to = -this.rightHalf[index] + halfWidth;
+    const offset = from + (to - from) * state.progress;
+    const point = this.points[index];
+    const normal = this.normals[index];
+    const tangent = this.tangents[index];
+    state.obstacle.setPosition(
+      point.x + normal.x * offset,
+      point.y + normal.y * offset,
+      Math.atan2(-tangent.x, -tangent.y),
+    );
+  }
+
+  /** Ping-pong moving obstacles between the left and right road edges. */
+  updateObstacles() {
+    this.#obstacleFlashPhase += config.OBSTACLE_FLASH_SPEED;
+    const warningFlash = Math.floor(this.#obstacleFlashPhase) % 2 === 1;
+    for (const obstacle of this.obstacles) {
+      obstacle.warningFlash = warningFlash;
+    }
+
+    for (const state of this.#movingObstacles) {
+      state.progress += config.MOVING_OBSTACLE_SPEED * state.direction;
+      if (state.progress >= 1) {
+        state.progress = 1;
+        state.direction = -1;
+      } else if (state.progress <= 0) {
+        state.progress = 0;
+        state.direction = 1;
+      }
+      this.#positionMovingObstacle(state);
     }
   }
 

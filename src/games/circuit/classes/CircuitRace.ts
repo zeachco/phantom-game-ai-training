@@ -493,6 +493,7 @@ export class CircuitRace {
 
   /** Advance one simulation frame, leaving rendering and HUD updates outside. */
   public update(now: number) {
+    this.circuit.updateObstacles();
     let savePoint = false;
     for (const car of this.state.cars) {
       const alive = !car.damaged;
