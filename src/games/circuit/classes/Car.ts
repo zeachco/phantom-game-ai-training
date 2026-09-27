@@ -509,14 +509,13 @@ export class Car {
   #move() {
     // 1. decompose old velocity in heading frame
     const v = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    const speedRatio = Math.min(1, v / this.maxSpeed);
     const steer = this.controls.left - this.controls.right;
+    // Steering fades in with speed: a stationary car cannot pivot in place.
     const target =
       steer *
-      lerp(
-        config.CAR_YAW_SHARP,
-        config.CAR_YAW_LAZY,
-        Math.min(1, v / this.maxSpeed),
-      );
+      lerp(config.CAR_YAW_SHARP, config.CAR_YAW_LAZY, speedRatio) *
+      speedRatio;
     this.va += (target - this.va) * config.CAR_YAW_RESPONSE;
     this.angle += this.va;
 
@@ -537,13 +536,10 @@ export class Car {
       else vf -= config.CAR_REVERSE_ACCEL * t;
     }
 
-    // 4. tire grip: lateral acceleration demands exceed grip limit, the lateral component persists
-    const demand = v * Math.abs(this.va);
-    const over = Math.min(
-      1,
-      demand / (this.maxSpeed * config.CAR_GRIP_LIMIT_RATIO),
-    );
-    const grip = lerp(config.CAR_GRIP, config.CAR_DRIFT_GRIP, over);
+    // 4. tire grip: friction falls with speed and steering input. This lets
+    // the car drift naturally without injecting extra sideways velocity.
+    const driftFactor = Math.min(1, speedRatio * Math.abs(steer));
+    const grip = lerp(config.CAR_GRIP, config.CAR_DRIFT_GRIP, driftFactor);
     vl *= 1 - grip;
 
     this.drifting = Math.abs(vl) > config.CAR_DRIFT_THRESHOLD;

@@ -57,6 +57,8 @@ export default async (state: typeof defaultState) => {
   /** world x/y mapped to the screen center, lerps so target switches animate */
   let camX = 0;
   let camY = 0;
+  let camAngle = 0;
+  let camAngleSet = false;
   let camSet = false;
   let panelOpen = !window.location.href.includes('demo=true');
   /** the race owns simulation state; this function coordinates browser UI. */
@@ -587,7 +589,7 @@ export default async (state: typeof defaultState) => {
       }
       const camTarget = followedCar();
       const carUpFollow = followForced || humanFollow;
-      const cameraAngle =
+      const targetCameraAngle =
         carUpFollow && camTarget
           ? camTarget.vx !== 0 || camTarget.vy !== 0
             ? Math.atan2(-camTarget.vx, -camTarget.vy)
@@ -599,11 +601,13 @@ export default async (state: typeof defaultState) => {
         camY = spawn.y;
         camSet = true;
       } else if (state.playing && camTarget) {
+        // Displace the camera along the car's current world-space direction;
+        // the view rotation is applied afterward and can lerp independently.
         const followX = carUpFollow
-          ? camTarget.x - Math.sin(cameraAngle) * CAMERA_AHEAD_DISTANCE
+          ? camTarget.x - Math.sin(targetCameraAngle) * CAMERA_AHEAD_DISTANCE
           : camTarget.x - 2 * camTarget.vx;
         const followY = carUpFollow
-          ? camTarget.y - Math.cos(cameraAngle) * CAMERA_AHEAD_DISTANCE
+          ? camTarget.y - Math.cos(targetCameraAngle) * CAMERA_AHEAD_DISTANCE
           : camTarget.y - 2 * camTarget.vy;
         if (!camSet) {
           camX = followX;
@@ -616,6 +620,23 @@ export default async (state: typeof defaultState) => {
         camX += (followX - camX) * 0.1;
         camY += (followY - camY) * 0.1;
       }
+      if (carUpFollow && camTarget) {
+        if (!camAngleSet) {
+          camAngle = targetCameraAngle;
+          camAngleSet = true;
+        } else {
+          // Interpolate over the shortest arc so the camera never snaps at π.
+          const delta = Math.atan2(
+            Math.sin(targetCameraAngle - camAngle),
+            Math.cos(targetCameraAngle - camAngle),
+          );
+          camAngle += delta * 0.1;
+        }
+      } else {
+        camAngle = 0;
+        camAngleSet = false;
+      }
+      const cameraAngle = camAngle;
       // the controls mimic the followed car, hidden while it is dead
       if (domUpdateDue) {
         steerOverlay.style.setProperty(

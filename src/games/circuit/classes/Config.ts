@@ -89,10 +89,8 @@ class Config {
   public CAR_YAW_RESPONSE = 0.35;
   /** lateral velocity fraction cancelled per frame when grip is not saturated */
   public CAR_GRIP = 0.45;
-  /** fraction cancelled when the grip limit is saturated: the drift */
+  /** fraction cancelled when speed and steering saturate the drift */
   public CAR_DRIFT_GRIP = 0.06;
-  /** grip limit as a fraction of maxSpeed, the turn demand that breaks it */
-  public CAR_GRIP_LIMIT_RATIO = 0.02;
   /** |lateral velocity| above which the car counts as drifting */
   public CAR_DRIFT_THRESHOLD = 0.15;
   /** forward speed fraction lost per frame while drifting: drifts bleed */
@@ -101,8 +99,8 @@ class Config {
   public CAR_BRAKE_DECEL = 0.1;
   /** reverse driving acceleration, the cap stays maxSpeed/2 */
   public CAR_REVERSE_ACCEL = 0.03;
-  /** tripled on purpose: the car needs the speed to actually drift */
-  public CAR_ACCELERATION = 0.09;
+  /** forward acceleration, reduced 25% so speed builds more gradually */
+  public CAR_ACCELERATION = 0.09 * 0.75;
   public CAR_FRICTION = 0.005;
   /** top speed in u/f */
   public CAR_MAX_SPEED = 9;
