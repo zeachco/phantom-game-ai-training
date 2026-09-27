@@ -1,11 +1,16 @@
 import {
+  expertSlotIds,
   hydrateExperts,
   MIXED_KIND,
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../../ai/Mixed';
 import type { NeuralNetwork } from '../../../ai/Network';
-import { type fileUtilities, PLAYER_COLOR } from '../../../ai/utils';
+import {
+  type fileUtilities,
+  networkLevelSizes,
+  PLAYER_COLOR,
+} from '../../../ai/utils';
 import { lerp } from '../../../utilities/math';
 import { ControlType } from '../types';
 import {
@@ -448,12 +453,33 @@ export class CircuitRace {
     this.#bestFinishFrames = Infinity;
     Object.assign(this.state, defaultState);
     this.state.playing = true;
+    const { inputCount, outputCount } = getCircuitBrainDimensions();
     this.state.sortedModels = this.io.loadAllModelLayers(
       config.MAX_NETWORK_LAYERS,
+      undefined,
+      (layers) => ({
+        levelSizes: networkLevelSizes(inputCount, outputCount, layers),
+      }),
+    );
+
+    // Mixed selector saves depend on the current regular expert library. Do
+    // this check before building any map pools so stale routing weights are
+    // removed instead of failing later during mutation.
+    const experts = hydrateExperts(
+      this.state.sortedModels,
+      inputCount,
+      outputCount,
+      config.MIXED_EXPERTS_PER_LAYER,
     );
     this.state.sortedMixed = this.io.loadAllModelLayers(
       MIXED_LEVELS,
       MIXED_KIND,
+      () => ({
+        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, experts.length],
+        kind: MIXED_KIND,
+        requireKind: true,
+        expertIds: expertSlotIds(experts),
+      }),
     );
     this.state.circuit = this.circuit;
     this.state.obstacles = this.circuit.obstacles;

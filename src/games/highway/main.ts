@@ -6,7 +6,7 @@ import {
   MixedNetwork,
 } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
-import { fileUtilities } from '../../ai/utils';
+import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
@@ -563,8 +563,30 @@ export default async (state: typeof defaultState) => {
     Object.assign(state, defaultState);
     state.playing = true;
     camSet = false;
-    state.sortedModels = io.loadAllModelLayers(config.MAX_NETWORK_LAYERS);
-    state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND);
+    const inputCount = config.SENSORS + 1;
+    const outputCount = 4;
+    state.sortedModels = io.loadAllModelLayers(
+      config.MAX_NETWORK_LAYERS,
+      undefined,
+      (layers) => ({
+        levelSizes: networkLevelSizes(inputCount, outputCount, layers),
+      }),
+    );
+
+    // Mixed selectors route to the exact expert library loaded above. Validate
+    // that library-dependent shape before the mixed save can enter a pool.
+    const experts = hydrateExperts(
+      state.sortedModels,
+      inputCount,
+      outputCount,
+      config.MIXED_EXPERTS_PER_LAYER,
+    );
+    state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND, () => ({
+      levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, experts.length],
+      kind: MIXED_KIND,
+      requireKind: true,
+      expertIds: expertSlotIds(experts),
+    }));
 
     // Game ender
     ray = new DeathRay();

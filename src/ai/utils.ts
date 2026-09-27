@@ -31,6 +31,89 @@ export type ModelsByLayerCount = (
   | any
 )[];
 
+/** The exact node counts a saved network must have at each level boundary. */
+export interface ModelShape {
+  levelSizes: number[];
+  /** Saved mixed brains must keep their selector kind separate from regular brains. */
+  kind?: string;
+  requireKind?: boolean;
+  /** Mixed brains may also identify the expert slots they route to. */
+  expertIds?: string[];
+}
+
+/** Matches the layer sizing used by NeuralNetwork without constructing a brain. */
+export function networkLevelSizes(
+  inputCount: number,
+  outputCount: number,
+  layerCount: number,
+) {
+  return Array.from({ length: layerCount + 1 }, (_value, index) =>
+    Math.floor(inputCount + ((outputCount - inputCount) * index) / layerCount),
+  );
+}
+
+/**
+ * Checks the complete persisted shape before it can reach NeuralNetwork.hydrate
+ * or mutate. JSON is untrusted here: malformed rows, ragged matrices, and
+ * changed sensor/control dimensions all otherwise fail later in the game loop.
+ */
+export function isModelShapeValid(
+  model: unknown,
+  shape: ModelShape,
+): model is ModelsByLayerCount[number] {
+  if (
+    !shape.levelSizes.length ||
+    shape.levelSizes.some((size) => !Number.isInteger(size) || size < 1)
+  )
+    return false;
+  if (!model || typeof model !== 'object') return false;
+  const saved = model as {
+    levels?: unknown;
+    kind?: unknown;
+    expertIds?: unknown;
+  };
+  if (
+    !Array.isArray(saved.levels) ||
+    saved.levels.length !== shape.levelSizes.length - 1
+  )
+    return false;
+  if (
+    shape.kind &&
+    (shape.requireKind
+      ? saved.kind !== shape.kind
+      : saved.kind !== undefined && saved.kind !== shape.kind)
+  )
+    return false;
+  if (shape.expertIds) {
+    if (
+      saved.expertIds !== undefined &&
+      (!Array.isArray(saved.expertIds) ||
+        saved.expertIds.length !== shape.expertIds.length ||
+        saved.expertIds.some((id, index) => id !== shape.expertIds?.[index]))
+    )
+      return false;
+  }
+
+  return saved.levels.every((level, index) => {
+    if (!level || typeof level !== 'object') return false;
+    const weights = (level as { weights?: unknown }).weights;
+    const inputCount = shape.levelSizes[index];
+    const outputCount = shape.levelSizes[index + 1];
+    return (
+      Array.isArray(weights) &&
+      weights.length === inputCount &&
+      weights.every(
+        (row) =>
+          Array.isArray(row) &&
+          row.length === outputCount &&
+          row.every(
+            (weight) => typeof weight === 'number' && Number.isFinite(weight),
+          ),
+      )
+    );
+  });
+}
+
 export function fileUtilities(game = '') {
   /** regular brains keep their historical namespace, other kinds get their own */
   const name = (layer: number, kind: string = DEFAULT_KIND) =>
@@ -85,18 +168,31 @@ export function fileUtilities(game = '') {
     layers: number,
     kind: string = DEFAULT_KIND,
     namespace = name(layers, kind),
+    shape?: ModelShape,
   ) {
-    let models: ModelsByLayerCount[number] = [];
+    const data = localStorage.getItem(namespace);
+    if (!data) return [] as ModelsByLayerCount[number];
+
     try {
-      const data = localStorage.getItem(namespace);
-      if (!data) throw new Error(`not found`);
-      models = JSON.parse(data);
+      let models = JSON.parse(data);
       // saves from before the multi-model era hold a single network object
       if (models && !Array.isArray(models)) models = [models];
-    } catch {
-      console.debug(`Nothing for layer ${layers} of ${kind}`);
+      if (
+        !Array.isArray(models) ||
+        (shape &&
+          (!models.length ||
+            !models.every((model) => isModelShapeValid(model, shape))))
+      ) {
+        throw new Error('incompatible model shape');
+      }
+      return models as ModelsByLayerCount[number];
+    } catch (err) {
+      // A bad group is removed immediately, so it cannot be encountered again
+      // by a later spawn, save, or mixed-expert hydration.
+      localStorage.removeItem(namespace);
+      console.warn(`Discarding invalid save ${namespace}`, err);
+      return [] as ModelsByLayerCount[number];
     }
-    return models;
   }
 
   /**
@@ -124,15 +220,15 @@ export function fileUtilities(game = '') {
     });
   }
 
-  function loadAllModelLayers(maxLayer = 1, kind: string = DEFAULT_KIND) {
+  function loadAllModelLayers(
+    maxLayer = 1,
+    kind: string = DEFAULT_KIND,
+    shapeForLayer?: (layers: number) => ModelShape,
+  ) {
     const load: ModelsByLayerCount[] = [];
-    try {
-      for (let i = 1; i <= maxLayer; i++) {
-        const model = loadModels(i, kind);
-        if (model) load[i] = model;
-      }
-    } catch (err) {
-      console.error(err);
+    for (let i = 1; i <= maxLayer; i++) {
+      const model = loadModels(i, kind, name(i, kind), shapeForLayer?.(i));
+      if (model.length) load[i] = model;
     }
     return load;
   }
