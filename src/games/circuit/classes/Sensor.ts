@@ -144,9 +144,11 @@ export class Sensor {
       ctx.lineTo(end.x, end.y);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(125, 211, 252, 0.22)';
+    ctx.fillStyle = this.car.color;
+    ctx.globalAlpha = 0.22;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(125, 211, 252, 0.8)';
+    ctx.strokeStyle = this.car.color;
+    ctx.globalAlpha = 0.8;
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.restore();

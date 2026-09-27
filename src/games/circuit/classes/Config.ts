@@ -109,13 +109,6 @@ class Config {
   public CLEAR_STORAGE = /clear/.test(window.location.href);
   /** leaving the road kills; score comes from claiming checkpoints */
 
-  // steering ui, the wheel and pedals mimic the followed car's outputs
-  /** wheel rotation at full steer, radians */
-  public STEER_UI_WHEEL_MAX_ANGLE = 2.2;
-  /** half the pill stroke, px: the cap rests centered, gas lifts it, reverse drops it */
-  public STEER_UI_PEDAL_TRAVEL = 27;
-  /** display lerp for the wheel, the brain outputs are noisy per frame */
-  public STEER_UI_SMOOTH = 0.35;
   /** optional browser cap while a human is actively being followed */
   public HUMAN_FPS_CAP_ENABLED = true;
   public HUMAN_FPS_CAP = 90;

@@ -29,7 +29,7 @@ export class TimingBoard {
     board.setAttribute('aria-label', 'Best laps and finishers');
     const title = document.createElement('div');
     title.className = 'timing-board-title';
-    title.textContent = 'race progress';
+    title.textContent = 'race';
 
     const columns = document.createElement('div');
     columns.className = 'timing-board-columns';
@@ -38,6 +38,11 @@ export class TimingBoard {
     board.append(title, columns);
     document.body.appendChild(board);
     this.element = board;
+  }
+
+  appendHeaderControl(control: HTMLElement) {
+    const title = this.element.querySelector('.timing-board-title');
+    title?.append(control);
   }
 
   #makeColumn(parent: HTMLElement, heading: string) {

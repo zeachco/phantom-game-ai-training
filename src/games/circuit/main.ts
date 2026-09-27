@@ -15,9 +15,15 @@ import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Car } from './classes/Car';
 import { CircuitRace } from './classes/CircuitRace';
 import { config } from './classes/Config';
-import { drawSteeringWheel } from './ui/steeringWheel';
+import { drawControlAxes, drawVelocityVector } from './ui/driveIndicators';
 import { TimingBoard } from './ui/TimingBoard';
-import { brainId, type defaultState, drawScores } from './utilities';
+import { TrackScoreBoard } from './ui/TrackScoreBoard';
+import {
+  brainId,
+  clearScoreRecords,
+  type defaultState,
+  drawScores,
+} from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -73,6 +79,9 @@ export default async (state: typeof defaultState) => {
   const clearBtn = document.createElement('button');
   clearBtn.className = 'model-btn';
   clearBtn.textContent = 'Clear training';
+  const clearScoresBtn = document.createElement('button');
+  clearScoresBtn.className = 'model-btn';
+  clearScoresBtn.textContent = 'Clear race records';
   loadBtn.onclick = async () => {
     try {
       const archive = await pickModelArchive();
@@ -103,6 +112,17 @@ export default async (state: typeof defaultState) => {
       return;
     io.discardGameModels();
     console.info('Cleared the training set of this game');
+    race.initialize();
+  };
+  clearScoresBtn.onclick = () => {
+    if (
+      !confirm(
+        'Clear all saved circuit race records? Neural networks are kept.',
+      )
+    )
+      return;
+    clearScoreRecords();
+    console.info('Cleared all circuit race records');
     race.initialize();
   };
 
@@ -291,7 +311,7 @@ export default async (state: typeof defaultState) => {
 
   const actions = document.createElement('div');
   actions.className = 'model-actions';
-  actions.append(loadBtn, saveBtn, clearBtn);
+  actions.append(loadBtn, saveBtn, clearBtn, clearScoresBtn);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -304,21 +324,22 @@ export default async (state: typeof defaultState) => {
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
 
-  // the wheel, pedals and speed mimic the followed car, display only
+  // The output box and velocity vector mimic the followed car, display only.
   const steerOverlay = document.createElement('div');
   steerOverlay.className = 'steer-overlay hidden';
-  const wheelCanvas = document.createElement('canvas');
-  wheelCanvas.className = 'steer-wheel';
-  wheelCanvas.width = 110;
-  wheelCanvas.height = 110;
-  const wheelCtx = wheelCanvas.getContext('2d');
-  // one pill for the signed throttle: centered neutral, up = gas, down = reverse
-  const pedal = document.createElement('div');
-  pedal.className = 'pedal';
-  pedal.title = 'throttle: up = gas, down = brake / reverse';
-  const pedalCap = document.createElement('div');
-  pedalCap.className = 'pedal-cap';
-  pedal.append(pedalCap);
+  const controlIndicators = document.createElement('div');
+  controlIndicators.className = 'control-indicators';
+  const controlCanvas = document.createElement('canvas');
+  controlCanvas.className = 'control-axis';
+  controlCanvas.width = 110;
+  controlCanvas.height = 110;
+  const controlCtx = controlCanvas.getContext('2d');
+  const velocityCanvas = document.createElement('canvas');
+  velocityCanvas.className = 'velocity-vector';
+  velocityCanvas.width = 110;
+  velocityCanvas.height = 34;
+  const velocityCtx = velocityCanvas.getContext('2d');
+  controlIndicators.append(controlCanvas, velocityCanvas);
   // the race, laps and speed readouts sit together, race on top, laps just
   // above the speed
   const readout = document.createElement('div');
@@ -418,11 +439,10 @@ export default async (state: typeof defaultState) => {
   const brainStats = document.createElement('div');
   brainStats.className = 'brain-stats';
   brainStats.title = 'followed brain stats';
-  steerOverlay.append(wheelCanvas, pedal, readout, gateGauge, brainStats);
+  steerOverlay.append(controlIndicators, gateGauge, readout, brainStats);
   document.body.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
-  let wheelAngle = 0;
   // The loop's first tick is eager, so every state it reads must exist by then.
   let lastStatsHtml = '';
   const shouldUpdateDom = createUpdateLimiter(20);
@@ -470,8 +490,6 @@ export default async (state: typeof defaultState) => {
   // the model panel is closed. Buttons apply immediately and update the hash.
   const seedControls = document.createElement('div');
   seedControls.className = 'seed-controls';
-  const seedLabel = document.createElement('span');
-  seedLabel.textContent = 'map';
   const seedValue = document.createElement('span');
   seedValue.className = 'seed-value';
   seedValue.textContent = String(seed);
@@ -485,17 +503,23 @@ export default async (state: typeof defaultState) => {
   nextSeed.textContent = '>';
   nextSeed.title = 'Next map';
   nextSeed.onclick = () => race.applyUserSeed(race.seed + 1);
-  seedControls.append(previousSeed, seedLabel, seedValue, nextSeed);
-  document.body.appendChild(seedControls);
+  seedControls.append(previousSeed, seedValue, nextSeed);
 
   const timingBoard = new TimingBoard(
     state,
     race.groups,
     race.completedFinishes,
   );
+  timingBoard.appendHeaderControl(seedControls);
+  const trackScoreBoard = new TrackScoreBoard(race.groups);
+  const topRightHud = document.createElement('div');
+  topRightHud.className = 'top-right-hud';
+  topRightHud.append(timingBoard.element, trackScoreBoard.element);
+  document.body.appendChild(topRightHud);
   const runningCategories = new Set<string>();
   race.initialize();
   timingBoard.update();
+  trackScoreBoard.update(race.seed);
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();
 
@@ -528,6 +552,7 @@ export default async (state: typeof defaultState) => {
       if (domUpdateDue) {
         race.refreshLeaderboard();
         timingBoard.update();
+        trackScoreBoard.update(race.seed);
         updateFollowButtons();
         if (race.seedChangeAt) {
           const remaining = Math.max(0, race.seedChangeAt - now);
@@ -575,6 +600,10 @@ export default async (state: typeof defaultState) => {
       }
       // the controls mimic the followed car, hidden while it is dead
       if (domUpdateDue) {
+        steerOverlay.style.setProperty(
+          '--hud-color',
+          camTarget?.color || '#c4c4c4',
+        );
         steerOverlay.classList.toggle(
           'hidden',
           !camTarget || lastFollowed?.damaged,
@@ -582,16 +611,24 @@ export default async (state: typeof defaultState) => {
       }
       if (camTarget) {
         const c = camTarget.controls;
-        const steer = Math.max(-1, Math.min(1, c.left - c.right));
-        wheelAngle +=
-          (steer * config.STEER_UI_WHEEL_MAX_ANGLE - wheelAngle) *
-          config.STEER_UI_SMOOTH;
-        if (wheelCtx) drawSteeringWheel(wheelCtx, wheelAngle);
+        if (controlCtx)
+          drawControlAxes(
+            controlCtx,
+            c.left,
+            c.right,
+            c.throttle,
+            camTarget.color,
+          );
+        if (velocityCtx)
+          drawVelocityVector(
+            velocityCtx,
+            camTarget.angle,
+            camTarget.vx,
+            camTarget.vy,
+            camTarget.maxSpeed,
+            camTarget.color,
+          );
         if (domUpdateDue) {
-          const throttle = Math.max(-1, Math.min(1, c.throttle));
-          pedalCap.style.transform = `translateY(${
-            (1 - throttle) * config.STEER_UI_PEDAL_TRAVEL
-          }px)`;
           speedoValue.textContent = Math.hypot(
             camTarget.vx,
             camTarget.vy,
@@ -613,7 +650,7 @@ export default async (state: typeof defaultState) => {
                 config.CHECKPOINT_BUDGET_FRAMES,
             ),
           );
-          gateGaugeFill.style.width = `${gateFraction * 100}%`;
+          gateGaugeFill.style.height = `${gateFraction * 100}%`;
           gateGauge.setAttribute(
             'aria-valuenow',
             String(camTarget.checkpointFramesRemaining),
@@ -826,53 +863,27 @@ export default async (state: typeof defaultState) => {
   }
 
   function updateBrainStats(network: NeuralNetwork, car: Car) {
-    const mixed = network instanceof MixedNetwork ? network : undefined;
-    const lines: { text?: string; html?: string }[] = [
-      { text: `Network ${network.id}` },
-    ];
-    if (network.mutationIndex === 0) {
-      lines.push({ text: 'Original model' });
-    } else {
-      lines.push({
-        text: `Mutation ${(network.mutationFactor * 100).toFixed(4)}%`,
-      });
-      lines.push({ text: `MutationIndex ${network.mutationIndex}` });
-    }
-    lines.push({ text: `Score ${Math.round(network.score)}` });
+    const mixed = network instanceof MixedNetwork;
     // Former record on this exact seed, from earlier visits to the track: the
     // live score of the current race is `scores.seed`, history is per seed.
     const groupKey = mixed ? 'mixed' : String(car.brainLayers);
     const group = race.groups.find((candidate) => candidate.key === groupKey);
     const previousBest = group?.scores.history[String(race.seed)];
-    if (typeof previousBest === 'number' && previousBest > 0) {
-      lines.push({ text: `PrevBest ${Math.round(previousBest)}` });
-    }
-    if (mixed?.selectorOutputs.length) {
-      // Softmax over the raw selector scores of the last pass gives the
-      // per-expert confidence the selector read out of the sensors.
-      const outputs = mixed.selectorOutputs;
-      const max = Math.max(...outputs);
-      const exps = outputs.map((value) => Math.exp(value - max));
-      const sum = exps.reduce((a, b) => a + b, 0);
-      const order = outputs
-        .map((_value, index) => index)
-        .sort((a, b) => exps[b] - exps[a]);
-      const chip = (index: number) => {
-        const expert = mixed.experts[index];
-        const color = layerColor(
-          expert.levels.length,
-          config.MAX_NETWORK_LAYERS,
-        );
-        const pct = Math.round((exps[index] / sum) * 100);
-        return `<span style="color: ${color}">${expert.id} ${pct}%</span>`;
-      };
-      lines.push({
-        html: `Driving ${chip(order[0])} · 2nd ${chip(order[1] ?? order[0])}`,
-      });
-    }
-    const html = lines
-      .map((line) => `<span>${line.html ?? line.text}</span>`)
-      .join('');
+    const best =
+      typeof previousBest === 'number' && previousBest > 0
+        ? Math.round(previousBest)
+        : '—';
+    const mutation =
+      network.mutationIndex === 0
+        ? 'Original model'
+        : `Mut ${(network.mutationFactor * 100).toFixed(4)}%`;
+    const lines = [
+      `Net ${network.id}`,
+      mutation,
+      `Score ${Math.round(network.score)}`,
+      `Best ${best}`,
+    ];
+    const html = lines.map((line) => `<span>${line}</span>`).join('');
     if (html !== lastStatsHtml) {
       lastStatsHtml = html;
       brainStats.innerHTML = html;

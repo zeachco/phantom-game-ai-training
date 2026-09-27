@@ -119,6 +119,13 @@ export function saveScores(group: Group, scores = group.scores) {
   localStorage.setItem(scoreKey(group), JSON.stringify(scores));
 }
 
+/** Remove race records without touching any saved neural networks. */
+export function clearScoreRecords() {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('circuit_score_')) localStorage.removeItem(key);
+  }
+}
+
 /** A new seed records the old map high and starts a fresh comparison.
  * History lives per track for HUD reference, never as a goal for the new run. */
 export function foldScores(scores: GroupScores, newSeed: number) {
