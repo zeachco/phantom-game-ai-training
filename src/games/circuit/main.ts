@@ -30,6 +30,26 @@ const neuralVisualizer = new Visualizer(config);
 const io = fileUtilities('circuit');
 if (config.CLEAR_STORAGE) io.discardModels();
 
+async function loadDefaultModels(onlyMissing = false): Promise<string[]> {
+  const response = await fetch(
+    new URL('./presets/circuit_models_default.json', import.meta.url),
+  );
+  if (!response.ok)
+    throw new Error(`Default models not found (${response.status})`);
+  const archive = await response.json();
+  if (archive.game !== 'circuit' || !archive.models) {
+    throw new Error('Invalid circuit default models');
+  }
+  const models = onlyMissing
+    ? Object.fromEntries(
+        Object.entries(archive.models).filter(
+          ([key]) => !localStorage.getItem(key),
+        ),
+      )
+    : archive.models;
+  return io.importModels(models);
+}
+
 /** the panel takes that share of the screen while open, capped in width,
  * the map keeps whatever is left */
 const PANEL_RATIO = 0.75;
@@ -76,9 +96,10 @@ export default async (state: typeof defaultState) => {
   const loadBtn = document.createElement('button');
   loadBtn.className = 'model-btn';
   loadBtn.textContent = 'Load models';
-  loadBtn.disabled = true;
-  loadBtn.title =
-    'disabled for now: the default archive predates the current sensors';
+  loadBtn.title = 'Load the bundled circuit models';
+  const importBtn = document.createElement('button');
+  importBtn.className = 'model-btn';
+  importBtn.textContent = 'Import archive';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
@@ -89,6 +110,19 @@ export default async (state: typeof defaultState) => {
   clearScoresBtn.className = 'model-btn';
   clearScoresBtn.textContent = 'Clear race records';
   loadBtn.onclick = async () => {
+    try {
+      loadBtn.disabled = true;
+      const written = await loadDefaultModels();
+      if (!written.length) throw new Error('No compatible default models');
+      console.info(`Loaded default models: ${written.join(', ')}`);
+      race.initialize();
+    } catch (err) {
+      alert(err?.message || 'Unable to load default models');
+    } finally {
+      loadBtn.disabled = false;
+    }
+  };
+  importBtn.onclick = async () => {
     try {
       const archive = await pickModelArchive();
       if (archive.game && archive.game !== 'circuit') {
@@ -318,7 +352,7 @@ export default async (state: typeof defaultState) => {
 
   const actions = document.createElement('div');
   actions.className = 'model-actions';
-  actions.append(loadBtn, saveBtn, clearBtn, clearScoresBtn);
+  actions.append(loadBtn, saveBtn, importBtn, clearBtn, clearScoresBtn);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -522,6 +556,15 @@ export default async (state: typeof defaultState) => {
   topRightHud.append(trackScoreBoard.element, timingBoard.element);
   document.body.appendChild(topRightHud);
   const runningCategories = new Set<string>();
+  if (new URLSearchParams(window.location.search).get('demo') === 'true') {
+    try {
+      const written = await loadDefaultModels(true);
+      if (written.length)
+        console.info(`Loaded default models: ${written.join(', ')}`);
+    } catch (err) {
+      console.warn('Unable to load default circuit models', err);
+    }
+  }
   race.initialize();
   timingBoard.update();
   trackScoreBoard.update(race.seed);
