@@ -235,6 +235,9 @@ export class Car {
       this.#assessDamage(obstacles, circuit) ||
       this.#checkStall() ||
       this.#checkCheckpointBudget();
+    if (this.damaged && this.brain) {
+      this.brain.score -= Math.hypot(this.vx, this.vy);
+    }
     if (this.sensor) {
       this.sensor.update(obstacles, circuit.segments);
       if (this.useAI) {
