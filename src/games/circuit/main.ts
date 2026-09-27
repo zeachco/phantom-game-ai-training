@@ -443,6 +443,7 @@ export default async (state: typeof defaultState) => {
     race.groups,
     race.completedFinishes,
   );
+  const runningCategories = new Set<string>();
   race.initialize();
   timingBoard.update();
   // paint the button states before the first frame, they load with their colors
@@ -655,7 +656,6 @@ export default async (state: typeof defaultState) => {
 
   /** car buttons stay filled with their car color while the category
    *  races, and turn to an outline once its last car is dead */
-  const runningCategories = new Set<string>();
   function updateFollowButtons() {
     // one pass fills every category at once instead of one scan per button
     runningCategories.clear();
