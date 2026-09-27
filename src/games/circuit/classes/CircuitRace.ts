@@ -5,7 +5,7 @@ import {
   MixedNetwork,
 } from '../../../ai/Mixed';
 import type { NeuralNetwork } from '../../../ai/Network';
-import type { fileUtilities } from '../../../ai/utils';
+import { type fileUtilities, PLAYER_COLOR } from '../../../ai/utils';
 import { lerp } from '../../../utilities/math';
 import { ControlType } from '../types';
 import {
@@ -83,6 +83,7 @@ export class CircuitRace {
       'white',
       1,
     );
+    car.setColor(PLAYER_COLOR);
     this.state.human = car;
     this.state.cars.push(car);
     this.state.living++;
