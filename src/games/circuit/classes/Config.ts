@@ -118,8 +118,8 @@ class Config {
   public CIRCUIT_BASE_RADIUS = 1500;
   /** max base deviation from the radius, split over four broad waves */
   public CIRCUIT_WAVINESS = 420;
-  /** seed scale for difficulty = seed / (scale + seed) */
-  public CIRCUIT_DIFFICULTY_SEED_BASE = 10;
+  /** seed at which the circuit difficulty reaches its maximum */
+  public CIRCUIT_DIFFICULTY_SEED_BASE = 100;
   /** low-frequency waves retained at difficulty zero */
   public CIRCUIT_BASE_HARMONICS = 4;
   /** maximum number of extra, higher-frequency waves at full difficulty */
@@ -168,7 +168,8 @@ class Config {
   public LAPS_PER_SEED = 3;
 
   // obstacles, round objects along the road, none in the start zone
-  public OBSTACLES = 12;
+  public OBSTACLES_MIN = 4;
+  public OBSTACLES_MAX = 32;
   /** one car width (Car.width): the minimum gap between a block's side and
    *  the road edge; edge-anchored blocks may extend half off the road */
   public OBSTACLE_PASS_GAP = 36;

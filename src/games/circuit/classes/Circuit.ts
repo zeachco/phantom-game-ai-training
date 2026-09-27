@@ -54,7 +54,7 @@ export class Circuit {
     const nonnegativeSeed = Math.max(0, this.seed);
     const difficulty = Math.min(
       1,
-      nonnegativeSeed / (config.CIRCUIT_DIFFICULTY_SEED_BASE + nonnegativeSeed),
+      nonnegativeSeed / config.CIRCUIT_DIFFICULTY_SEED_BASE,
     );
     // Random harmonics of the radius start as four low frequencies for wide
     // sweeping turns.  Extra waves use this same seeded stream, so maps stay
@@ -260,7 +260,26 @@ export class Circuit {
     // are centered on the boundary, so half of the obstacle can sit off-road.
     this.obstacles = [];
     const span = Math.max(1, last - first);
-    const step = span / config.OBSTACLES;
+    const obstacleCount = Math.round(
+      config.OBSTACLES_MIN +
+        difficulty * (config.OBSTACLES_MAX - config.OBSTACLES_MIN),
+    );
+    // Treat one checkpoint interval as a road section. At low difficulty,
+    // obstacle centers are kept at least two sections apart; as difficulty
+    // rises that gap eases down to one section, allowing the count to grow
+    // without ever clustering obstacles at the start of the road.
+    const sectionLength = span / config.CHECKPOINTS;
+    // Indices are discrete, so round down once here; otherwise the rounded
+    // center points at full difficulty would reject every fifth slot.
+    const minimumSpacing = Math.max(
+      1,
+      Math.floor(sectionLength * (2 - difficulty)),
+    );
+    const step = span / obstacleCount;
+    // Keep the random displacement inside the spacing budget. Without this
+    // bound, jittering two neighboring evenly-spaced slots could put them
+    // right next to each other again.
+    const jitter = Math.max(0, (step - minimumSpacing) / 2);
     const roadWidthAt = (idx: number) =>
       this.leftHalf[idx] + this.rightHalf[idx];
     const hasLaneReductionAhead = (idx: number) => {
@@ -322,18 +341,26 @@ export class Circuit {
       );
     };
 
-    for (let i = 0; i < config.OBSTACLES; i++) {
+    const obstacleIndices: number[] = [];
+    for (let i = 0; i < obstacleCount; i++) {
       const base = first + (i + 0.5) * step;
       let obstacle: Obstacle | null = null;
-      // Keep twelve obstacles even when a seeded sample lands in a
-      // one-lane section: reroll that sample rather than adding an obstacle
-      // where it would remove every safe route.
-      for (let attempt = 0; attempt < n && !obstacle; attempt++) {
-        const idx =
-          (((Math.round(base + (-0.35 + rng() * 0.7) * step) + attempt) % n) +
-            n) %
-          n;
+      // Search only inside this obstacle's own evenly-spaced slot. If the
+      // slot falls in a one-lane section, leave it empty rather than retrying
+      // at the next point and creating a cluster of obstacles.
+      const offsets = [0, -jitter * 0.5, jitter * 0.5, -jitter, jitter];
+      for (let attempt = 0; attempt < offsets.length && !obstacle; attempt++) {
+        const idx = Math.round(base + offsets[attempt]);
+        if (idx < first || idx > last) continue;
+        if (
+          obstacleIndices.some(
+            (placedIdx) => Math.abs(placedIdx - idx) < minimumSpacing,
+          )
+        ) {
+          continue;
+        }
         obstacle = makeObstacle(idx);
+        if (obstacle) obstacleIndices.push(idx);
       }
       if (obstacle) this.obstacles.push(obstacle);
     }
