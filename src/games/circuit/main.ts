@@ -480,7 +480,7 @@ export default async (state: typeof defaultState) => {
     },
     onSeedChanged: (nextSeed) => {
       writeSeed(nextSeed);
-      seedValue.textContent = String(nextSeed);
+      timingBoard.setSeed(nextSeed);
       finishCountdown.hidden = true;
       camSet = false;
     },
@@ -490,9 +490,6 @@ export default async (state: typeof defaultState) => {
   // the model panel is closed. Buttons apply immediately and update the hash.
   const seedControls = document.createElement('div');
   seedControls.className = 'seed-controls';
-  const seedValue = document.createElement('span');
-  seedValue.className = 'seed-value';
-  seedValue.textContent = String(seed);
   const previousSeed = document.createElement('button');
   previousSeed.type = 'button';
   previousSeed.textContent = '<';
@@ -503,9 +500,13 @@ export default async (state: typeof defaultState) => {
   nextSeed.textContent = '>';
   nextSeed.title = 'Next map';
   nextSeed.onclick = () => race.applyUserSeed(race.seed + 1);
-  seedControls.append(previousSeed, seedValue, nextSeed);
+  seedControls.append(previousSeed, nextSeed);
 
-  const timingBoard = new TimingBoard(race.groups, race.completedFinishes);
+  const timingBoard = new TimingBoard(
+    race.groups,
+    race.completedFinishes,
+    race.seed,
+  );
   timingBoard.appendHeaderControl(seedControls);
   const trackScoreBoard = new TrackScoreBoard(race.groups);
   const topRightHud = document.createElement('div');
