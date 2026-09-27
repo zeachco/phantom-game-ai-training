@@ -721,6 +721,24 @@ export default async (state: typeof defaultState) => {
       for (let i = 0; i < race.circuit.obstacles.length; i++) {
         race.circuit.obstacles[i].draw(carCtx);
       }
+      // Show the predictive collision radius only when the followed car's
+      // current sensor fan can see the moving obstacle.
+      const followedSensor = camTarget?.sensor;
+      if (followedSensor) {
+        for (const obstacle of race.circuit.obstacles) {
+          if (
+            obstacle.type !== 'moving' ||
+            !followedSensor.isObstacleInView(obstacle)
+          ) {
+            continue;
+          }
+          const distance = Math.hypot(
+            obstacle.x - followedSensor.car.x,
+            obstacle.y - followedSensor.car.y,
+          );
+          obstacle.drawCollisionRadius(carCtx, distance);
+        }
+      }
       // the human car draws last, above every other car, no sensor fan
       const corpseNow = performance.now();
       // off-screen cars cost a transform and two blits for nothing

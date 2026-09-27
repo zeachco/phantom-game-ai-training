@@ -174,6 +174,10 @@ class Config {
   public MOVING_OBSTACLE_SCALE = 0.8;
   /** fraction of the road crossed per simulation frame, left to right */
   public MOVING_OBSTACLE_SPEED = 0.0025;
+  /** how quickly a moving obstacle steers toward its new travel vector */
+  public MOVING_OBSTACLE_TURN_RESPONSE = 0.08;
+  /** scale applied to speed × distance for the sensor translation */
+  public MOVING_OBSTACLE_SENSOR_OFFSET_SCALE = 0.25;
   /** warning color phase advance per simulation frame for every obstacle */
   public OBSTACLE_FLASH_SPEED = 0.1;
   /** one car width (Car.width): the minimum gap between a block's side and

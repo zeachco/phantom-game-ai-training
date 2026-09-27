@@ -59,6 +59,51 @@ export class Sensor {
     }
   }
 
+  /** Whether an obstacle's translated sensor radius is inside any current ray. */
+  isObstacleInView(obstacle: Obstacle) {
+    for (const ray of this.rays) {
+      const origin = ray[0];
+      const distance = Math.hypot(obstacle.x - origin.x, obstacle.y - origin.y);
+      const sensorOffset = obstacle.getSensorCollisionOffset(distance);
+      const projectedX =
+        obstacle.x + obstacle.movementDirectionX * sensorOffset;
+      const projectedY =
+        obstacle.y + obstacle.movementDirectionY * sensorOffset;
+      const actualHit = circleIntersectionOffset(
+        ray[0].x,
+        ray[0].y,
+        ray[1].x,
+        ray[1].y,
+        obstacle.x,
+        obstacle.y,
+        obstacle.width / 2,
+      );
+      const projectedHit = circleIntersectionOffset(
+        ray[0].x,
+        ray[0].y,
+        ray[1].x,
+        ray[1].y,
+        projectedX,
+        projectedY,
+        obstacle.width / 2,
+      );
+      const linkHit = intersectionOffset(
+        ray[0].x,
+        ray[0].y,
+        ray[1].x,
+        ray[1].y,
+        obstacle.x,
+        obstacle.y,
+        projectedX,
+        projectedY,
+      );
+      if (actualHit >= 0 || projectedHit >= 0 || linkHit >= 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   #getReading(
     ray: Vector[],
     obstacles: Obstacle[],
@@ -72,6 +117,48 @@ export class Sensor {
 
     for (let i = 0; i < obstacles.length; i++) {
       const obstacle = obstacles[i];
+      if (obstacle.type === 'moving') {
+        const distance = Math.hypot(obstacle.x - ax, obstacle.y - ay);
+        const sensorOffset = obstacle.getSensorCollisionOffset(distance);
+        const projectedX =
+          obstacle.x + obstacle.movementDirectionX * sensorOffset;
+        const projectedY =
+          obstacle.y + obstacle.movementDirectionY * sensorOffset;
+        const actualOffset = circleIntersectionOffset(
+          ax,
+          ay,
+          bx,
+          by,
+          obstacle.x,
+          obstacle.y,
+          obstacle.width / 2,
+        );
+        const projectedOffset = circleIntersectionOffset(
+          ax,
+          ay,
+          bx,
+          by,
+          projectedX,
+          projectedY,
+          obstacle.width / 2,
+        );
+        const linkOffset = intersectionOffset(
+          ax,
+          ay,
+          bx,
+          by,
+          obstacle.x,
+          obstacle.y,
+          projectedX,
+          projectedY,
+        );
+        if (actualOffset >= 0 && actualOffset < bestOffset)
+          bestOffset = actualOffset;
+        if (projectedOffset >= 0 && projectedOffset < bestOffset)
+          bestOffset = projectedOffset;
+        if (linkOffset >= 0 && linkOffset < bestOffset) bestOffset = linkOffset;
+        continue;
+      }
       // most rays miss most blocks, the box rejects them before any edge test
       if (!segmentHitsAABB(ax, ay, bx, by, obstacle.aabb)) continue;
       const poly = obstacle.polygon;
@@ -153,6 +240,32 @@ export class Sensor {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+function circleIntersectionOffset(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  radius: number,
+) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const fx = ax - cx;
+  const fy = ay - cy;
+  const a = dx * dx + dy * dy;
+  if (a === 0) return -1;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - radius * radius;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return -1;
+  const root = Math.sqrt(discriminant);
+  const first = (-b - root) / (2 * a);
+  const second = (-b + root) / (2 * a);
+  if (first >= 0 && first <= 1) return first;
+  return second >= 0 && second <= 1 ? second : -1;
 }
 
 function intersectionOffset(

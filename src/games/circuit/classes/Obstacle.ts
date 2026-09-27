@@ -1,4 +1,5 @@
 import type { AABB, Vector } from '../../../utilities/math';
+import { config } from './Config';
 
 export type ObstacleShape = 'circle' | 'wall';
 export type ObstacleType = 'static' | 'moving';
@@ -18,6 +19,11 @@ const CIRCLE_SIDES = 24;
 export class Obstacle {
   public polygon: Vector[];
   public aabb: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  /** world units moved per simulation frame; zero for static obstacles */
+  public movementSpeed = 0;
+  /** normalized direction of travel used by the predictive collision radius */
+  public movementDirectionX = 0;
+  public movementDirectionY = 0;
   public warningFlash = false;
 
   constructor(
@@ -80,6 +86,43 @@ export class Obstacle {
     this.y = y;
     this.angle = angle;
     this.#corners();
+  }
+
+  /** Distance-based translation for the sensor's predictive obstacle position. */
+  getSensorCollisionOffset(distance: number) {
+    return this.type === 'moving'
+      ? this.movementSpeed *
+          Math.max(0, distance) *
+          config.MOVING_OBSTACLE_SENSOR_OFFSET_SCALE
+      : 0;
+  }
+
+  /** Draw the sensor's same-size radius translated along the travel vector. */
+  drawCollisionRadius(ctx: CanvasRenderingContext2D, distance: number) {
+    const offset = this.getSensorCollisionOffset(distance);
+    const projectedX = this.x + this.movementDirectionX * offset;
+    const projectedY = this.y + this.movementDirectionY * offset;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(projectedX, projectedY);
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.warningFlash
+      ? OBSTACLE_FLASH_RED
+      : OBSTACLE_FLASH_YELLOW;
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(projectedX, projectedY, this.width / 2, 0, Math.PI * 2);
+    ctx.setLineDash([8, 5]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.warningFlash
+      ? OBSTACLE_FLASH_RED
+      : OBSTACLE_FLASH_YELLOW;
+    ctx.globalAlpha = 0.65;
+    ctx.stroke();
+    ctx.restore();
   }
 
   #path(ctx: CanvasRenderingContext2D) {

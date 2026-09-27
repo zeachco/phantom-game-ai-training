@@ -417,7 +417,8 @@ export class Car {
     if (!circuit.isOnRoad(this.x, this.y)) return true;
     const box = this.aabb;
     for (let i = 0; i < obstacles.length; i++) {
-      const other = obstacles[i].aabb;
+      const obstacle = obstacles[i];
+      const other = obstacle.aabb;
       if (
         box.maxX < other.minX ||
         box.minX > other.maxX ||
@@ -426,9 +427,9 @@ export class Car {
       ) {
         continue;
       }
-      if (polysIntersect(this.polygon, obstacles[i].polygon)) {
+      if (polysIntersect(this.polygon, obstacle.polygon)) {
         if (this.brain) {
-          this.brain.score -= this.#obstaclePenalty(obstacles[i]);
+          this.brain.score -= this.#obstaclePenalty(obstacle);
         }
         return true;
       }

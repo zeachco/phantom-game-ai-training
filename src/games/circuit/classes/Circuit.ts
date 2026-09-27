@@ -17,7 +17,11 @@ interface MovingObstacleState {
   obstacle: Obstacle;
   index: number;
   progress: number;
-  direction: 1 | -1;
+  velocity: Vector;
+  targetVelocity: Vector;
+  pathX: number;
+  pathY: number;
+  pathLength2: number;
 }
 
 /**
@@ -388,11 +392,15 @@ export class Circuit {
       if (obstacle) {
         this.obstacles.push(obstacle);
         if (obstacle.type === 'moving') {
-          const state = {
+          const state: MovingObstacleState = {
             obstacle,
             index: obstacleIndices[obstacleIndices.length - 1],
             progress: rng(),
-            direction: 1 as const,
+            velocity: { x: 0, y: 0 },
+            targetVelocity: { x: 0, y: 0 },
+            pathX: 0,
+            pathY: 0,
+            pathLength2: 0,
           };
           this.#movingObstacles.push(state);
           this.#positionMovingObstacle(state);
@@ -455,9 +463,27 @@ export class Circuit {
     const halfWidth = state.obstacle.width / 2;
     const from = this.leftHalf[index] - halfWidth;
     const to = -this.rightHalf[index] + halfWidth;
+    const normal = this.normals[index];
+    state.pathX = normal.x * (to - from);
+    state.pathY = normal.y * (to - from);
+    state.pathLength2 = state.pathX ** 2 + state.pathY ** 2;
+    if (state.targetVelocity.x === 0 && state.targetVelocity.y === 0) {
+      const pathLength = Math.sqrt(state.pathLength2) || 1;
+      const speed = pathLength * config.MOVING_OBSTACLE_SPEED;
+      state.targetVelocity.x = (state.pathX / pathLength) * speed;
+      state.targetVelocity.y = (state.pathY / pathLength) * speed;
+      state.velocity.x = state.targetVelocity.x;
+      state.velocity.y = state.targetVelocity.y;
+    }
+
+    const velocityLength = Math.hypot(state.velocity.x, state.velocity.y);
+    state.obstacle.movementSpeed = velocityLength;
+    state.obstacle.movementDirectionX =
+      velocityLength > 1e-6 ? state.velocity.x / velocityLength : 0;
+    state.obstacle.movementDirectionY =
+      velocityLength > 1e-6 ? state.velocity.y / velocityLength : 0;
     const offset = from + (to - from) * state.progress;
     const point = this.points[index];
-    const normal = this.normals[index];
     const tangent = this.tangents[index];
     state.obstacle.setPosition(
       point.x + normal.x * offset,
@@ -466,7 +492,7 @@ export class Circuit {
     );
   }
 
-  /** Ping-pong moving obstacles between the left and right road edges. */
+  /** Move between the road edges with vector-based, gradual turns. */
   updateObstacles() {
     this.#obstacleFlashPhase += config.OBSTACLE_FLASH_SPEED;
     const warningFlash = Math.floor(this.#obstacleFlashPhase) % 2 === 1;
@@ -475,13 +501,30 @@ export class Circuit {
     }
 
     for (const state of this.#movingObstacles) {
-      state.progress += config.MOVING_OBSTACLE_SPEED * state.direction;
-      if (state.progress >= 1) {
+      state.velocity.x +=
+        (state.targetVelocity.x - state.velocity.x) *
+        config.MOVING_OBSTACLE_TURN_RESPONSE;
+      state.velocity.y +=
+        (state.targetVelocity.y - state.velocity.y) *
+        config.MOVING_OBSTACLE_TURN_RESPONSE;
+      const progressDelta =
+        (state.velocity.x * state.pathX + state.velocity.y * state.pathY) /
+        state.pathLength2;
+      const nextProgress = state.progress + progressDelta;
+      if (nextProgress >= 1) {
         state.progress = 1;
-        state.direction = -1;
-      } else if (state.progress <= 0) {
+        state.targetVelocity.x = -state.targetVelocity.x;
+        state.targetVelocity.y = -state.targetVelocity.y;
+        state.velocity.x = 0;
+        state.velocity.y = 0;
+      } else if (nextProgress <= 0) {
         state.progress = 0;
-        state.direction = 1;
+        state.targetVelocity.x = -state.targetVelocity.x;
+        state.targetVelocity.y = -state.targetVelocity.y;
+        state.velocity.x = 0;
+        state.velocity.y = 0;
+      } else {
+        state.progress = nextProgress;
       }
       this.#positionMovingObstacle(state);
     }
