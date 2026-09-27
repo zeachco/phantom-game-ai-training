@@ -505,16 +505,13 @@ export default async (state: typeof defaultState) => {
   nextSeed.onclick = () => race.applyUserSeed(race.seed + 1);
   seedControls.append(previousSeed, seedValue, nextSeed);
 
-  const timingBoard = new TimingBoard(
-    state,
-    race.groups,
-    race.completedFinishes,
-  );
+  const timingBoard = new TimingBoard(race.groups, race.completedFinishes);
   timingBoard.appendHeaderControl(seedControls);
   const trackScoreBoard = new TrackScoreBoard(race.groups);
   const topRightHud = document.createElement('div');
   topRightHud.className = 'top-right-hud';
-  topRightHud.append(timingBoard.element, trackScoreBoard.element);
+  // Keep global scores in the upper slot and the current race beneath it.
+  topRightHud.append(trackScoreBoard.element, timingBoard.element);
   document.body.appendChild(topRightHud);
   const runningCategories = new Set<string>();
   race.initialize();

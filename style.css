@@ -284,7 +284,7 @@ ul:hover {
   font-family: monospace;
 }
 
-/* current race and global scores share a top-right HUD stack */
+/* global scores and current race share a top-right HUD stack */
 .top-right-hud {
   position: fixed;
   top: 24px;
@@ -356,7 +356,7 @@ ul:hover {
   margin-top: 0.15em;
 }
 
-/* fastest completed AI laps, positioned just above the cockpit HUD */
+/* current race progress, positioned beneath the global scores */
 .timing-board {
   position: fixed;
   left: 24px;
@@ -379,20 +379,6 @@ ul:hover {
   color: rgba(255, 255, 255, 0.55);
   font-size: 0.85em;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.timing-board-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(86px, 0.8fr);
-  column-gap: 1.25em;
-}
-
-.timing-board-heading {
-  margin-bottom: 0.15em;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.85em;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
