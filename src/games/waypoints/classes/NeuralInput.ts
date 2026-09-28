@@ -1,6 +1,6 @@
 import { BufferGeometry, Line, LineBasicMaterial, Vector3 } from 'three';
+import { NeuralNetwork } from '../../../ai/neural-network/NeuralNetwork';
 import type { GamePad } from '../../../utilities/inputs/Gamepad';
-import { NeuralNetwork } from '../../cells/neural-network/NeuralNetwork';
 import type { Mob } from './Mob';
 
 const SHOW_WP_NB = 2;

@@ -1,5 +1,5 @@
-import type { NeuralNetwork } from '../games/cells/neural-network/NeuralNetwork';
 import { CtxTxt } from '../utilities/text';
+import type { NeuralNetwork } from './neural-network/NeuralNetwork';
 
 export class NeuralVisualizer {
   public network: NeuralNetwork;

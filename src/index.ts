@@ -6,10 +6,8 @@ type GameModule = { default: (state: object) => unknown };
 const apps = new Map<string, () => Promise<unknown>>([
   ['highway', () => import(`./games/highway/main.js`)],
   ['circuit', () => import(`./games/circuit/main.js`)],
-  ['ping-pong', () => import(`./games/ping-pong/index.js`)],
   ['space-shield', () => import(`./games/space-shield/index.js`)],
   ['waypoints', () => import(`./games/waypoints/main.js`)],
-  ['cells', () => import(`./games/cells/main.js`)],
 ]);
 
 const ul = document.createElement('ul');

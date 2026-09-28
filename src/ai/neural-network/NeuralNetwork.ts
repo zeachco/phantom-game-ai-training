@@ -1,4 +1,4 @@
-import { lerp, rand } from '../../../utilities/math.js';
+import { lerp, rand } from '../../utilities/math.js';
 import { NeuralUnit } from './NeuralUnit.js';
 
 export class NeuralNetwork {
