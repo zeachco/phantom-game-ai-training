@@ -363,8 +363,12 @@ export class Car {
         this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
         // claiming the last gate wraps the index back to the start: a full lap
         if (isLapGate) {
-          // large speed bonus every lap
-          this.brain.score += config.LAP_SPEED_BONUS / this.framesSinceLapStart;
+          // progress toward the finish is banked lap by lap: the flat lap
+          // bonus dominates, the speed bonus only breaks ties between
+          // finishers
+          this.brain.score +=
+            config.LAP_BONUS +
+            config.LAP_SPEED_BONUS / this.framesSinceLapStart;
           this.completedLap = true;
           this.laps++;
           this.completedLapAt = performance.now();
@@ -372,7 +376,12 @@ export class Car {
           this.totalRaceFrames += this.completedLapFrames;
           this.framesSinceLapStart = 0;
           this.lapStartedAt = this.completedLapAt;
-          if (this.laps >= config.LAPS_PER_SEED) this.finished = true;
+          if (this.laps >= config.LAPS_PER_SEED) {
+            this.finished = true;
+            // completing the map is the biggest reward in the game: it puts
+            // a finisher far ahead of any partial run, whatever its pace
+            this.brain.score += config.FINISH_BONUS;
+          }
         }
         this.nextCheckpoint = (this.nextCheckpoint + 1) % n;
       } else if (gate !== this.insideGate) {

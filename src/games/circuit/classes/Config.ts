@@ -155,8 +155,18 @@ class Config {
   /** speed bonus for every gate but the lap gate:
    *  CHECKPOINT_SPEED_BONUS / frames taken since the last gate */
   public CHECKPOINT_SPEED_BONUS = 10;
-  /** lap bonus: LAP_SPEED_BONUS / frames taken on the lap */
-  public LAP_SPEED_BONUS = 120;
+  /** flat reward for completing a full lap: progress toward the finish is
+   *  banked as it happens, before the map is done */
+  public LAP_BONUS = 40;
+  /** lap speed bonus: LAP_SPEED_BONUS / frames taken on the lap. Kept small
+   *  on purpose: it only breaks ties between finishers, it must never make a
+   *  fast-but-crashy line beat a slower line that actually finishes */
+  public LAP_SPEED_BONUS = 20;
+  /** one-time reward for completing LAPS_PER_SEED laps on a seed. The
+   *  biggest payout in the game: finishing must always dominate any speed
+   *  optimization on a single track, so the selected line is one that can
+   *  complete unknown maps, not one that shaves frames off a known one */
+  public FINISH_BONUS = 600;
   /** fixed debt for entering a checkpoint out of order */
   public WRONG_CHECKPOINT_PENALTY = 100;
   public CHECKPOINT_CLAIM_RADIUS = 100;
