@@ -340,6 +340,23 @@ ul:hover {
   margin-top: 0.15em;
 }
 
+/* the player keeps the camera during the map transition countdown */
+.race-end-countdown {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 1000;
+  transform: translate(-50%, -50%);
+  color: #ff4545;
+  font: bold clamp(1.5rem, 6vw, 3.5rem) monospace;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(255, 69, 69, 0.7);
+  pointer-events: none;
+}
+.race-end-countdown[hidden] {
+  display: none;
+}
+
 /* a first-place human finish is intentionally hard to miss without blocking input */
 .human-celebration {
   position: fixed;

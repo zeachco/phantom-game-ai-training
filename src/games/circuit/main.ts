@@ -442,6 +442,12 @@ export default async (state: typeof defaultState) => {
   finishCountdown.className = 'finish-countdown';
   finishCountdown.style.color = 'red';
   finishCountdown.hidden = true;
+  const raceEndCountdown = document.createElement('div');
+  raceEndCountdown.className = 'race-end-countdown';
+  raceEndCountdown.setAttribute('role', 'status');
+  raceEndCountdown.setAttribute('aria-live', 'polite');
+  raceEndCountdown.hidden = true;
+  document.body.appendChild(raceEndCountdown);
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
   speedo.title = 'speed';
@@ -552,6 +558,7 @@ export default async (state: typeof defaultState) => {
       timingBoard.setSeed(nextSeed);
       hideHumanCelebration();
       finishCountdown.hidden = true;
+      raceEndCountdown.hidden = true;
       camSet = false;
     },
   });
@@ -635,12 +642,23 @@ export default async (state: typeof defaultState) => {
         if (race.seedChangeAt) {
           const remaining = Math.max(0, race.seedChangeAt - now);
           finishCountdown.hidden = false;
+          const humanInControl =
+            humanFollow && !!state.human && !state.human.damaged;
+          finishCountdown.hidden = humanInControl;
+          raceEndCountdown.hidden = !humanInControl;
           // the label changes at most once per tenth of a second
           const tenths = Math.floor(remaining / 100);
+          const seconds = (tenths / 10).toFixed(1);
           if (tenths !== lastCountdownTenths) {
             lastCountdownTenths = tenths;
-            finishCountdown.textContent = `next track in ${(tenths / 10).toFixed(1)}s`;
+            finishCountdown.textContent = `next track in ${seconds}s`;
           }
+          if (humanInControl) {
+            raceEndCountdown.textContent = `${seconds}s remaining`;
+            hideHumanCelebration();
+          }
+        } else {
+          raceEndCountdown.hidden = true;
         }
       }
 
@@ -668,7 +686,7 @@ export default async (state: typeof defaultState) => {
             ? Math.atan2(-camTarget.vx, -camTarget.vy)
             : camTarget.angle
           : 0;
-      if (state.playing && race.seedChangeAt) {
+      if (state.playing && race.seedChangeAt && !camTarget) {
         const spawn = race.circuit.getSpawn();
         camX = spawn.x;
         camY = spawn.y;
@@ -899,8 +917,13 @@ export default async (state: typeof defaultState) => {
   }
 
   function followedCar(): Car | undefined {
-    // Once the race enters its finish countdown, stop following any finisher.
-    if (race.seedChangeAt) return undefined;
+    // During the map transition, keep the player-controlled car in view;
+    // otherwise the normal camera rests at the next map's spawn point.
+    if (race.seedChangeAt) {
+      if (humanFollow && state.human && !state.human.damaged)
+        return state.human;
+      return undefined;
+    }
     const now = performance.now();
     const freshFinish = (car: Car) =>
       car.finished &&
