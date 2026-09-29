@@ -105,8 +105,8 @@ export class CircuitRace {
   #slotMutation(group: Group, slot: number) {
     if (slot === 0) return 0;
     const divisor = group.mutationOnly
-      ? config.CARS_PER_GROUP / config.FINISHED_MUTATION_SCALE
-      : slot;
+      ? config.FINISHED_SWARM_DIVISOR
+      : Math.min(slot, config.MUTATION_LADDER_CAP);
     return Math.max(Number.MIN_VALUE, this.#maxMutation() / divisor);
   }
 

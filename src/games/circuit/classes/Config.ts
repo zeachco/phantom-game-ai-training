@@ -14,19 +14,26 @@ class Config {
    *  corpse), so the map never holds more AI cars than this */
   public CAR_NB = 200;
   public MAX_MUTATION_LVL = 0.5;
-  public MIN_MUTATION_LVL = Number.MIN_VALUE;
+  /** floor of the mutation schedule: exploration never fully dies, so a
+   *  population that has raced many maps keeps the ability to escape the
+   *  champion line it converged on */
+  public MIN_MUTATION_LVL = 0.1;
   /** every brain category runs a pool of exactly thist and push many cars, slots 0..9 */
   public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 15 : 50;
   /** a group that has seen one of its cars cross the finish line respawns as a
    *  mutation-only swarm of this many cars, on slots 1..FINISHED_CARS_PER_GROUP,
    *  so the untouched champion never re-enters that pool */
   public FINISHED_CARS_PER_GROUP = 5;
-  /** a finished group's cars mutate at the full ladder's bottom rung
-   *  (max / CARS_PER_GROUP) times this: the brain already wins, the swarm only
-   *  looks for a faster line */
-  public FINISHED_MUTATION_SCALE = 0.5;
+  /** a finished group's cars mutate at max / this divisor: the brain already
+   *  won this track, but the swarm keeps hunting genuinely different lines
+   *  for the next one instead of freezing the champion */
+  public FINISHED_SWARM_DIVISOR = 5;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
+  /** the slot ladder divides the max mutation by the slot number, capped here:
+   *  without the cap the late slots mutate by ~0 and most of the pool becomes
+   *  a clone of the champion */
+  public MUTATION_LADDER_CAP = 10;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
   public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */
