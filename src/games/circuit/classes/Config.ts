@@ -41,6 +41,11 @@ class Config {
   /** a finished swarm keeps this many explorers too: the champion is settled
    *  on this track, a new line is what the next one needs */
   public FINISHED_EXPLORER_CARS = 1;
+  /** hall of fame: recent lines kept per brain category. The newest one is
+   *  the champion, the older ones are re-explored by the scout slot, so a
+   *  second family of weights survives even when the champion line overfits
+   *  the maps it saw */
+  public HALL_OF_FAME_SIZE = 3;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
   public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */

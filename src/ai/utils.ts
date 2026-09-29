@@ -121,6 +121,7 @@ export function fileUtilities(game = '') {
 
   return {
     saveBestModels,
+    saveModelList,
     loadAllModelLayers,
     discardModels,
     discardModel,
@@ -162,6 +163,20 @@ export function fileUtilities(game = '') {
       console.info(`👍 ${name} scores ${score}`);
       localStorage.setItem(namespace, data);
     }
+  }
+
+  /**
+   * Writes the given list straight into the layer namespace. saveBestModels
+   * keeps only the top one per complexity; the circuit's hall of fame keeps
+   * several recent lines per layer, so it stores the window on its own.
+   */
+  function saveModelList(
+    layers: number,
+    models: NeuralNetwork[],
+    kind: string = DEFAULT_KIND,
+    namespace = name(layers, kind),
+  ) {
+    localStorage.setItem(namespace, JSON.stringify(models));
   }
 
   function loadModels(

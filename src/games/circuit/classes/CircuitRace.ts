@@ -104,6 +104,12 @@ export class CircuitRace {
 
   #slotMutation(group: Group, slot: number) {
     if (slot === 0) return 0;
+    if (this.#isScoutSlot(group, slot))
+      // scouts stay close to the old line they re-explore: bottom rung
+      return Math.max(
+        Number.MIN_VALUE,
+        this.#maxMutation() / config.MUTATION_LADDER_CAP,
+      );
     const divisor = group.mutationOnly
       ? config.FINISHED_SWARM_DIVISOR
       : Math.min(slot, config.MUTATION_LADDER_CAP);
@@ -122,6 +128,38 @@ export class CircuitRace {
       ? config.FINISHED_EXPLORER_CARS
       : config.EXPLORER_CARS;
     return slot >= size - explorers;
+  }
+
+  /** the second-to-last slot of a full pool re-explores the oldest kept
+   *  hall of fame line, so a second family of weights is always being
+   *  retrained in case the champion line fails to adapt to the next track */
+  #isScoutSlot(group: Group, slot: number) {
+    if (group.mutationOnly || group.isMixed) return false;
+    return slot === config.CARS_PER_GROUP - 1 - config.EXPLORER_CARS;
+  }
+
+  /** oldest line of the hall of fame, null while only one is kept */
+  #scoutSource(group: Group): {
+    brain: NeuralNetwork;
+    score: number;
+  } | null {
+    const library = this.state.sortedModels[group.layer] || [];
+    if (library.length < 2) return null;
+    const saved = library[library.length - 1] as NeuralNetwork;
+    return { brain: saved, score: saved.score || 0 };
+  }
+
+  /** brain a slot mutates from, null = a fresh random brain (explorers,
+   *  or a group with no champion yet) */
+  #slotSource(
+    group: Group,
+    slot: number,
+  ): { brain: NeuralNetwork; score: number } | null {
+    if (!group.best) return null;
+    if (this.#isExplorerSlot(group, slot)) return null;
+    if (this.#isScoutSlot(group, slot))
+      return this.#scoutSource(group) ?? group.best;
+    return group.best;
   }
 
   #spawnCar(group: Group, slot: number) {
@@ -143,24 +181,23 @@ export class CircuitRace {
             })
         : undefined,
     );
-    if (group.best && car.brain) {
-      if (this.#isExplorerSlot(group, slot)) {
-        // explorers keep the constructor's random brain: nothing to mutate
-        // from, the factor records the full re-roll in the HUD stats
-        car.brain.mutationIndex = slot;
-        car.brain.mutationFactor = 1;
-      } else {
-        car.brain.mutationIndex = slot;
-        car.brain.mutationFactor = this.#slotMutation(group, slot);
-        try {
-          car.brain.mutate(group.best.brain);
-        } catch (err) {
-          console.error(
-            `Line ${group.layer} save does not fit the current sensors, starting fresh.\nReset data with ${location.href}&clear=true`,
-            err instanceof Error ? err.message : err,
-          );
-        }
+    const source = this.#slotSource(group, slot);
+    if (source && car.brain) {
+      car.brain.mutationIndex = slot;
+      car.brain.mutationFactor = this.#slotMutation(group, slot);
+      try {
+        car.brain.mutate(source.brain);
+      } catch (err) {
+        console.error(
+          `Line ${group.layer} save does not fit the current sensors, starting fresh.\nReset data with ${location.href}&clear=true`,
+          err instanceof Error ? err.message : err,
+        );
       }
+    } else if (this.#isExplorerSlot(group, slot) && car.brain) {
+      // explorers keep the constructor's random brain: nothing to mutate
+      // from, the factor records the full re-roll in the HUD stats
+      car.brain.mutationIndex = slot;
+      car.brain.mutationFactor = 1;
     }
     return car;
   }
@@ -304,8 +341,17 @@ export class CircuitRace {
     const saves = group.isMixed
       ? this.state.sortedMixed
       : this.state.sortedModels;
-    saves[group.layer] = [brain];
-    if (group.isMixed) this.#refreshExperts();
+    if (group.isMixed) {
+      saves[group.layer] = [brain];
+      this.#refreshExperts();
+    } else {
+      // hall of fame: a rolling window of the recent lines, newest first.
+      // The older entries are what the scout slot re-explores
+      saves[group.layer] = [brain, ...(saves[group.layer] || [])].slice(
+        0,
+        config.HALL_OF_FAME_SIZE,
+      );
+    }
   }
 
   #settle(group: Group, car: Car) {
@@ -326,10 +372,22 @@ export class CircuitRace {
 
   public flushPendingSaves() {
     for (const group of this.#pendingSaves) {
-      if (group.best) this.io.saveBestModels([group.best.brain], 1);
+      this.#persistGroup(group);
       saveScores(group);
     }
     this.#pendingSaves.clear();
+  }
+
+  /** regular groups persist their whole hall of fame, mixed the single
+   *  champion save */
+  #persistGroup(group: Group) {
+    if (!group.best) return;
+    if (group.isMixed) this.io.saveBestModels([group.best.brain], 1);
+    else
+      this.io.saveModelList(
+        group.layer,
+        this.state.sortedModels[group.layer] || [group.best.brain],
+      );
   }
 
   /** Clear one saved champion and rebuild only that group's ladder. */
@@ -592,7 +650,7 @@ export class CircuitRace {
 
   public saveAll() {
     for (const group of this.groups) {
-      if (group.best) this.io.saveBestModels([group.best.brain], 1);
+      this.#persistGroup(group);
       saveScores(group);
     }
   }
