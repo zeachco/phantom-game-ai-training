@@ -34,13 +34,15 @@ class Config {
    *  without the cap the late slots mutate by ~0 and most of the pool becomes
    *  a clone of the champion */
   public MUTATION_LADDER_CAP = 10;
-  /** the last slots of a full pool drive a fresh fully-random brain instead
-   *  of a champion mutation: a standing source of novelty, so the population
-   *  can never fully converge on one overfit line */
+  /** the last slots of a pool drive a fresh fully-random brain instead of a
+   *  champion mutation: a standing source of novelty, so the population can
+   *  never fully converge on one overfit line */
   public EXPLORER_CARS = 1;
-  /** a finished swarm keeps this many explorers too: the champion is settled
-   *  on this track, a new line is what the next one needs */
-  public FINISHED_EXPLORER_CARS = 1;
+  /** random explorers only earn a car slot while the group is still finding
+   *  its feet: once its cars have completed this many laps on the current
+   *  seed, the line is proven and the slot reverts to a regular mutation
+   *  car, because a blank brain can no longer beat the established line */
+  public EXPLORER_LAP_LIMIT = 2;
   /** hall of fame: recent lines kept per brain category. The newest one is
    *  the champion, the older ones are re-explored by the scout slot, so a
    *  second family of weights survives even when the champion line overfits

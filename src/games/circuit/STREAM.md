@@ -35,10 +35,13 @@ the followed car and shifts the camera ahead to show more of the track.
   group's best brain, the higher slots carry progressively bolder mutations,
   with the slot ladder capped and the mutation level floored at 10% so
   exploration never fully dies no matter how many tracks have been run.
-  The last slot of each pool is an explorer: a fully fresh random brain,
-  a standing source of novelty. The second-to-last slot is a scout: it
-  re-explores the oldest line of the group's hall of fame — the last three
-  champion lines are kept per category, not just one. Once one of a group's cars crosses the finish line, that group is demoted: it
+  The last slot of each pool is an explorer: a fully fresh random brain while
+  the group's cars have completed fewer than 2 laps on the current map — a
+  standing source of novelty for a stuck line — and a regular mutation car
+  once the group is proven, since a blank brain can no longer beat the
+  established line. The second-to-last slot is a scout: it re-explores the
+  oldest line of the group's hall of fame — the last three champion lines are
+  kept per category, not just one. Once one of a group's cars crosses the finish line, that group is demoted: it
   respawns 5 cars on slots 1..5, every one of them a mutation (plus its own
   explorer), and the untouched
   original is out of the pool for good. Returning to a previously completed

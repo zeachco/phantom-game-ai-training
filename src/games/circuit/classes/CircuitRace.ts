@@ -116,18 +116,27 @@ export class CircuitRace {
     return Math.max(Number.MIN_VALUE, this.#maxMutation() / divisor);
   }
 
+  /** laps completed by this group's cars on the current seed, accumulated
+   *  across pool respawns: 0 right after the seed changed */
+  #groupSeedLaps(group: Group) {
+    let laps = 0;
+    for (const key of Object.keys(group.lapTimes))
+      laps += group.lapTimes[key].length;
+    return laps;
+  }
+
   /** the last slots of a pool skip the champion mutation and start from a
-   *  blank random brain: a standing source of new lines, so the population
-   *  can never fully converge on one overfit champion */
+   *  blank random brain — but only while the group is still struggling. Once
+   *  its cars have banked EXPLORER_LAP_LIMIT laps on this seed, the line is
+   *  proven, a blank brain can no longer beat it, and the slot reverts to a
+   *  regular mutation car */
   #isExplorerSlot(group: Group, slot: number) {
     if (slot === 0) return false;
+    if (this.#groupSeedLaps(group) >= config.EXPLORER_LAP_LIMIT) return false;
     const size = group.mutationOnly
       ? config.FINISHED_CARS_PER_GROUP
       : config.CARS_PER_GROUP;
-    const explorers = group.mutationOnly
-      ? config.FINISHED_EXPLORER_CARS
-      : config.EXPLORER_CARS;
-    return slot >= size - explorers;
+    return slot >= size - config.EXPLORER_CARS;
   }
 
   /** the second-to-last slot of a full pool re-explores the oldest kept
