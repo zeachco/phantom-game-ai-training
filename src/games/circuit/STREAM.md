@@ -18,19 +18,29 @@ the followed car and shifts the camera ahead to show more of the track.
   depending on how head-on the movement vector meets the obstacle, so a
   sideways brush is cheaper than driving straight into it, while going off
   the road only costs the life.
-- Score comes from checkpoint boosts, with each reward equal to the greater of
-  `10` and `1000 /` the frames taken since the previous checkpoint. Checkpoints are gates across
-  the road, claimed in order around the loop, and a gate touched
+- Score comes from checkpoints, gates across the road claimed in order around
+  the loop. Each gate in order is worth a flat 10 plus a small speed bonus
+  (`CHECKPOINT_SPEED_BONUS /` frames since the previous gate); a gate touched
   out of order subtracts its value, so a U-turn is a debt and donuts earn
-  nothing. Every car also runs a 7 s countdown between gates: reach the next
-  checkpoint or the car dies like a collision (the followed car's remaining
-  time shows in the "secs" badge of the bottom HUD).
+  nothing. Every completed lap banks a flat `LAP_BONUS` (40), and finishing
+  the required laps on a seed pays a one-time `FINISH_BONUS` (600) — the
+  biggest payout in the game, so the line that gets selected is one that can
+  complete the track, not one that is merely fast on a known one. Every car
+  also runs a 7 s countdown between gates: reach the next checkpoint or the
+  car dies like a collision (the followed car's remaining time shows in the
+  "secs" badge of the bottom HUD).
 - There are no generations: a crash leaves the car as a corpse that fades out
   from 50% opacity to 0 over 3 s. A brain category waits until every car in its pool is dead and the
   corpses are gone, then respawns the whole pool together — slot 0 clones the
-  group's best brain, the higher slots carry progressively bolder mutations.
-  Once one of a group's cars crosses the finish line, that group is demoted: it
-  respawns 5 cars on slots 1..5, every one of them a mutation, and the untouched
+  group's best brain, the higher slots carry progressively bolder mutations,
+  with the slot ladder capped and the mutation level floored at 10% so
+  exploration never fully dies no matter how many tracks have been run.
+  The last slot of each pool is an explorer: a fully fresh random brain,
+  a standing source of novelty. The second-to-last slot is a scout: it
+  re-explores the oldest line of the group's hall of fame — the last three
+  champion lines are kept per category, not just one. Once one of a group's cars crosses the finish line, that group is demoted: it
+  respawns 5 cars on slots 1..5, every one of them a mutation (plus its own
+  explorer), and the untouched
   original is out of the pool for good. Returning to a previously completed
   seed restores that group's mutation-only pool; a new seed starts its own
   ladder. Groups are independent, so one category never waits for
@@ -38,7 +48,7 @@ the followed car and shifts the camera ahead to show more of the track.
   bottom HUD shows the three fastest brain groups by completed-lap timing,
   measured in simulation frames.
 - The moment a car sets a new high on the current track, its brain is saved
-  as the group's new best (live, not at death). The map is a pure function of
+  at the front of the group's hall of fame, the new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
   seed input field changes it on demand, and any car completing
   LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
