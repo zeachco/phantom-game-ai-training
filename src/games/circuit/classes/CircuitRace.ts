@@ -110,6 +110,20 @@ export class CircuitRace {
     return Math.max(Number.MIN_VALUE, this.#maxMutation() / divisor);
   }
 
+  /** the last slots of a pool skip the champion mutation and start from a
+   *  blank random brain: a standing source of new lines, so the population
+   *  can never fully converge on one overfit champion */
+  #isExplorerSlot(group: Group, slot: number) {
+    if (slot === 0) return false;
+    const size = group.mutationOnly
+      ? config.FINISHED_CARS_PER_GROUP
+      : config.CARS_PER_GROUP;
+    const explorers = group.mutationOnly
+      ? config.FINISHED_EXPLORER_CARS
+      : config.EXPLORER_CARS;
+    return slot >= size - explorers;
+  }
+
   #spawnCar(group: Group, slot: number) {
     const spawn = this.circuit.getSpawn();
     const car = new Car(
@@ -130,15 +144,22 @@ export class CircuitRace {
         : undefined,
     );
     if (group.best && car.brain) {
-      car.brain.mutationIndex = slot;
-      car.brain.mutationFactor = this.#slotMutation(group, slot);
-      try {
-        car.brain.mutate(group.best.brain);
-      } catch (err) {
-        console.error(
-          `Line ${group.layer} save does not fit the current sensors, starting fresh.\nReset data with ${location.href}&clear=true`,
-          err instanceof Error ? err.message : err,
-        );
+      if (this.#isExplorerSlot(group, slot)) {
+        // explorers keep the constructor's random brain: nothing to mutate
+        // from, the factor records the full re-roll in the HUD stats
+        car.brain.mutationIndex = slot;
+        car.brain.mutationFactor = 1;
+      } else {
+        car.brain.mutationIndex = slot;
+        car.brain.mutationFactor = this.#slotMutation(group, slot);
+        try {
+          car.brain.mutate(group.best.brain);
+        } catch (err) {
+          console.error(
+            `Line ${group.layer} save does not fit the current sensors, starting fresh.\nReset data with ${location.href}&clear=true`,
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
     }
     return car;

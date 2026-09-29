@@ -34,6 +34,13 @@ class Config {
    *  without the cap the late slots mutate by ~0 and most of the pool becomes
    *  a clone of the champion */
   public MUTATION_LADDER_CAP = 10;
+  /** the last slots of a full pool drive a fresh fully-random brain instead
+   *  of a champion mutation: a standing source of novelty, so the population
+   *  can never fully converge on one overfit line */
+  public EXPLORER_CARS = 1;
+  /** a finished swarm keeps this many explorers too: the champion is settled
+   *  on this track, a new line is what the next one needs */
+  public FINISHED_EXPLORER_CARS = 1;
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
   public MAX_NETWORK_LAYERS = 9;
   /** gap from the line to the start point, wider than the claim radius */
