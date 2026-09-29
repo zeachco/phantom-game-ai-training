@@ -1,5 +1,14 @@
+import type { Car } from '../classes/Car';
 import { config } from '../classes/Config';
 import { brainId, type Group } from '../utilities';
+
+type TimingEntry = {
+  group?: Group;
+  human?: boolean;
+  color: string;
+  laps: number;
+  totalFrames: number;
+};
 
 /** Renders the small progress board without coupling race simulation to DOM. */
 export class TimingBoard {
@@ -8,14 +17,17 @@ export class TimingBoard {
   #raceLabel: HTMLSpanElement;
   #groups: readonly Group[];
   #completedFinishes: Map<string, { totalFrames: number }>;
+  #getHuman: () => Car | undefined;
 
   constructor(
     groups: readonly Group[],
     completedFinishes: Map<string, { totalFrames: number }>,
     seed: number,
+    getHuman: () => Car | undefined,
   ) {
     this.#groups = groups;
     this.#completedFinishes = completedFinishes;
+    this.#getHuman = getHuman;
 
     const board = document.createElement('section');
     board.className = 'timing-board';
@@ -56,8 +68,8 @@ export class TimingBoard {
   }
 
   update() {
-    const ranked = this.#groups
-      .map((group) => {
+    const ranked: TimingEntry[] = this.#groups
+      .map((group): TimingEntry | null => {
         const car = group.pool
           .filter((candidate) => candidate.laps > 0)
           .sort(
@@ -68,33 +80,50 @@ export class TimingBoard {
         if (finish)
           return {
             group,
+            color: group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)',
             laps: config.LAPS_PER_SEED,
             totalFrames: finish.totalFrames,
           };
         return {
           group,
+          color: group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)',
           laps: car.laps,
           totalFrames: car.totalRaceFrames,
         };
       })
-      .filter((entry) => entry !== null)
+      .filter((entry): entry is TimingEntry => entry !== null);
+
+    const human = this.#getHuman();
+    const humanFinish = this.#completedFinishes.get('human');
+    if (human && (human.laps > 0 || humanFinish)) {
+      ranked.push({
+        human: true,
+        color: human.color,
+        laps: humanFinish ? config.LAPS_PER_SEED : human.laps,
+        totalFrames: humanFinish?.totalFrames ?? human.totalRaceFrames,
+      });
+    }
+
+    ranked
       .sort(
         (a, b) =>
           b.laps - a.laps ||
           a.totalFrames - b.totalFrames ||
-          (a.group.isMixed ? 1 : 0) - (b.group.isMixed ? 1 : 0) ||
-          a.group.layer - b.group.layer,
+          (a.group?.isMixed ? 1 : 0) - (b.group?.isMixed ? 1 : 0) ||
+          (a.group?.layer ?? -1) - (b.group?.layer ?? -1),
       )
-      .slice(0, this.#rows.length);
+      .splice(this.#rows.length);
 
     this.#rows.forEach((row, index) => {
       const entry = ranked[index];
-      row.style.color =
-        entry?.group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)';
+      row.style.color = entry?.color || 'rgba(255, 255, 255, 0.82)';
+      const name = entry?.human
+        ? '🕹 human'
+        : entry?.group
+          ? brainId(entry.group.layer)
+          : '';
       row.textContent = entry
-        ? `${index + 1}. ${brainId(entry.group.layer)}  ${entry.laps}/${
-            config.LAPS_PER_SEED
-          }${
+        ? `${index + 1}. ${name}  ${entry.laps}/${config.LAPS_PER_SEED}${
             entry.laps >= config.LAPS_PER_SEED ? ' finished' : ''
           }  ${this.#formatFrames(entry.totalFrames)}`
         : `${index + 1}. —`;

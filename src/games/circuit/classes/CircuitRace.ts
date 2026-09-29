@@ -49,8 +49,10 @@ export class CircuitRace {
   /** fastest completed lap and finish on the current track */
   #bestLapFrames = Infinity;
   #bestFinishFrames = Infinity;
+  #humanFinishCelebrated = false;
   #pendingSaves = new Set<Group>();
   #onHumanCrash?: () => void;
+  #onHumanFinish?: () => void;
   #onSeedChanged?: (seed: number) => void;
   #onReset?: () => void;
 
@@ -60,6 +62,7 @@ export class CircuitRace {
     seed: number,
     options: {
       onHumanCrash?: () => void;
+      onHumanFinish?: () => void;
       onSeedChanged?: (seed: number) => void;
       onReset?: () => void;
     } = {},
@@ -67,6 +70,7 @@ export class CircuitRace {
     this.seed = seed;
     this.circuit = new Circuit(seed);
     this.#onHumanCrash = options.onHumanCrash;
+    this.#onHumanFinish = options.onHumanFinish;
     this.#onSeedChanged = options.onSeedChanged;
     this.#onReset = options.onReset;
   }
@@ -304,6 +308,9 @@ export class CircuitRace {
   }
 
   #groupOf(car: Car) {
+    // The human has a NeuralNetwork-shaped score holder for shared physics,
+    // but must never be mistaken for the layer-1 AI group.
+    if (!car.useAI) return undefined;
     const key =
       car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers);
     return this.groups.find((group) => group.key === key);
@@ -501,6 +508,7 @@ export class CircuitRace {
     this.circuit = new Circuit(this.seed);
     this.#completedBrainIndices.clear();
     this.#completedFinishes.clear();
+    this.#humanFinishCelebrated = false;
     this.#bestCheckpointFrames = [];
     this.#bestLapFrames = Infinity;
     this.#bestFinishFrames = Infinity;
@@ -539,6 +547,7 @@ export class CircuitRace {
     this.#bestCheckpointFrames = [];
     this.#bestLapFrames = Infinity;
     this.#bestFinishFrames = Infinity;
+    this.#humanFinishCelebrated = false;
     Object.assign(this.state, defaultState);
     this.state.playing = true;
     const { inputCount, outputCount } = getCircuitBrainDimensions();
@@ -645,6 +654,19 @@ export class CircuitRace {
             score: car.useAI ? car.brain.score : null,
             totalFrames: car.totalRaceFrames,
           });
+        }
+        // The human's first completed map is a win only when no AI had
+        // already finished. Keep this separate from the three-finisher map
+        // advance rule so the celebration is emitted exactly once.
+        if (
+          car === this.state.human &&
+          !this.#humanFinishCelebrated &&
+          !Array.from(this.#completedFinishes.keys()).some(
+            (key) => key !== 'human',
+          )
+        ) {
+          this.#humanFinishCelebrated = true;
+          this.#onHumanFinish?.();
         }
       }
     }

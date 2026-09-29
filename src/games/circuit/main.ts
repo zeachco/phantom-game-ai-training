@@ -509,6 +509,33 @@ export default async (state: typeof defaultState) => {
     return match ? parseInt(match[1], 10) : 0;
   })();
   writeSeed(seed);
+
+  const humanCelebration = document.createElement('div');
+  humanCelebration.className = 'human-celebration';
+  humanCelebration.setAttribute('role', 'status');
+  humanCelebration.setAttribute('aria-live', 'polite');
+  humanCelebration.textContent = '🎉 CONGRATZ! YOU FINISHED FIRST! 🎉';
+  humanCelebration.hidden = true;
+  document.body.appendChild(humanCelebration);
+
+  let humanCelebrationTimer = 0;
+  const showHumanCelebration = () => {
+    if (humanCelebrationTimer) window.clearTimeout(humanCelebrationTimer);
+    humanCelebration.hidden = false;
+    humanCelebration.classList.add('visible');
+    humanCelebrationTimer = window.setTimeout(() => {
+      humanCelebration.hidden = true;
+      humanCelebration.classList.remove('visible');
+      humanCelebrationTimer = 0;
+    }, 6_000);
+  };
+  const hideHumanCelebration = () => {
+    if (humanCelebrationTimer) window.clearTimeout(humanCelebrationTimer);
+    humanCelebrationTimer = 0;
+    humanCelebration.hidden = true;
+    humanCelebration.classList.remove('visible');
+  };
+
   const race = new CircuitRace(state, io, seed, {
     onReset: () => {
       camSet = false;
@@ -519,9 +546,11 @@ export default async (state: typeof defaultState) => {
       humanFollow = false;
       humanDriving = false;
     },
+    onHumanFinish: showHumanCelebration,
     onSeedChanged: (nextSeed) => {
       writeSeed(nextSeed);
       timingBoard.setSeed(nextSeed);
+      hideHumanCelebration();
       finishCountdown.hidden = true;
       camSet = false;
     },
@@ -547,6 +576,7 @@ export default async (state: typeof defaultState) => {
     race.groups,
     race.completedFinishes,
     race.seed,
+    () => state.human,
   );
   timingBoard.appendHeaderControl(seedControls);
   const trackScoreBoard = new TrackScoreBoard(race.groups);

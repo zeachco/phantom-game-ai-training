@@ -340,6 +340,40 @@ ul:hover {
   margin-top: 0.15em;
 }
 
+/* a first-place human finish is intentionally hard to miss without blocking input */
+.human-celebration {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 1000;
+  transform: translate(-50%, -50%) scale(0.9);
+  padding: 0.65em 1em;
+  border: 2px solid #ffe47a;
+  border-radius: 0.45em;
+  background: rgba(17, 21, 15, 0.92);
+  color: #ffe47a;
+  font: bold clamp(1.1rem, 4vw, 2.2rem) monospace;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(255, 228, 122, 0.55);
+  pointer-events: none;
+  animation: human-celebration-pulse 1.2s ease-in-out infinite alternate;
+}
+.human-celebration[hidden] {
+  display: none;
+}
+.human-celebration:not(.visible) {
+  animation: none;
+}
+
+@keyframes human-celebration-pulse {
+  from {
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+}
+
 /* current race progress, positioned beneath the global scores */
 .timing-board {
   position: fixed;
