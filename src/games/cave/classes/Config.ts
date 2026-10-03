@@ -56,8 +56,8 @@ class Config {
   /** corpses linger that long after the crash, fading from 0.5 to 0 opacity;
    *  a whole group respawns together once every member's corpse has expired */
   public DEAD_LIFETIME = 3000;
-  /** a car under this speed (u/f) is stalling; GATE_BUDGET_FRAMES of that in
-   *  a row kills it */
+  /** a car under this speed (u/f) is stalling; SECTION_BUDGET_FRAMES of that
+   *  in a row kills it */
   public CAR_STALL_SPEED = 0.8;
   /** score lost when a car dies of a stall; steeper than the worst wall hit
    *  so idling is never the cheaper way out */
@@ -129,11 +129,17 @@ class Config {
   ];
   /** suspension rest length of the wheel ray, travel below it is spring */
   public SUSP_REST = 3.0;
-  public SUSP_TRAVEL = 2.6;
-  /** spring acceleration per unit of compression */
-  public SUSP_SPRING = 0.5;
-  /** damping of the wheel velocity into the surface */
-  public SUSP_DAMP = 0.65;
+  public SUSP_TRAVEL = 4.0;
+  /** softer spring acceleration per unit of compression for smoother bumps */
+  public SUSP_SPRING = 0.35;
+  /** critical-ish damping keeps the elastic contact from oscillating */
+  public SUSP_DAMP = 1.25;
+  /** hard contact solve: wheel centers are snapped to the rendered/queried
+   *  cave surface after integration instead of being allowed to bounce away */
+  public WHEEL_SNAP = 1;
+  /** wheel contacts only support the lower floor arc, not tunnel side walls;
+   *  the radial angle is measured from the cave frame's upward normal */
+  public WHEEL_GROUND_ANGLE_COS = -0.8;
   /** forward acceleration at full throttle, u/f^2 */
   public CAR_ENGINE = 0.06;
   /** braking before the reverse drive kicks in */
@@ -176,6 +182,13 @@ class Config {
   public CAVE_BUMP_WAVE = 6;
   /** angular cell of the fine bumps around the circumference */
   public CAVE_BUMP_ANGLE = 0.35;
+  /** distance over which the initially smooth cave grows into its full
+   *  bumpy/obstacle-filled terrain */
+  public CAVE_TERRAIN_RAMP = 1400;
+  /** distance between deterministic terrain feature cells */
+  public CAVE_FEATURE_CELL = 280;
+  /** clearance from the cave floor to a car's body center at spawn */
+  public CAVE_GROUND_CLEARANCE = 4.1;
   /** max turn (rad) of the centerline per segment at difficulty 1 */
   public CAVE_TURN_BASE = 0.1;
   public CAVE_TURN_GROWTH = 0.22;
@@ -202,8 +215,13 @@ class Config {
   public FINISH_BONUS = 600;
   /** fixed debt for entering a gate out of order */
   public WRONG_GATE_PENALTY = 100;
-  /** reference 60 FPS budget for reaching the next gate (seven seconds) */
-  public GATE_BUDGET_FRAMES = 220;
+  /**
+   * Reference 60 FPS budget for advancing into the next cave section.
+   * Sections are deliberately used instead of gates for the liveness check:
+   * a car can make progress through a long section without crossing the
+   * decorative/scoring ring exactly. Ten times the old seven-second budget.
+   */
+  public SECTION_BUDGET_FRAMES = 2200;
 
   public CLEAR_STORAGE =
     typeof window !== 'undefined' && /clear/.test(window.location.href);

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { GameLoop } from '../../utilities/three/GameLoop';
-import { ControlType } from './types';
 import { Car, getCaveBrainDimensions } from './classes/Car';
 import { Cave } from './classes/Cave';
 import { config } from './classes/Config';
+import { ControlType } from './types';
 
 interface CaveState {
   cave?: Cave;
@@ -52,24 +52,6 @@ export default async (state: CaveState) => {
   state.cave = cave;
 
   const spawn = cave.getSpawn();
-  const spawnAt = (distance: number, lateral: number) => {
-    const s = spawn.s + distance;
-    const point = cave.centerAt(s, { x: 0, y: 0, z: 0 });
-    const tangent = cave.tangent(s, { x: 0, y: 0, z: 0 });
-    const normal = { x: 0, y: 0, z: 0 };
-    const binormal = { x: 0, y: 0, z: 0 };
-    cave.frame(s, tangent, normal, binormal);
-    const offset = lateral * cave.radius(s, 0) * 0.45;
-    return {
-      x: point.x + binormal.x * offset,
-      y: point.y + binormal.y * offset,
-      z: point.z + binormal.z * offset,
-      tx: tangent.x,
-      ty: tangent.y,
-      tz: tangent.z,
-      s,
-    };
-  };
   const human = new Car(
     spawn,
     ControlType.HUMAN,
@@ -91,7 +73,7 @@ export default async (state: CaveState) => {
   void outputCount;
   for (let i = 0; i < CAR_COUNT; i++) {
     const ai = new Car(
-      spawnAt((i + 1) * 16, ((i * 7) % 11) / 10 - 0.5),
+      spawn,
       ControlType.AI,
       config.CAR_MAX_SPEED,
       `A${i}`,
@@ -106,10 +88,6 @@ export default async (state: CaveState) => {
 
   const carGeometry = new THREE.BoxGeometry(4.4, 2.2, 8.5);
   const wheelGeometry = new THREE.BoxGeometry(1.25, 1.1, 2.0);
-  const wheelMaterial = new THREE.MeshStandardMaterial({
-    color: 0x15181d,
-    roughness: 0.9,
-  });
   const markerGeometry = new THREE.SphereGeometry(1.4, 12, 8);
   const carMeshes = new Map<Car, THREE.Group>();
   for (const car of state.cars) {
@@ -139,6 +117,12 @@ export default async (state: CaveState) => {
     group.add(marker);
     group.renderOrder = car === human ? 10 : 1;
     group.frustumCulled = false;
+    // Each car owns its wheel material so focused-car opacity does not
+    // accidentally change every car's wheels at once.
+    const wheelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x15181d,
+      roughness: 0.9,
+    });
     for (const [x, z] of [
       [-2.0, -3.1],
       [2.0, -3.1],
@@ -153,6 +137,29 @@ export default async (state: CaveState) => {
     scene.add(group);
     carMeshes.set(car, group);
   }
+
+  const updateCarFocusStyle = (
+    car: Car,
+    mesh: THREE.Group,
+    focused: boolean,
+  ) => {
+    const opacity = focused ? 1 : 0.5;
+    mesh.renderOrder = focused ? 10 : 1;
+    mesh.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      for (const material of materials) {
+        material.transparent = opacity < 1;
+        material.opacity = opacity;
+        material.depthWrite = focused;
+        // The human is drawn over the cave only while it is focused. A faded
+        // human follows the same depth rules as every other background car.
+        material.depthTest = focused || car !== human;
+      }
+    });
+  };
 
   const hud = document.createElement('div');
   hud.style.position = 'fixed';
@@ -192,9 +199,9 @@ export default async (state: CaveState) => {
   camera.position.set(spawn.x, spawn.y + 4, spawn.z + 20);
 
   const respawn = (car: Car) => {
-    const next = cave.getSpawn();
-    car.reset(next);
-    car.s += car === human ? 0 : (car.label.length * 7) % 24;
+    // Cars intentionally share one starting transform; there is no
+    // car-to-car collision system, so overlapping spawn slots are harmless.
+    car.reset(spawn);
     car.brain.score = 0;
   };
 
@@ -236,6 +243,7 @@ export default async (state: CaveState) => {
     for (const car of state.cars) {
       const mesh = carMeshes.get(car);
       if (!mesh) continue;
+      updateCarFocusStyle(car, mesh, car === followed);
       const visible =
         !car.damaged && Math.abs(car.s - followed.s) < config.VISUAL_RANGE;
       mesh.visible = visible;

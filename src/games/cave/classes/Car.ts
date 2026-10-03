@@ -97,8 +97,11 @@ export class Car {
   /** performance.now() of the crash: the corpse fades from 0.5 to 0 over
    *  DEAD_LIFETIME; the whole brain group respawns when every corpse has expired */
   public deathTime = 0;
-  /** frames remaining to reach the next gate at the reference 60 FPS */
-  public gateFramesRemaining = config.GATE_BUDGET_FRAMES;
+  /** frames remaining to advance into another cave section */
+  public sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+  /** furthest cave section reached; unlike gates, sections keep the car alive
+   *  while it makes forward progress even if it misses a ring */
+  private furthestSection = 0;
   /** simulation frames since the last gate was claimed */
   public framesSinceLastGate = 0;
   /** simulation frames spent on this cave run */
@@ -174,7 +177,8 @@ export class Car {
     this.avy = 0;
     this.avz = 0;
     this.damaged = false;
-    this.gateFramesRemaining = config.GATE_BUDGET_FRAMES;
+    this.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+    this.furthestSection = Math.floor(spawn.s / config.CAVE_SEGMENT_LENGTH);
     this.stallFrames = 0;
 
     this.quat = new THREE.Quaternion();
@@ -245,7 +249,8 @@ export class Car {
     this.insideGate = -1;
     this.passedGate = false;
     this.completedGateIndex = -1;
-    this.gateFramesRemaining = config.GATE_BUDGET_FRAMES;
+    this.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+    this.furthestSection = Math.floor(spawn.s / config.CAVE_SEGMENT_LENGTH);
     this.framesSinceLastGate = 0;
     this.totalRaceFrames = 0;
     this.stallFrames = 0;
@@ -281,15 +286,16 @@ export class Car {
   update(cave: Cave) {
     if (this.damaged) return;
     this.controls.update();
-    this.gateFramesRemaining--;
+    this.sectionFramesRemaining--;
     this.prevS = this.s;
     this.#move(cave);
     if (this.brain) this.#updateScore(cave);
+    this.#updateSectionProgress();
 
     this.damaged =
       this.#assessDamage() ||
       this.#checkStall() ||
-      this.#checkBudget();
+      this.#checkSectionBudget();
     if (this.damaged && this.brain) {
       this.brain.score -= this.deathPenalty + this.speed;
     }
@@ -327,13 +333,24 @@ export class Car {
     }
   }
 
-  /** a car that misses its next gate for the frame budget dies, exactly like
-   *  a collision */
-  #checkBudget() {
-    return this.gateFramesRemaining <= 0;
+  /** Forward progress into a new cave section is enough to reset the
+   *  liveness budget. Reaching a scoring gate is not required: rings are
+   *  sparse and can be missed while the car is still driving the cave. */
+  #updateSectionProgress() {
+    const section = Math.floor(this.s / config.CAVE_SEGMENT_LENGTH);
+    if (section > this.furthestSection) {
+      this.furthestSection = section;
+      this.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+    }
   }
 
-  /** a car under CAR_STALL_SPEED for GATE_BUDGET_FRAMES consecutive
+  /** a car that makes no section progress for the frame budget dies, exactly
+   *  like a collision */
+  #checkSectionBudget() {
+    return this.sectionFramesRemaining <= 0;
+  }
+
+  /** a car under CAR_STALL_SPEED for SECTION_BUDGET_FRAMES consecutive
    *  simulation frames has stalled: it dies and its brain pays STALL_PENALTY
    *  once. Any frame at or above the speed threshold resets the streak. */
   #checkStall() {
@@ -342,7 +359,7 @@ export class Car {
       return false;
     }
     this.stallFrames++;
-    if (this.stallFrames < config.GATE_BUDGET_FRAMES) return false;
+    if (this.stallFrames < config.SECTION_BUDGET_FRAMES) return false;
     this.deathPenalty = config.STALL_PENALTY;
     return true;
   }
@@ -384,7 +401,8 @@ export class Car {
         this.completedGateFrames = this.framesSinceLastGate;
         this.framesSinceLastGate = 0;
         this.passedGate = true;
-        this.gateFramesRemaining = config.GATE_BUDGET_FRAMES;
+        // Gates still award score, but do not control car lifetime. The
+        // section-progress budget is reset only by actual forward progress.
         if (isFinish) {
           // completing the cave is the biggest reward in the game: it puts a
           // finisher far ahead of any partial run, whatever its pace
@@ -530,15 +548,33 @@ export class Car {
         this.s,
         this.wheelHit,
       );
-      // dist is negative inside the cave. Suspension travel begins when the
-      // wheel is within (radius + travel) of the wall and reaches full
-      // compression at actual wheel-surface contact.
+      // Snap target is the point where this wheel sphere touches the exact
+      // surface used by the cave mesh (including generated rock features).
+      // Unlike the old radial compression check, this remains correct when
+      // the rendered cave is vertically scaled.
+      const targetX = this.wheelHit.hx - this.wheelHit.nx * config.CAR_WHEEL_RADIUS;
+      const targetY = this.wheelHit.hy - this.wheelHit.ny * config.CAR_WHEEL_RADIUS;
+      const targetZ = this.wheelHit.hz - this.wheelHit.nz * config.CAR_WHEEL_RADIUS;
+      const toTargetX = targetX - this.#anchor.x;
+      const toTargetY = targetY - this.#anchor.y;
+      const toTargetZ = targetZ - this.#anchor.z;
+      const targetDistance = Math.sqrt(
+        toTargetX * toTargetX +
+          toTargetY * toTargetY +
+          toTargetZ * toTargetZ,
+      );
       const compression = clamp(
         0,
         config.SUSP_TRAVEL,
-        this.wheelHit.dist + config.CAR_WHEEL_RADIUS + config.SUSP_TRAVEL,
+        config.SUSP_TRAVEL - targetDistance,
       );
-      const grounded = compression > 0;
+      // Only the lower-facing surface is a wheel/ground contact. Without
+      // this guard a wheel can snap to a nearby side or ceiling wall and
+      // launch the whole car up the tunnel.
+      const groundContact =
+        this.wheelHit.ny < -0.25 &&
+        Math.cos(this.wheelHit.a) < config.WHEEL_GROUND_ANGLE_COS;
+      const grounded = groundContact && targetDistance <= config.SUSP_TRAVEL;
       this.grounded[w] = grounded;
       if (!grounded) {
         this.compression[w] = 0;
@@ -546,9 +582,6 @@ export class Car {
       }
       groundedCount++;
       this.compression[w] = compression;
-      const nx = this.wheelHit.nx;
-      const ny = this.wheelHit.ny;
-      const nz = this.wheelHit.nz;
 
       // wheel velocity = body velocity + angular velocity x radius
       const rlx = this.#anchor.x - this.x;
@@ -596,22 +629,41 @@ export class Car {
       const dvL = vL - oldVL;
       // tire grip: cancel the lateral slip, shared over the grounded wheels
       const dvLat = -oldVLat * grip * (groundedCount / 4);
-      // The radial normal points from the cave axis into its wall. Springs
-      // push the car in the opposite direction, back into the cave. The old
-      // sign pushed the wheels through the floor and then flipped the body.
-      const vn = wvx * nx + wvy * ny + wvz * nz;
-      const damp = vn > 0 ? config.SUSP_DAMP * vn : 0;
-      const suspension = -(config.SUSP_SPRING * compression + damp);
-      const aX = fwX * dvL + flX * dvLat + nx * suspension;
-      const aY = fwY * dvL + flY * dvLat + ny * suspension;
-      const aZ = fwZ * dvL + flZ * dvLat + nz * suspension;
+      // This is a real elastic vector from the wheel to its contact point.
+      // It pulls a wheel down onto the floor when it is above it and pushes
+      // it back into the cave when it is embedded, rather than applying the
+      // old one-sided spring that repeatedly launched the rigid body.
+      let elasticX = 0;
+      let elasticY = 0;
+      let elasticZ = 0;
+      if (targetDistance > 1e-4) {
+        const invDistance = 1 / targetDistance;
+        const dirX = toTargetX * invDistance;
+        const dirY = toTargetY * invDistance;
+        const dirZ = toTargetZ * invDistance;
+        const targetSpeed = wvx * dirX + wvy * dirY + wvz * dirZ;
+        const elastic =
+          config.SUSP_SPRING * targetDistance -
+          config.SUSP_DAMP * targetSpeed;
+        elasticX = dirX * elastic;
+        elasticY = dirY * elastic;
+        elasticZ = dirZ * elastic;
+      }
+      const tireX = fwX * dvL + flX * dvLat;
+      const tireY = fwY * dvL + flY * dvLat;
+      const tireZ = fwZ * dvL + flZ * dvLat;
+      const aX = tireX + elasticX;
+      const aY = tireY + elasticY;
+      const aZ = tireZ + elasticZ;
 
       accX += aX / 4;
       accY += aY / 4;
       accZ += aZ / 4;
-      tqX += (rly * aZ - rlz * aY) / config.CAR_INERTIA;
-      tqY += (rlz * aX - rlx * aZ) / config.CAR_INERTIA;
-      tqZ += (rlx * aY - rly * aX) / config.CAR_INERTIA;
+      // The elastic contact moves the rigid body but does not inject pitch or
+      // roll torque; the hard snap below already aligns each wheel to ground.
+      tqX += (rly * tireZ - rlz * tireY) / config.CAR_INERTIA;
+      tqY += (rlz * tireX - rlx * tireZ) / config.CAR_INERTIA;
+      tqZ += (rlx * tireY - rly * tireX) / config.CAR_INERTIA;
     }
 
     // 4. integrate the body
@@ -692,9 +744,14 @@ export class Car {
         }
       }
     }
-    // Resolve each wheel sphere again after integration. This is the hard
-    // non-penetration pass: suspension is soft, but the wheel itself never
-    // ends a frame on the far side of the cave mesh.
+    // Resolve every wheel against its exact contact point after integration.
+    // The averaged correction moves the rigid body, rather than leaving each
+    // wheel to bounce independently. Removing only velocity into the surface
+    // keeps the car planted without adding restitution to ground contacts.
+    let snapX = 0;
+    let snapY = 0;
+    let snapZ = 0;
+    let snapCount = 0;
     for (let w = 0; w < 4; w++) {
       const off = config.WHEEL_OFFSETS[w];
       this.#toWorld(off[0], off[1], off[2], this.#anchor);
@@ -708,20 +765,43 @@ export class Car {
         this.s,
         this.wheelHit,
       );
-      const embed = this.wheelHit.dist + config.CAR_WHEEL_RADIUS;
-      if (embed <= 0) continue;
+      const targetX = this.wheelHit.hx - this.wheelHit.nx * config.CAR_WHEEL_RADIUS;
+      const targetY = this.wheelHit.hy - this.wheelHit.ny * config.CAR_WHEEL_RADIUS;
+      const targetZ = this.wheelHit.hz - this.wheelHit.nz * config.CAR_WHEEL_RADIUS;
+      const toTargetX = targetX - this.#anchor.x;
+      const toTargetY = targetY - this.#anchor.y;
+      const toTargetZ = targetZ - this.#anchor.z;
+      const targetDistance = Math.sqrt(
+        toTargetX * toTargetX +
+          toTargetY * toTargetY +
+          toTargetZ * toTargetZ,
+      );
+      if (
+        this.wheelHit.ny >= -0.25 ||
+        Math.cos(this.wheelHit.a) >= config.WHEEL_GROUND_ANGLE_COS ||
+        targetDistance > config.SUSP_TRAVEL
+      )
+        continue;
+      snapX += toTargetX;
+      snapY += toTargetY;
+      snapZ += toTargetZ;
+      snapCount++;
+
+      // Ground contacts do not bounce: cancel only velocity into the wall.
       const nx = this.wheelHit.nx;
       const ny = this.wheelHit.ny;
       const nz = this.wheelHit.nz;
-      this.x -= nx * embed;
-      this.y -= ny * embed;
-      this.z -= nz * embed;
       const vn = this.vx * nx + this.vy * ny + this.vz * nz;
       if (vn > 0) {
-        this.vx -= nx * vn * (1 + config.CAR_RESTITUTION) * 0.5;
-        this.vy -= ny * vn * (1 + config.CAR_RESTITUTION) * 0.5;
-        this.vz -= nz * vn * (1 + config.CAR_RESTITUTION) * 0.5;
+        this.vx -= nx * vn;
+        this.vy -= ny * vn;
+        this.vz -= nz * vn;
       }
+    }
+    if (snapCount > 0) {
+      this.x += (snapX / snapCount) * config.WHEEL_SNAP;
+      this.y += (snapY / snapCount) * config.WHEEL_SNAP;
+      this.z += (snapZ / snapCount) * config.WHEEL_SNAP;
     }
     // a car that ends up outside the cave has tunneled: it is dead
     if (body.dist > 50) this.damaged = true;

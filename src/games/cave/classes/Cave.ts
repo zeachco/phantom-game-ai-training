@@ -265,14 +265,82 @@ export class Cave {
     return texture;
   }
 
+  /** terrain starts deliberately calm at the mouth, then eases into its
+   *  full procedural roughness so the player has time to get grounded. */
+  #terrainProgress(s: number) {
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        (s - config.SPAWN_OFFSET) / config.CAVE_TERRAIN_RAMP,
+      ),
+    );
+    return t * t * (3 - 2 * t);
+  }
+
   /** the long waves of the radius, continuous over the whole cave */
   #waveRadius(s: number) {
     let r = config.CAVE_RADIUS;
+    const progress = this.#terrainProgress(s);
     for (let i = 0; i < this.#waves.length; i++) {
       const w = this.#waves[i];
-      r += w.amp * Math.sin(w.freq * s + w.phase);
+      r += progress * w.amp * Math.sin(w.freq * s + w.phase);
     }
     return r;
+  }
+
+  #angleDistance(a: number, b: number) {
+    let d = Math.abs(a - b) % TWO_PI;
+    return d > Math.PI ? TWO_PI - d : d;
+  }
+
+  #smoothPulse(s: number, center: number, halfWidth: number) {
+    const t = 1 - Math.abs(s - center) / halfWidth;
+    if (t <= 0) return 0;
+    return t * t * (3 - 2 * t);
+  }
+
+  /** inward radial cuts make raised floor platforms and rock columns. They
+   *  are part of the analytic radius, so rendering, rays and wheel contact
+   *  all agree without a second obstacle system. */
+  #featureRadiusDelta(s: number, a: number) {
+    const progress = this.#terrainProgress(s);
+    if (progress <= 0) return 0;
+
+    const cell = Math.floor(s / config.CAVE_FEATURE_CELL);
+    let delta = 0;
+    for (let i = cell - 1; i <= cell + 1; i++) {
+      const center = i * config.CAVE_FEATURE_CELL;
+      const roll = this.#hash(i * 7 + 11) / 0xffffffff;
+      const featureS = center + 70 + (this.#hash(i * 7 + 13) / 0xffffffff) * 140;
+      const lower = Math.max(0, -Math.cos(a));
+
+      // A broad, mostly flat raised section appears occasionally and gives a
+      // car a natural launch surface instead of making every bump a spike.
+      if (roll > 0.55) {
+        const platform =
+          this.#smoothPulse(s, featureS, 54 + (this.#hash(i * 7 + 17) / 0xffffffff) * 22) *
+          lower ** 3;
+        delta -= progress * platform * (18 + (this.#hash(i * 7 + 19) / 0xffffffff) * 16);
+      }
+
+      // Narrow lower-cave columns are sparse, seeded, and offset from the
+      // center line so some can be driven around while others need a jump.
+      if (roll < 0.7) {
+        const columnAngle =
+          Math.PI +
+          (this.#hash(i * 7 + 23) / 0xffffffff - 0.5) * 1.15;
+        const angleWidth = 0.13 + (this.#hash(i * 7 + 29) / 0xffffffff) * 0.12;
+        const angular = Math.exp(
+          -(this.#angleDistance(a, columnAngle) ** 2) /
+            (2 * angleWidth * angleWidth),
+        );
+        const column = this.#smoothPulse(s, featureS, 20 + (this.#hash(i * 7 + 31) / 0xffffffff) * 18);
+        delta -=
+          progress * column * angular * (24 + (this.#hash(i * 7 + 37) / 0xffffffff) * 24);
+      }
+    }
+    return delta;
   }
 
   /** one corner of the bump noise grid, deterministic in (i, j, seed) */
@@ -305,13 +373,16 @@ export class Cave {
     const nx0 = n00 + (n10 - n00) * su;
     const nx1 = n01 + (n11 - n01) * su;
     const n = nx0 + (nx1 - nx0) * sv;
-    const amp = 16 + 24 * this.difficulty;
+    const amp = (16 + 24 * this.difficulty) * this.#terrainProgress(s);
     return (n - 0.5) * 2 * amp;
   }
 
   /** full radius at (arc, angle), clamped so the cave stays passable */
   radius(s: number, a: number) {
-    const r = this.#waveRadius(s) + this.#bump(s, a);
+    const r =
+      this.#waveRadius(s) +
+      this.#bump(s, a) +
+      this.#featureRadiusDelta(s, a);
     return r < config.CAVE_MIN_RADIUS ? config.CAVE_MIN_RADIUS : r;
   }
 
@@ -524,12 +595,37 @@ export class Cave {
     return out;
   }
 
+  /** Place the body just above the lower cave wall. The opening is flat, so
+   *  cars start with a real ground contact instead of floating at the axis. */
+  groundSpawn(s: number, lateral = 0) {
+    const c = this.center(s, { x: 0, y: 0, z: 0 });
+    const t = this.tangent(s, { x: 0, y: 0, z: 0 });
+    const n = { x: 0, y: 0, z: 0 };
+    const b = { x: 0, y: 0, z: 0 };
+    this.#frameFromTangent(t, n, b);
+    const floorRadius = this.radius(s, Math.PI);
+    const lateralOffset = lateral * floorRadius * 0.45;
+    const floorY = (c.y - n.y * floorRadius) * config.CAVE_VERTICAL_SCALE;
+    const floorX = c.x - n.x * floorRadius + b.x * lateralOffset;
+    const floorZ = c.z - n.z * floorRadius + b.z * lateralOffset;
+    const upX = n.x;
+    const upY = n.y * config.CAVE_VERTICAL_SCALE;
+    const upZ = n.z;
+    const upLength = Math.hypot(upX, upY, upZ) || 1;
+    return {
+      x: floorX + (upX / upLength) * config.CAVE_GROUND_CLEARANCE,
+      y: floorY + (upY / upLength) * config.CAVE_GROUND_CLEARANCE,
+      z: floorZ + (upZ / upLength) * config.CAVE_GROUND_CLEARANCE,
+      tx: t.x,
+      ty: t.y,
+      tz: t.z,
+      s,
+    };
+  }
+
   /** the single start point, just inside the mouth, every car overlaps there */
   getSpawn() {
-    const s = config.SPAWN_OFFSET;
-    const c = this.centerAt(s, { x: 0, y: 0, z: 0 });
-    const t = this.tangent(s, { x: 0, y: 0, z: 0 });
-    return { x: c.x, y: c.y, z: c.z, tx: t.x, ty: t.y, tz: t.z, s };
+    return this.groundSpawn(config.SPAWN_OFFSET);
   }
 
   /** build or drop the chunk meshes so the window [minS, maxS] stays meshed */
