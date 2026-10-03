@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GameLoop } from '../../utilities/three/GameLoop';
+import { drawControlAxes } from '../circuit/ui/driveIndicators';
 import { Car, getCaveBrainDimensions } from './classes/Car';
 import { Cave } from './classes/Cave';
 import { config } from './classes/Config';
@@ -161,17 +162,6 @@ export default async (state: CaveState) => {
     });
   };
 
-  const hud = document.createElement('div');
-  hud.style.position = 'fixed';
-  hud.style.left = '14px';
-  hud.style.bottom = '14px';
-  hud.style.zIndex = '2';
-  hud.style.color = '#e8edf4';
-  hud.style.font = '600 14px monospace';
-  hud.style.textShadow = '0 1px 3px #000';
-  hud.style.pointerEvents = 'none';
-  document.body.appendChild(hud);
-
   const title = document.createElement('div');
   title.textContent = `CAVE // seed ${seed}`;
   title.style.position = 'fixed';
@@ -185,11 +175,114 @@ export default async (state: CaveState) => {
 
   const hint = document.createElement('div');
   hint.textContent = 'WASD / arrows to drive · R to regenerate';
-  hint.style.marginTop = '4px';
-  hud.appendChild(hint);
-  const readout = document.createElement('div');
-  hud.appendChild(readout);
+  hint.style.position = 'fixed';
+  hint.style.top = '38px';
+  hint.style.left = '14px';
+  hint.style.zIndex = '2';
+  hint.style.color = '#e8edf4';
+  hint.style.font = '600 12px monospace';
+  hint.style.textShadow = '0 1px 3px #000';
+  document.body.appendChild(hint);
 
+  // Reuse the circuit cockpit HUD, with gate and cave-section information in
+  // place of its lap/checkpoint countdown.
+  const steerOverlay = document.createElement('div');
+  steerOverlay.className = 'steer-overlay';
+  const controlIndicators = document.createElement('div');
+  controlIndicators.className = 'control-indicators';
+  const controlCanvas = document.createElement('canvas');
+  controlCanvas.className = 'control-axis';
+  controlCanvas.width = 110;
+  controlCanvas.height = 110;
+  const controlCtx = controlCanvas.getContext('2d');
+  const velocityCanvas = document.createElement('canvas');
+  velocityCanvas.className = 'velocity-vector';
+  velocityCanvas.width = 110;
+  velocityCanvas.height = 34;
+  const velocityCtx = velocityCanvas.getContext('2d');
+  controlIndicators.append(controlCanvas, velocityCanvas);
+
+  const readout = document.createElement('div');
+  readout.className = 'readout';
+  const gateCountEl = document.createElement('div');
+  gateCountEl.className = 'laps';
+  gateCountEl.title = 'next gate out of the total gates in this cave';
+  const gateFramesEl = document.createElement('div');
+  gateFramesEl.className = 'frame-count';
+  gateFramesEl.title = 'simulation frames since the previous gate';
+  const totalFramesEl = document.createElement('div');
+  totalFramesEl.className = 'frame-count';
+  totalFramesEl.title = 'simulation frames driven in this cave';
+
+  const makeTimingLine = (label: string, title: string) => {
+    const element = document.createElement('div');
+    element.className = 'timing-line';
+    element.title = title;
+    const labelEl = document.createElement('span');
+    labelEl.className = 'timing-label';
+    labelEl.textContent = label;
+    const value = document.createElement('span');
+    value.className = 'timing-value';
+    value.textContent = '—';
+    const delta = document.createElement('span');
+    delta.className = 'timing-delta';
+    element.append(labelEl, value, delta);
+    return { element, label: labelEl, value, delta };
+  };
+  const gateTiming = makeTimingLine(
+    'gate',
+    'latest completed gate split in simulation frames',
+  );
+  const finishTiming = makeTimingLine(
+    'finish',
+    'final cave time in simulation frames',
+  );
+  const timingDeltas = document.createElement('div');
+  timingDeltas.className = 'timing-deltas';
+  timingDeltas.append(gateTiming.element, finishTiming.element);
+
+  const speedo = document.createElement('div');
+  speedo.className = 'speedo';
+  speedo.title = 'speed';
+  const speedoValue = document.createElement('span');
+  speedoValue.className = 'speedo-value';
+  const speedoUnit = document.createElement('span');
+  speedoUnit.className = 'speedo-unit';
+  speedoUnit.textContent = 'u/f';
+  speedo.append(speedoValue, speedoUnit);
+  readout.append(
+    gateCountEl,
+    gateFramesEl,
+    totalFramesEl,
+    timingDeltas,
+    speedo,
+  );
+
+  const sectionGauge = document.createElement('div');
+  sectionGauge.className = 'gate-gauge';
+  sectionGauge.title =
+    'budget remaining to make forward progress into the next cave section';
+  sectionGauge.setAttribute('role', 'progressbar');
+  sectionGauge.setAttribute(
+    'aria-label',
+    'Cave section progress budget remaining',
+  );
+  sectionGauge.setAttribute('aria-valuemin', '0');
+  sectionGauge.setAttribute(
+    'aria-valuemax',
+    String(config.SECTION_BUDGET_FRAMES),
+  );
+  const sectionGaugeFill = document.createElement('div');
+  sectionGaugeFill.className = 'gate-gauge-fill';
+  sectionGauge.append(sectionGaugeFill);
+
+  const brainStats = document.createElement('div');
+  brainStats.className = 'brain-stats';
+  brainStats.title = 'followed brain stats';
+  steerOverlay.append(controlIndicators, sectionGauge, readout, brainStats);
+  document.body.appendChild(steerOverlay);
+
+  let lastStatsText = '';
   let followed = human;
   let lastHud = 0;
   const lookAt = new THREE.Vector3();
@@ -276,13 +369,89 @@ export default async (state: CaveState) => {
       gate.scale.setScalar(i === followed.nextGate ? 1.06 : 1);
     }
 
+    const isFollowedAlive = !followed.damaged;
+    steerOverlay.style.setProperty('--hud-color', followed.color || '#c4c4c4');
+    steerOverlay.classList.toggle('hidden', !isFollowedAlive);
+    if (isFollowedAlive) {
+      if (controlCtx)
+        drawControlAxes(
+          controlCtx,
+          followed.controls.left,
+          followed.controls.right,
+          followed.controls.throttle,
+          followed.color,
+        );
+      if (velocityCtx) drawCaveVelocityVector(velocityCtx, followed);
+    }
+
     renderer.render(scene, camera);
     if (now - lastHud > 50) {
       lastHud = now;
-      readout.textContent = `${Math.round(followed.speed * 3.6)} km/h · gate ${Math.min(
-        followed.nextGate,
-        config.GATES_PER_SEED,
-      )}/${config.GATES_PER_SEED} · score ${Math.round(followed.brain.score)} · alive ${living.length}`;
+      if (!isFollowedAlive) return;
+      const gateNumber = Math.min(followed.nextGate + 1, config.GATES_PER_SEED);
+      gateCountEl.textContent = `gate ${gateNumber}/${config.GATES_PER_SEED}`;
+      gateFramesEl.textContent = `gate ${followed.framesSinceLastGate}f`;
+      totalFramesEl.textContent = `total ${followed.totalRaceFrames}f`;
+      speedoValue.textContent = followed.speed.toFixed(1);
+
+      gateTiming.label.textContent =
+        followed.completedGateIndex < 0
+          ? 'gate'
+          : `gate${followed.completedGateIndex + 1}`;
+      gateTiming.value.textContent =
+        followed.completedGateIndex < 0
+          ? '—'
+          : String(Math.round(followed.completedGateFrames));
+      finishTiming.value.textContent =
+        followed.lastFinishFrames > 0
+          ? String(Math.round(followed.lastFinishFrames))
+          : '—';
+
+      const sectionFraction = Math.max(
+        0,
+        Math.min(
+          1,
+          followed.sectionFramesRemaining / config.SECTION_BUDGET_FRAMES,
+        ),
+      );
+      sectionGaugeFill.style.height = `${sectionFraction * 100}%`;
+      sectionGauge.setAttribute(
+        'aria-valuenow',
+        String(followed.sectionFramesRemaining),
+      );
+
+      let bestScore: number | string = '—';
+      try {
+        const saved = localStorage.getItem(
+          `cave_score_${followed.brainLayers}`,
+        );
+        const history = saved ? JSON.parse(saved).history : undefined;
+        const previousBest = history?.[String(seed)];
+        if (typeof previousBest === 'number' && previousBest > 0)
+          bestScore = Math.round(previousBest);
+      } catch {
+        // HUD history is optional; malformed or unavailable storage is ignored.
+      }
+      const mutation =
+        followed.brain.mutationIndex === 0
+          ? 'Original model'
+          : `Mut ${(followed.brain.mutationFactor * 100).toFixed(4)}%`;
+      const statsText = [
+        `Net ${followed.brain.id}`,
+        mutation,
+        `Score ${Math.round(followed.brain.score)}`,
+        `Best ${bestScore}`,
+      ].join('\n');
+      if (statsText !== lastStatsText) {
+        lastStatsText = statsText;
+        brainStats.replaceChildren(
+          ...statsText.split('\n').map((line) => {
+            const span = document.createElement('span');
+            span.textContent = line;
+            return span;
+          }),
+        );
+      }
     }
   });
 
@@ -301,4 +470,50 @@ export default async (state: CaveState) => {
 function readSeed() {
   const match = location.hash.match(/cave=(\d+)/);
   return match ? Number.parseInt(match[1], 10) : 0;
+}
+
+/** Project 3D velocity into the followed car's forward/right plane. */
+function drawCaveVelocityVector(
+  ctx: CanvasRenderingContext2D,
+  car: Car,
+  width = 110,
+  height = 34,
+) {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const forward = car.vx * car.fx + car.vy * car.fy + car.vz * car.fz;
+  const lateral = car.vx * car.rx + car.vy * car.ry + car.vz * car.rz;
+  const scale = (Math.min(width, height) * 0.42) / Math.max(1, car.maxSpeed);
+  const endX = centerX + lateral * scale;
+  const endY = centerY - forward * scale;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = car.color;
+  ctx.globalAlpha = 0.25;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(8, centerY);
+  ctx.lineTo(width - 8, centerY);
+  ctx.stroke();
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+  const angle = Math.atan2(endY - centerY, endX - centerX);
+  ctx.fillStyle = car.color;
+  ctx.beginPath();
+  ctx.moveTo(endX, endY);
+  ctx.lineTo(
+    endX - Math.cos(angle - Math.PI / 6) * 7,
+    endY - Math.sin(angle - Math.PI / 6) * 7,
+  );
+  ctx.lineTo(
+    endX - Math.cos(angle + Math.PI / 6) * 7,
+    endY - Math.sin(angle + Math.PI / 6) * 7,
+  );
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
