@@ -89,7 +89,7 @@ class Config {
   /** arc distance around the followed car inside which car meshes sync */
   public VISUAL_RANGE = 700;
   /** how far the camera looks along the cave axis ahead of the followed car */
-  public CAMERA_LOOK_AHEAD = 70;
+  public CAMERA_LOOK_AHEAD = 55;
 
   // env, the sensor fan is a front arc in the car's plane: longest straight
   // ahead, tapering to the edges, so reach is one honest function of where a
@@ -113,11 +113,11 @@ class Config {
 
   // car, an emulated rigid body: one body with four raycast wheel contacts
   /** top speed in u/f */
-  public CAR_MAX_SPEED = 12;
+  public CAR_MAX_SPEED = 7;
   /** world down acceleration per frame^2 */
   public CAR_GRAVITY = 0.28;
   /** the body collides with the cave as a sphere around its center */
-  public CAR_BODY_RADIUS = 5;
+  public CAR_BODY_RADIUS = 3.2;
   /** each wheel is a sphere for the embed test and a ray for the suspension */
   public CAR_WHEEL_RADIUS = 2.6;
   /** wheel anchor offsets in body space: x right, y up, z back (front = -z) */
@@ -128,14 +128,14 @@ class Config {
     [-2.4, -1.5, 4.4], // rear right
   ];
   /** suspension rest length of the wheel ray, travel below it is spring */
-  public SUSP_REST = 4.8;
-  public SUSP_TRAVEL = 3;
+  public SUSP_REST = 3.0;
+  public SUSP_TRAVEL = 2.6;
   /** spring acceleration per unit of compression */
-  public SUSP_SPRING = 0.9;
+  public SUSP_SPRING = 0.5;
   /** damping of the wheel velocity into the surface */
-  public SUSP_DAMP = 0.3;
+  public SUSP_DAMP = 0.65;
   /** forward acceleration at full throttle, u/f^2 */
-  public CAR_ENGINE = 0.16;
+  public CAR_ENGINE = 0.06;
   /** braking before the reverse drive kicks in */
   public CAR_BRAKE_DECEL = 0.2;
   /** reverse driving acceleration, the cap stays maxSpeed/2 */
@@ -150,28 +150,32 @@ class Config {
   /** normal impact speed (u/f) at which a wall hit kills the car */
   public CAR_CRASH_SPEED = 5.5;
   /** fraction of the normal velocity kept after a wall bounce */
-  public CAR_RESTITUTION = 0.2;
+  public CAR_RESTITUTION = 0.05;
   /** the car is upside down (and dead) below this dot with world up */
   public UPSIDE_DOWN_LIMIT = -0.25;
+  /** upright assist keeps the lightweight emulated body drivable over bumps */
+  public CAR_UPRIGHT_RESPONSE = 0.35;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */
   public CAVE_SEGMENT_LENGTH = 240;
   /** centerline samples per segment, the mesh resolution along the tube */
-  public CAVE_CHUNK_SAMPLES = 24;
+  public CAVE_CHUNK_SAMPLES = 48;
   /** cross-section sides of the tube mesh */
-  public CAVE_SIDES = 24;
-  /** base radius of the tube */
-  public CAVE_RADIUS = 45;
+  public CAVE_SIDES = 40;
+  /** base radius of the tube; the original tunnel was 45 units, this is 2x */
+  public CAVE_RADIUS = 90;
+  /** visual vertical compression requested for the rendered tunnel mesh */
+  public CAVE_VERTICAL_SCALE = 0.5;
   /** the bumps and the waves never pinch the tube below this */
-  public CAVE_MIN_RADIUS = 24;
+  public CAVE_MIN_RADIUS = 48;
   /** base deviation of the long radius waves, split over CAVE_HARMONICS */
-  public CAVE_WAVINESS = 12;
+  public CAVE_WAVINESS = 36;
   public CAVE_HARMONICS = 3;
   /** arc wavelength of the fine bumps, the bumpy rock skin */
-  public CAVE_BUMP_WAVE = 14;
+  public CAVE_BUMP_WAVE = 6;
   /** angular cell of the fine bumps around the circumference */
-  public CAVE_BUMP_ANGLE = 0.9;
+  public CAVE_BUMP_ANGLE = 0.35;
   /** max turn (rad) of the centerline per segment at difficulty 1 */
   public CAVE_TURN_BASE = 0.1;
   public CAVE_TURN_GROWTH = 0.22;

@@ -12,7 +12,7 @@ interface CaveState {
   seed: number;
 }
 
-const CAR_COUNT = 24;
+const CAR_COUNT = 10;
 
 /**
  * A small playable 3D cave prototype. The cave and collision queries are
@@ -52,6 +52,24 @@ export default async (state: CaveState) => {
   state.cave = cave;
 
   const spawn = cave.getSpawn();
+  const spawnAt = (distance: number, lateral: number) => {
+    const s = spawn.s + distance;
+    const point = cave.centerAt(s, { x: 0, y: 0, z: 0 });
+    const tangent = cave.tangent(s, { x: 0, y: 0, z: 0 });
+    const normal = { x: 0, y: 0, z: 0 };
+    const binormal = { x: 0, y: 0, z: 0 };
+    cave.frame(s, tangent, normal, binormal);
+    const offset = lateral * cave.radius(s, 0) * 0.45;
+    return {
+      x: point.x + binormal.x * offset,
+      y: point.y + binormal.y * offset,
+      z: point.z + binormal.z * offset,
+      tx: tangent.x,
+      ty: tangent.y,
+      tz: tangent.z,
+      s,
+    };
+  };
   const human = new Car(
     spawn,
     ControlType.HUMAN,
@@ -73,17 +91,16 @@ export default async (state: CaveState) => {
   void outputCount;
   for (let i = 0; i < CAR_COUNT; i++) {
     const ai = new Car(
-      spawn,
+      spawnAt((i + 1) * 16, ((i * 7) % 11) / 10 - 0.5),
       ControlType.AI,
       config.CAR_MAX_SPEED,
       `A${i}`,
       '',
       1 + (i % config.MAX_NETWORK_LAYERS),
       undefined,
-      ((i * 7) % 17) / 17 - 0.5,
+      0,
       cave,
     );
-    ai.s += (i % 6) * 3;
     state.cars.push(ai);
   }
 
@@ -93,6 +110,7 @@ export default async (state: CaveState) => {
     color: 0x15181d,
     roughness: 0.9,
   });
+  const markerGeometry = new THREE.SphereGeometry(1.4, 12, 8);
   const carMeshes = new Map<Car, THREE.Group>();
   for (const car of state.cars) {
     const group = new THREE.Group();
@@ -100,11 +118,27 @@ export default async (state: CaveState) => {
       carGeometry,
       new THREE.MeshStandardMaterial({
         color: car.color === 'white' ? 0xffffff : car.color,
+        emissive: car.color === 'white' ? 0x222222 : car.color,
+        emissiveIntensity: car === human ? 0.7 : 0.12,
         roughness: 0.6,
         metalness: 0.15,
+        depthTest: car !== human,
       }),
     );
+    body.frustumCulled = false;
     group.add(body);
+    const marker = new THREE.Mesh(
+      markerGeometry,
+      new THREE.MeshBasicMaterial({
+        color: car === human ? 0xffffaa : car.color,
+        depthTest: car !== human,
+      }),
+    );
+    marker.position.set(0, 1.8, -3.7);
+    marker.frustumCulled = false;
+    group.add(marker);
+    group.renderOrder = car === human ? 10 : 1;
+    group.frustumCulled = false;
     for (const [x, z] of [
       [-2.0, -3.1],
       [2.0, -3.1],
@@ -152,26 +186,15 @@ export default async (state: CaveState) => {
   let followed = human;
   let lastHud = 0;
   const lookAt = new THREE.Vector3();
+  const desiredLookAt = new THREE.Vector3();
   const desiredCamera = new THREE.Vector3();
   const center = { x: 0, y: 0, z: 0 };
+  camera.position.set(spawn.x, spawn.y + 4, spawn.z + 20);
 
   const respawn = (car: Car) => {
     const next = cave.getSpawn();
-    car.x = next.x;
-    car.y = next.y;
-    car.z = next.z;
-    car.s = next.s + (car === human ? 0 : Math.random() * 24);
-    car.vx = 0;
-    car.vy = 0;
-    car.vz = 0;
-    car.avx = 0;
-    car.avy = 0;
-    car.avz = 0;
-    car.damaged = false;
-    car.finished = false;
-    car.nextGate = 0;
-    car.insideGate = -1;
-    car.gateFramesRemaining = config.GATE_BUDGET_FRAMES;
+    car.reset(next);
+    car.s += car === human ? 0 : (car.label.length * 7) % 24;
     car.brain.score = 0;
   };
 
@@ -180,13 +203,15 @@ export default async (state: CaveState) => {
     const now = performance.now();
     for (const car of state.cars) {
       if (car.damaged) {
-        if (now - car.deathTime > config.DEAD_LIFETIME) {
+        if (now - car.deathTime > 900) {
           respawn(car);
           car.deathTime = 0;
         }
         continue;
       }
+      const alive = !car.damaged;
       car.update(cave);
+      if (alive && car.damaged) car.deathTime = now;
     }
 
     let minS = human.s;
@@ -222,11 +247,14 @@ export default async (state: CaveState) => {
     // The camera sits behind the car but always looks at the cave axis ahead,
     // rather than staring at the car's local tilt.
     cave.centerAt(followed.s + config.CAMERA_LOOK_AHEAD, center);
-    lookAt.set(center.x, center.y, center.z);
+    // Keep the optical axis on the tunnel center, while the chase position
+    // leaves the car visible at the lower edge like the circuit camera.
+    desiredLookAt.set(center.x, followed.y, center.z);
+    lookAt.lerp(desiredLookAt, 0.16);
     desiredCamera.set(
-      followed.x - followed.fx * 20 + followed.ux * 8,
-      followed.y - followed.fy * 20 + followed.uy * 8,
-      followed.z - followed.fz * 20 + followed.uz * 8,
+      followed.x - followed.fx * 22,
+      followed.y + 4,
+      followed.z - followed.fz * 22,
     );
     camera.position.lerp(desiredCamera, 0.12);
     camera.lookAt(lookAt);
@@ -246,7 +274,7 @@ export default async (state: CaveState) => {
       readout.textContent = `${Math.round(followed.speed * 3.6)} km/h · gate ${Math.min(
         followed.nextGate,
         config.GATES_PER_SEED,
-      )}/${config.GATES_PER_SEED} · score ${Math.round(followed.brain.score)}`;
+      )}/${config.GATES_PER_SEED} · score ${Math.round(followed.brain.score)} · alive ${living.length}`;
     }
   });
 

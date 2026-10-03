@@ -73,6 +73,7 @@ export class Cave {
   #noiseSalt: number;
   #scene: THREE.Scene;
   #material: THREE.MeshLambertMaterial;
+  #rockTexture: THREE.CanvasTexture;
   #gateMaterial: THREE.MeshBasicMaterial;
   #gateNextMaterial: THREE.MeshBasicMaterial;
 
@@ -102,8 +103,13 @@ export class Cave {
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
 
     this.#scene = scene;
+    this.#rockTexture = this.#createRockTexture();
+    this.#rockTexture.wrapS = THREE.RepeatWrapping;
+    this.#rockTexture.wrapT = THREE.RepeatWrapping;
+    this.#rockTexture.repeat.set(4, 12);
     this.#material = new THREE.MeshLambertMaterial({
       color: new THREE.Color(config.CAVE_COLOR),
+      map: this.#rockTexture,
       vertexColors: true,
       side: THREE.BackSide,
     });
@@ -231,6 +237,34 @@ export class Cave {
     out.z = dz / len;
   }
 
+  /** A small generated rock texture keeps the cave from reading as a bare
+   *  checkerboard of lit triangles while remaining deterministic/offline. */
+  #createRockTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+    if (!context) return new THREE.CanvasTexture(canvas);
+    const image = context.createImageData(canvas.width, canvas.height);
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        let h = (x * 374761393 + y * 668265263 + (this.seed + 17) * 1442695041) | 0;
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        const noise = ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+        const shade = Math.round(48 + noise * 38);
+        const index = (y * canvas.width + x) * 4;
+        image.data[index] = shade;
+        image.data[index + 1] = Math.round(shade * 1.05);
+        image.data[index + 2] = Math.round(shade * 1.1);
+        image.data[index + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
   /** the long waves of the radius, continuous over the whole cave */
   #waveRadius(s: number) {
     let r = config.CAVE_RADIUS;
@@ -271,7 +305,7 @@ export class Cave {
     const nx0 = n00 + (n10 - n00) * su;
     const nx1 = n01 + (n11 - n01) * su;
     const n = nx0 + (nx1 - nx0) * sv;
-    const amp = 1.5 + 4.5 * this.difficulty;
+    const amp = 16 + 24 * this.difficulty;
     return (n - 0.5) * 2 * amp;
   }
 
@@ -375,7 +409,10 @@ export class Cave {
     const q = this;
     for (let t = 0; t < maxLen; t += step) {
       const px = ox + dx * t;
-      const py = oy + dy * t;
+      // Collision space is the unscaled generator space. Convert world Y
+      // through the same vertical scale used by the rendered chunk mesh.
+      const py = oy / config.CAVE_VERTICAL_SCALE +
+        (dy / config.CAVE_VERTICAL_SCALE) * t;
       const pz = oz + dz * t;
       const s = Math.max(0, sHint + t * dotDT);
       q.center(s, q.#qc);
@@ -388,7 +425,7 @@ export class Cave {
         wx * q.#qn.x + wy * q.#qn.y + wz * q.#qn.z,
       );
       const d = Math.sqrt(wx * wx + wy * wy + wz * wz);
-      if (d - q.radius(s, a) > step) {
+      if (d - q.radius(s, a) > 0) {
         const hitT = Math.max(0.01, t - step / 2);
         if (out) q.#fillRadialAt(hitT, s, a, out);
         return hitT;
@@ -431,22 +468,24 @@ export class Cave {
   ) {
     let bestS = sHint;
     let bestA = 0;
-    let bestD = Infinity;
+    // Choose the nearest centerline point, not the most negative signed
+    // clearance. The latter can select a different arc sample and let a car
+    // tunnel through a wall when it is outside the local cross-section.
+    let bestCenterDistance = Infinity;
     for (let s = sHint - 20; s <= sHint + 20; s += 4) {
       if (s < 0) continue;
       this.center(s, this.#qc);
       this.frame(s, this.#qt, this.#qn, this.#qb);
       const wx = px - this.#qc.x;
-      const wy = py - this.#qc.y;
+      const wy = py / config.CAVE_VERTICAL_SCALE - this.#qc.y;
       const wz = pz - this.#qc.z;
       const a = Math.atan2(
         wx * this.#qb.x + wy * this.#qb.y + wz * this.#qb.z,
         wx * this.#qn.x + wy * this.#qn.y + wz * this.#qn.z,
       );
       const d = Math.sqrt(wx * wx + wy * wy + wz * wz);
-      const dist = d - this.radius(s, a);
-      if (dist < bestD) {
-        bestD = dist;
+      if (d < bestCenterDistance) {
+        bestCenterDistance = d;
         bestS = s;
         bestA = a;
       }
@@ -454,33 +493,41 @@ export class Cave {
     this.center(bestS, this.#qc);
     this.frame(bestS, this.#qt, this.#qn, this.#qb);
     const wx = px - this.#qc.x;
-    const wy = py - this.#qc.y;
+    const wy = py / config.CAVE_VERTICAL_SCALE - this.#qc.y;
     const wz = pz - this.#qc.z;
     const d = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1;
     out.s = bestS;
     out.a = bestA;
-    out.dist = bestD;
-    out.nx = wx / d;
-    out.ny = wy / d;
-    out.nz = wz / d;
+    out.dist = d - this.radius(bestS, bestA);
+    // Transform the radial normal back into world space: the scaled mesh's
+    // Y gradient is compressed, so its world normal has the inverse scale.
+    const rawNx = wx / d;
+    const rawNy = wy / d;
+    const rawNz = wz / d;
+    const worldLength = Math.hypot(rawNx, rawNy / config.CAVE_VERTICAL_SCALE, rawNz) || 1;
+    out.nx = rawNx / worldLength;
+    out.ny = rawNy / config.CAVE_VERTICAL_SCALE / worldLength;
+    out.nz = rawNz / worldLength;
     const r = this.radius(bestS, bestA);
     const ca = Math.cos(bestA);
     const sa = Math.sin(bestA);
     out.hx = this.#qc.x + (this.#qn.x * ca + this.#qb.x * sa) * r;
-    out.hy = this.#qc.y + (this.#qn.y * ca + this.#qb.y * sa) * r;
+    out.hy = (this.#qc.y + (this.#qn.y * ca + this.#qb.y * sa) * r) * config.CAVE_VERTICAL_SCALE;
     out.hz = this.#qc.z + (this.#qn.z * ca + this.#qb.z * sa) * r;
     return out;
   }
 
   /** the point of the cave axis at arc s, for the camera and the gates */
   centerAt(s: number, out: Pt) {
-    return this.center(s, out);
+    this.center(s, out);
+    out.y *= config.CAVE_VERTICAL_SCALE;
+    return out;
   }
 
   /** the single start point, just inside the mouth, every car overlaps there */
   getSpawn() {
     const s = config.SPAWN_OFFSET;
-    const c = this.center(s, { x: 0, y: 0, z: 0 });
+    const c = this.centerAt(s, { x: 0, y: 0, z: 0 });
     const t = this.tangent(s, { x: 0, y: 0, z: 0 });
     return { x: c.x, y: c.y, z: c.z, tx: t.x, ty: t.y, tz: t.z, s };
   }
@@ -550,6 +597,7 @@ export class Cave {
     const positions = new Float32Array(count * 3);
     const normals = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
+    const uvs = new Float32Array(count * 2);
     let vi = 0;
     for (let j = 0; j <= SAMPLES; j++) {
       const o = j * 13;
@@ -573,6 +621,8 @@ export class Cave {
         colors[vi * 3] = shade;
         colors[vi * 3 + 1] = shade;
         colors[vi * 3 + 2] = shade;
+        uvs[vi * 2] = (k / SIDES) * 4;
+        uvs[vi * 2 + 1] = (j / SAMPLES) * 12;
         vi++;
       }
     }
@@ -583,15 +633,20 @@ export class Cave {
         const a1 = a0 + 1;
         const b0 = a0 + SIDES + 1;
         const b1 = b0 + 1;
-        indices.push(a0, b0, a1, a0, a1, b1);
+        // Keep both triangles wound consistently. The previous alternating
+        // winding made BackSide lighting produce a black/white checkerboard.
+        indices.push(a0, a1, b0, a1, b1, b0);
       }
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     geometry.setIndex(indices);
     const mesh = new THREE.Mesh(geometry, this.#material);
+    // Keep the cave wide while compressing its rendered vertical profile.
+    mesh.scale.y = config.CAVE_VERTICAL_SCALE;
     this.#scene.add(mesh);
 
     // the gates this chunk owns: a thin unlit ring across the cave
@@ -604,7 +659,7 @@ export class Cave {
       const b: Pt = { x: 0, y: 0, z: 0 };
       this.tangent(gs, t);
       this.#frameFromTangent(t, n, b);
-      const c = this.center(gs, { x: 0, y: 0, z: 0 });
+      const c = this.centerAt(gs, { x: 0, y: 0, z: 0 });
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(this.#waveRadius(gs) * 0.99, 1.1, 6, 48),
         this.#gateMaterial,
@@ -681,6 +736,7 @@ export class Cave {
     this.#controlOffset = 0;
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
     this.#material.dispose();
+    this.#rockTexture.dispose();
     this.#gateMaterial.dispose();
     this.#gateNextMaterial.dispose();
     this.#generateControl(0);

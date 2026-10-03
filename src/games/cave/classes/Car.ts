@@ -177,28 +177,8 @@ export class Car {
     this.gateFramesRemaining = config.GATE_BUDGET_FRAMES;
     this.stallFrames = 0;
 
-    // face the cave direction: the body's -z is the forward, so the basis
-    // back vector is the opposite of the spawn tangent
-    const fwdx = spawn.tx;
-    const fwdy = spawn.ty;
-    const fwdz = spawn.tz;
-    // right = forward x worldUp, normalized; up = right x forward
-    let rxw = -fwdz;
-    let ryw = 0;
-    let rzv = fwdx;
-    const rlen = Math.sqrt(rxw * rxw + ryw * ryw + rzv * rzv) || 1;
-    rxw /= rlen;
-    ryw /= rlen;
-    rzv /= rlen;
-    const uxw = ryw * fwdz - rzv * fwdy;
-    const uyw = rzv * fwdx - rxw * fwdz;
-    const uzv = rxw * fwdy - ryw * fwdx;
-    const m = new THREE.Matrix4().makeBasis(
-      new THREE.Vector3(rxw, ryw, rzv),
-      new THREE.Vector3(uxw, uyw, uzv),
-      new THREE.Vector3(-fwdx, -fwdy, -fwdz),
-    );
-    this.quat = new THREE.Quaternion().setFromRotationMatrix(m);
+    this.quat = new THREE.Quaternion();
+    this.#setOrientation(spawn.tx, spawn.ty, spawn.tz);
 
     // a lateral offset slides the car along the cave frame at the spawn arc
     if (this.cave && laneOffset !== 0) {
@@ -233,6 +213,69 @@ export class Car {
   /** the accent can move at runtime, a mixed brain blends the brains it uses */
   setColor(color: string) {
     this.color = color;
+  }
+
+  /** Return a crashed car to a fresh spawn while preserving its controls and
+   *  brain. This mirrors the circuit human respawn instead of leaving a dead
+   *  mesh invisible forever. */
+  reset(spawn: {
+    x: number;
+    y: number;
+    z: number;
+    tx: number;
+    ty: number;
+    tz: number;
+    s: number;
+  }) {
+    this.x = spawn.x;
+    this.y = spawn.y;
+    this.z = spawn.z;
+    this.s = spawn.s;
+    this.prevS = spawn.s;
+    this.vx = 0;
+    this.vy = 0;
+    this.vz = 0;
+    this.avx = 0;
+    this.avy = 0;
+    this.avz = 0;
+    this.#setOrientation(spawn.tx, spawn.ty, spawn.tz);
+    this.damaged = false;
+    this.finished = false;
+    this.nextGate = 0;
+    this.insideGate = -1;
+    this.passedGate = false;
+    this.completedGateIndex = -1;
+    this.gateFramesRemaining = config.GATE_BUDGET_FRAMES;
+    this.framesSinceLastGate = 0;
+    this.totalRaceFrames = 0;
+    this.stallFrames = 0;
+    this.deathPenalty = 0;
+    this.speed = 0;
+    this.compression.fill(0);
+    this.grounded.fill(false);
+    this.hasPrevSensors = false;
+    this.prevSensorInputs.fill(0);
+  }
+
+  #setOrientation(fwdx: number, fwdy: number, fwdz: number) {
+    // right = forward x worldUp, normalized; up = right x forward. The
+    // body's local -Z is the resulting forward direction.
+    let rxw = -fwdz;
+    let ryw = 0;
+    let rzv = fwdx;
+    const rlen = Math.sqrt(rxw * rxw + ryw * ryw + rzv * rzv) || 1;
+    rxw /= rlen;
+    ryw /= rlen;
+    rzv /= rlen;
+    const uxw = ryw * fwdz - rzv * fwdy;
+    const uyw = rzv * fwdx - rxw * fwdz;
+    const uzv = rxw * fwdy - ryw * fwdx;
+    const m = new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(rxw, ryw, rzv),
+      new THREE.Vector3(uxw, uyw, uzv),
+      new THREE.Vector3(-fwdx, -fwdy, -fwdz),
+    );
+    this.quat.setFromRotationMatrix(m);
   }
 
   update(cave: Cave) {
@@ -427,6 +470,8 @@ export class Car {
   #down: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   #anchor: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   #tangent: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  #uprightMatrix = new THREE.Matrix4();
+  #uprightQuaternion = new THREE.Quaternion();
 
   #move(cave: Cave) {
     // 1. body frame from the quaternion
@@ -467,8 +512,6 @@ export class Car {
     let groundedCount = 0;
     const speedRatio = Math.min(1, this.speed / this.maxSpeed);
     const grip = config.CAR_GRIP * (1 - 0.45 * speedRatio);
-    const castLength = config.SUSP_REST + config.SUSP_TRAVEL + 0.5;
-
     for (let w = 0; w < 4; w++) {
       const off = config.WHEEL_OFFSETS[w];
       // wheel anchor in world space
@@ -477,28 +520,31 @@ export class Car {
       this.#anchor.y += this.y;
       this.#anchor.z += this.z;
 
-      const hitT = cave.castRay(
+      // Query the wheel point directly against the analytic surface. A
+      // downward ray can miss a steep/bumpy wall between frames; the radial
+      // point query cannot tunnel and still represents a four-point vehicle.
+      cave.nearestRadial(
         this.#anchor.x,
         this.#anchor.y,
         this.#anchor.z,
-        this.#down.x,
-        this.#down.y,
-        this.#down.z,
-        castLength,
         this.s,
-        this.cx,
-        this.cy,
-        this.cz,
         this.wheelHit,
       );
-      const grounded = hitT >= 0 && hitT < config.SUSP_REST;
+      // dist is negative inside the cave. Suspension travel begins when the
+      // wheel is within (radius + travel) of the wall and reaches full
+      // compression at actual wheel-surface contact.
+      const compression = clamp(
+        0,
+        config.SUSP_TRAVEL,
+        this.wheelHit.dist + config.CAR_WHEEL_RADIUS + config.SUSP_TRAVEL,
+      );
+      const grounded = compression > 0;
       this.grounded[w] = grounded;
       if (!grounded) {
         this.compression[w] = 0;
         continue;
       }
       groundedCount++;
-      const compression = config.SUSP_REST - hitT;
       this.compression[w] = compression;
       const nx = this.wheelHit.nx;
       const ny = this.wheelHit.ny;
@@ -550,12 +596,15 @@ export class Car {
       const dvL = vL - oldVL;
       // tire grip: cancel the lateral slip, shared over the grounded wheels
       const dvLat = -oldVLat * grip * (groundedCount / 4);
-      // suspension: spring plus a damper that only resists going in
+      // The radial normal points from the cave axis into its wall. Springs
+      // push the car in the opposite direction, back into the cave. The old
+      // sign pushed the wheels through the floor and then flipped the body.
       const vn = wvx * nx + wvy * ny + wvz * nz;
-      const damp = vn < 0 ? -config.SUSP_DAMP * vn : 0;
-      const aX = fwX * dvL + flX * dvLat + nx * (config.SUSP_SPRING * compression + damp);
-      const aY = fwY * dvL + flY * dvLat + ny * (config.SUSP_SPRING * compression + damp);
-      const aZ = fwZ * dvL + flZ * dvLat + nz * (config.SUSP_SPRING * compression + damp);
+      const damp = vn > 0 ? config.SUSP_DAMP * vn : 0;
+      const suspension = -(config.SUSP_SPRING * compression + damp);
+      const aX = fwX * dvL + flX * dvLat + nx * suspension;
+      const aY = fwY * dvL + flY * dvLat + ny * suspension;
+      const aZ = fwZ * dvL + flZ * dvLat + nz * suspension;
 
       accX += aX / 4;
       accY += aY / 4;
@@ -588,9 +637,12 @@ export class Car {
     this.avx += tqX;
     this.avy += tqY;
     this.avz += tqZ;
-    this.avx *= 0.97;
+    // A simple anti-roll damper keeps a single wheel hitting a bump from
+    // tumbling the lightweight body. Yaw remains responsive; pitch and roll
+    // settle quickly toward the cave surface.
+    this.avx *= 0.82;
     this.avy *= 0.97;
-    this.avz *= 0.97;
+    this.avz *= 0.82;
     // integrate the orientation: dq = 0.5 * (w quat) x q
     const qx = this.quat.x;
     const qy = this.quat.y;
@@ -601,6 +653,7 @@ export class Car {
     this.quat.z += 0.5 * (this.avz * qw + this.avx * qy - this.avy * qx);
     this.quat.w += -0.5 * (this.avx * qx + this.avy * qy + this.avz * qz);
     this.quat.normalize();
+    this.#stabilizeUpright();
     this.x += this.vx;
     this.y += this.vy;
     this.z += this.vz;
@@ -613,11 +666,14 @@ export class Car {
     //  kill the car on a hard enough hit
     const body = this.hit;
     cave.nearestRadial(this.x, this.y, this.z, this.s, body);
-    if (body.dist < config.CAR_BODY_RADIUS) {
-      const pen = config.CAR_BODY_RADIUS - body.dist;
-      this.x += body.nx * pen;
-      this.y += body.ny * pen;
-      this.z += body.nz * pen;
+    // body.dist is negative while inside the tube. The sphere touches a wall
+    // when its radial clearance is smaller than its radius, i.e. dist > -R.
+    // Push inward (toward the cave axis), not outward into the wall.
+    if (body.dist > -config.CAR_BODY_RADIUS) {
+      const pen = body.dist + config.CAR_BODY_RADIUS;
+      this.x -= body.nx * pen;
+      this.y -= body.ny * pen;
+      this.z -= body.nz * pen;
       const vn = this.vx * body.nx + this.vy * body.ny + this.vz * body.nz;
       if (vn > 0) {
         const j = vn * (1 + config.CAR_RESTITUTION);
@@ -636,18 +692,30 @@ export class Car {
         }
       }
     }
-    // the wheels are spheres too: an embedded wheel shoves the body out
+    // Resolve each wheel sphere again after integration. This is the hard
+    // non-penetration pass: suspension is soft, but the wheel itself never
+    // ends a frame on the far side of the cave mesh.
     for (let w = 0; w < 4; w++) {
-      if (!this.grounded[w]) continue;
-      const hitT = config.SUSP_REST - this.compression[w];
-      const embed = config.CAR_WHEEL_RADIUS - 0.6 - hitT;
+      const off = config.WHEEL_OFFSETS[w];
+      this.#toWorld(off[0], off[1], off[2], this.#anchor);
+      this.#anchor.x += this.x;
+      this.#anchor.y += this.y;
+      this.#anchor.z += this.z;
+      cave.nearestRadial(
+        this.#anchor.x,
+        this.#anchor.y,
+        this.#anchor.z,
+        this.s,
+        this.wheelHit,
+      );
+      const embed = this.wheelHit.dist + config.CAR_WHEEL_RADIUS;
       if (embed <= 0) continue;
       const nx = this.wheelHit.nx;
       const ny = this.wheelHit.ny;
       const nz = this.wheelHit.nz;
-      this.x += nx * embed;
-      this.y += ny * embed;
-      this.z += nz * embed;
+      this.x -= nx * embed;
+      this.y -= ny * embed;
+      this.z -= nz * embed;
       const vn = this.vx * nx + this.vy * ny + this.vz * nz;
       if (vn > 0) {
         this.vx -= nx * vn * (1 + config.CAR_RESTITUTION) * 0.5;
@@ -659,6 +727,34 @@ export class Car {
     if (body.dist > 50) this.damaged = true;
     // upside down is not a driving position
     if (this.uy < config.UPSIDE_DOWN_LIMIT) this.damaged = true;
+  }
+
+  /** Keep the car's visual/physical up direction close to world up. The
+   *  wheel springs still supply the actual contact forces, but this bounded
+   *  assist prevents one uneven wheel from flipping the simple rigid body and
+   *  sending it through the cave. Yaw is preserved. */
+  #stabilizeUpright() {
+    let fx = this.#fw.x;
+    let fz = this.#fw.z;
+    const horizontal = Math.hypot(fx, fz);
+    if (horizontal < 1e-4) {
+      fx = this.#tangent.x;
+      fz = this.#tangent.z;
+    }
+    const length = Math.hypot(fx, fz) || 1;
+    fx /= length;
+    fz /= length;
+    const rx = -fz;
+    const rz = fx;
+    this.#uprightMatrix.makeBasis(
+      new THREE.Vector3(rx, 0, rz),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(-fx, 0, -fz),
+    );
+    this.#uprightQuaternion.setFromRotationMatrix(this.#uprightMatrix);
+    this.quat.slerp(this.#uprightQuaternion, config.CAR_UPRIGHT_RESPONSE);
+    this.avx *= 0.25;
+    this.avz *= 0.25;
   }
 
   /** wall hits, tunneling and flips set damaged inside #move; this only
