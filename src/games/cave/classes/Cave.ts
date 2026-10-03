@@ -1,0 +1,718 @@
+import * as THREE from 'three';
+import { mulberry32 } from '../../../utilities/math';
+import { config } from './Config';
+
+/** plain 3D point, no allocation churn in the query hot paths */
+interface Pt {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** one streamed segment: control points at both ends plus precomputed
+ *  samples of the centerline, its frame and its base radius */
+interface ChunkData {
+  index: number;
+  /** (cx,cy,cz, tx,ty,tz, nx,ny,nz, bx,by,bz, baseRadius) per sample */
+  samples: Float32Array;
+  mesh: THREE.Mesh | null;
+  gates: THREE.Mesh[];
+}
+
+const SAMPLES = config.CAVE_CHUNK_SAMPLES;
+const SIDES = config.CAVE_SIDES;
+const LEN = config.CAVE_SEGMENT_LENGTH;
+const PER = LEN / SAMPLES;
+const TWO_PI = Math.PI * 2;
+const NOISE_CELLS = Math.round(TWO_PI / config.CAVE_BUMP_ANGLE);
+
+/** result of the body/wheel collision query: the nearest point of the
+ *  analytic surface to a point, with its radial normal */
+export interface RadialHit {
+  s: number;
+  a: number;
+  /** signed radial distance: point-to-centerline minus the local radius,
+   *  negative inside the cave, positive outside */
+  dist: number;
+  /** radial outward normal (toward the wall) at the hit */
+  nx: number;
+  ny: number;
+  nz: number;
+  /** the surface point itself */
+  hx: number;
+  hy: number;
+  hz: number;
+}
+
+/**
+ * The cave. A tube swept along a seeded 3D centerline: the centerline is a
+ * chain of cubic Hermite segments (one per CAVE_SEGMENT_LENGTH), each turning
+ * the direction by a seeded random angle, and the radius is a base plus long
+ * seeded waves plus a fine value-noise skin, so the same seed always yields
+ * the same cave. Everything the game queries (rays, collisions, spawn, gates)
+ * is answered by the analytic tube, the three.js mesh is only its sampled
+ * rendering, and old segments are disposed in real time as the cars pass.
+ */
+export class Cave {
+  public seed: number;
+  public difficulty: number;
+  /** arc position of every gate, gate i sits at (i + 1) * GATE_SPACING */
+  public gatePositions: number[] = [];
+  /** gate meshes by gate index, created with the chunk that owns the gate */
+  public gateMeshes: (THREE.Mesh | null)[] = [];
+
+  /** active chunks with their meshes, keyed by chunk index */
+  #chunks = new Map<number, ChunkData>();
+  /** centerline control points, grown one per chunk and trimmed on removal */
+  #control: { p: Pt; d: Pt }[] = [];
+  /** chunk index of #control[0], the array is trimmed as chunks are removed */
+  #controlOffset = 0;
+  /** long radius waves, seeded from the cave seed only so they are
+   *  continuous over the whole cave */
+  #waves: { freq: number; amp: number; phase: number }[] = [];
+  #noiseSalt: number;
+  #scene: THREE.Scene;
+  #material: THREE.MeshLambertMaterial;
+  #gateMaterial: THREE.MeshBasicMaterial;
+  #gateNextMaterial: THREE.MeshBasicMaterial;
+
+  constructor(seed: number, scene: THREE.Scene) {
+    this.seed = seed;
+    this.difficulty = Math.min(
+      1,
+      Math.max(0, seed) / config.CAVE_DIFFICULTY_SEED_BASE,
+    );
+
+    const rng = mulberry32(seed >>> 0);
+    for (let k = 0; k < config.CAVE_HARMONICS; k++) {
+      const wavelength = 250 + rng() * 650;
+      this.#waves.push({
+        freq: TWO_PI / wavelength,
+        amp:
+          (0.25 + rng() * 0.75) *
+          (config.CAVE_WAVINESS / config.CAVE_HARMONICS) *
+          (1 + 0.7 * this.difficulty),
+        phase: rng() * TWO_PI,
+      });
+    }
+    this.#noiseSalt = ((seed ^ 0x51ab3f) >>> 0) || 1;
+
+    for (let i = 0; i < config.GATES_PER_SEED; i++)
+      this.gatePositions.push((i + 1) * config.GATE_SPACING);
+    this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
+
+    this.#scene = scene;
+    this.#material = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(config.CAVE_COLOR),
+      vertexColors: true,
+      side: THREE.BackSide,
+    });
+    this.#gateMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(config.GATE_COLORS[0]),
+      transparent: true,
+      opacity: 0.28,
+    });
+    this.#gateNextMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(config.GATE_NEXT_COLOR),
+      transparent: true,
+      opacity: 0.85,
+    });
+
+    this.#generateControl(0);
+  }
+
+  /** deterministic 32-bit mix of the seed and a chunk index */
+  #hash(index: number) {
+    let h = (this.seed | 0) ^ Math.imul(index | 0, 0x9e3779b9);
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+
+  /** grow the control line: the next chunk starts where this one ends, in
+   *  the current direction, and turns it by a seeded random angle. A y
+   *  damping keeps the cave from ever diving straight down. */
+  #generateControl(index: number) {
+    const local = index - this.#controlOffset;
+    if (local < this.#control.length) return;
+    let p: Pt;
+    let d: Pt;
+    if (index === 0) {
+      p = { x: 0, y: 0, z: 0 };
+      d = { x: 0, y: 0, z: -1 };
+    } else {
+      const prev = this.#control[local - 1];
+      const rng = mulberry32(this.#hash(index));
+      // a random rotation axis, rerolled when it lands near zero
+      let ax = rng() * 2 - 1;
+      let ay = rng() * 2 - 1;
+      let az = rng() * 2 - 1;
+      const alen = Math.sqrt(ax * ax + ay * ay + az * az);
+      if (alen < 1e-3) {
+        ax = 1;
+        ay = 0;
+        az = 0;
+      } else {
+        ax /= alen;
+        ay /= alen;
+        az /= alen;
+      }
+      const maxAngle =
+        config.CAVE_TURN_BASE + config.CAVE_TURN_GROWTH * this.difficulty;
+      const angle = maxAngle * (0.35 + 0.65 * rng());
+      d = { x: 0, y: 0, z: 0 };
+      rotateAroundAxis(prev.d, ax, ay, az, angle, d);
+      d.y *= 0.9; // gentle: the cave undulates, it never plunges
+      const dlen = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z) || 1;
+      d.x /= dlen;
+      d.y /= dlen;
+      d.z /= dlen;
+      p = {
+        x: prev.p.x + prev.d.x * LEN,
+        y: prev.p.y + prev.d.y * LEN,
+        z: prev.p.z + prev.d.z * LEN,
+      };
+    }
+    this.#control.push({ p, d });
+  }
+
+  #ensureControl(index: number) {
+    while (index - this.#controlOffset >= this.#control.length)
+      this.#generateControl(this.#controlOffset + this.#control.length);
+  }
+
+  #controlAt(i: number) {
+    return this.#control[i - this.#controlOffset];
+  }
+
+  /** Hermite centerline point of chunk i at normalized t, into out */
+  #centerInChunk(i: number, t: number, out: Pt) {
+    this.#ensureControl(i + 1);
+    const a = this.#controlAt(i);
+    const b = this.#controlAt(i + 1);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+    out.x =
+      h00 * a.p.x + h10 * a.d.x * LEN + h01 * b.p.x + h11 * b.d.x * LEN;
+    out.y =
+      h00 * a.p.y + h10 * a.d.y * LEN + h01 * b.p.y + h11 * b.d.y * LEN;
+    out.z =
+      h00 * a.p.z + h10 * a.d.z * LEN + h01 * b.p.z + h11 * b.d.z * LEN;
+  }
+
+  /** Hermite centerline tangent (normalized) of chunk i at normalized t */
+  #tangentInChunk(i: number, t: number, out: Pt) {
+    this.#ensureControl(i + 1);
+    const a = this.#controlAt(i);
+    const b = this.#controlAt(i + 1);
+    const t2 = t * t;
+    let dx =
+      (6 * t2 - 6 * t) * a.p.x +
+      (3 * t2 - 4 * t + 1) * a.d.x * LEN +
+      (-6 * t2 + 6 * t) * b.p.x +
+      (3 * t2 - 2 * t) * b.d.x * LEN;
+    let dy =
+      (6 * t2 - 6 * t) * a.p.y +
+      (3 * t2 - 4 * t + 1) * a.d.y * LEN +
+      (-6 * t2 + 6 * t) * b.p.y +
+      (3 * t2 - 2 * t) * b.d.y * LEN;
+    let dz =
+      (6 * t2 - 6 * t) * a.p.z +
+      (3 * t2 - 4 * t + 1) * a.d.z * LEN +
+      (-6 * t2 + 6 * t) * b.p.z +
+      (3 * t2 - 2 * t) * b.d.z * LEN;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    out.x = dx / len;
+    out.y = dy / len;
+    out.z = dz / len;
+  }
+
+  /** the long waves of the radius, continuous over the whole cave */
+  #waveRadius(s: number) {
+    let r = config.CAVE_RADIUS;
+    for (let i = 0; i < this.#waves.length; i++) {
+      const w = this.#waves[i];
+      r += w.amp * Math.sin(w.freq * s + w.phase);
+    }
+    return r;
+  }
+
+  /** one corner of the bump noise grid, deterministic in (i, j, seed) */
+  #noiseCorner(i: number, j: number) {
+    let h =
+      (this.#noiseSalt | 0) ^
+      Math.imul(i | 0, 0x85ebca6b) ^
+      Math.imul(j | 0, 0xc2b2ae35);
+    h = Math.imul(h ^ (h >>> 13), 0x2f1b66d9);
+    h ^= h >>> 16;
+    return ((h >>> 0) % 4096) / 4096;
+  }
+
+  /** fine bumpy skin: value noise on an (arc, angle) grid. The angle wraps
+   *  on an integer number of cells so the seam of the tube is seamless. */
+  #bump(s: number, a: number) {
+    const u = s / config.CAVE_BUMP_WAVE;
+    const v = (((a < 0 ? a + TWO_PI : a) / TWO_PI) * NOISE_CELLS) % NOISE_CELLS;
+    const u0 = Math.floor(u);
+    const v0 = Math.floor(v);
+    const fu = u - u0;
+    const fv = v - v0;
+    const su = fu * fu * (3 - 2 * fu);
+    const sv = fv * fv * (3 - 2 * fv);
+    const v1 = (v0 + 1) % NOISE_CELLS;
+    const n00 = this.#noiseCorner(u0, v0);
+    const n10 = this.#noiseCorner(u0 + 1, v0);
+    const n01 = this.#noiseCorner(u0, v1);
+    const n11 = this.#noiseCorner(u0 + 1, v1);
+    const nx0 = n00 + (n10 - n00) * su;
+    const nx1 = n01 + (n11 - n01) * su;
+    const n = nx0 + (nx1 - nx0) * sv;
+    const amp = 1.5 + 4.5 * this.difficulty;
+    return (n - 0.5) * 2 * amp;
+  }
+
+  /** full radius at (arc, angle), clamped so the cave stays passable */
+  radius(s: number, a: number) {
+    const r = this.#waveRadius(s) + this.#bump(s, a);
+    return r < config.CAVE_MIN_RADIUS ? config.CAVE_MIN_RADIUS : r;
+  }
+
+  /** centerline point at arc s, into out */
+  center(s: number, out: Pt) {
+    const i = Math.max(0, Math.floor(s / LEN));
+    this.#centerInChunk(i, Math.min(1, (s - i * LEN) / LEN), out);
+    return out;
+  }
+
+  /** centerline tangent at arc s, normalized, into out */
+  tangent(s: number, out: Pt) {
+    const i = Math.max(0, Math.floor(s / LEN));
+    this.#tangentInChunk(i, Math.min(1, (s - i * LEN) / LEN), out);
+    return out;
+  }
+
+  /** the tube frame at arc s: tangent, normal and binormal. The normal is a
+   *  pure function of the tangent (world-up anchored), so the frame is
+   *  continuous across chunk borders without any carried state */
+  frame(s: number, outT: Pt, outN: Pt, outB: Pt) {
+    this.tangent(s, outT);
+    const t = outT;
+    // world up unless the tangent points almost straight up or down
+    let ux = 0;
+    let uy = 1;
+    let uz = 0;
+    if (Math.abs(t.y) > 0.93) {
+      ux = 1;
+      uy = 0;
+      uz = 0;
+    }
+    const dot = t.x * ux + t.y * uy + t.z * uz;
+    let nx = ux - t.x * dot;
+    let ny = uy - t.y * dot;
+    let nz = uz - t.z * dot;
+    const nlen = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+    nx /= nlen;
+    ny /= nlen;
+    nz /= nlen;
+    outN.x = nx;
+    outN.y = ny;
+    outN.z = nz;
+    // b = t x n, a right-handed frame around the tube
+    outB.x = t.y * nz - t.z * ny;
+    outB.y = t.z * nx - t.x * nz;
+    outB.z = t.x * ny - t.y * nx;
+    return { t: outT, n: outN, b: outB };
+  }
+
+  /** surface point at (arc, angle), into out */
+  surface(s: number, a: number, out: Pt) {
+    const t: Pt = { x: 0, y: 0, z: 0 };
+    const n: Pt = { x: 0, y: 0, z: 0 };
+    const b: Pt = { x: 0, y: 0, z: 0 };
+    this.frame(s, t, n, b);
+    const c = this.center(s, { x: 0, y: 0, z: 0 });
+    const r = this.radius(s, a);
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    out.x = c.x + (n.x * ca + b.x * sa) * r;
+    out.y = c.y + (n.y * ca + b.y * sa) * r;
+    out.z = c.z + (n.z * ca + b.z * sa) * r;
+    return out;
+  }
+
+  /** scratch frame, reused by every query so a frame allocates nothing */
+  #qt: Pt = { x: 0, y: 0, z: 0 };
+  #qn: Pt = { x: 0, y: 0, z: 0 };
+  #qb: Pt = { x: 0, y: 0, z: 0 };
+  #qc: Pt = { x: 0, y: 0, z: 0 };
+
+  /** march a ray against the analytic tube from (o) along the unit (d).
+   *  Returns the hit distance, or -1 when the ray stays inside for maxLen.
+   *  sHint is the arc position of the ray origin and tHint its tangent, so
+   *  the march projects the ray travel onto the cave direction. When out is
+   *  given the hit point, the radial normal and the local radius land there
+   *  too, ready for the suspension and the embed push-out. */
+  castRay(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    maxLen: number,
+    sHint: number,
+    thx: number,
+    thy: number,
+    thz: number,
+    out?: RadialHit,
+  ) {
+    const dotDT = dx * thx + dy * thy + dz * thz;
+    const step = config.RAY_STEP;
+    const q = this;
+    for (let t = 0; t < maxLen; t += step) {
+      const px = ox + dx * t;
+      const py = oy + dy * t;
+      const pz = oz + dz * t;
+      const s = Math.max(0, sHint + t * dotDT);
+      q.center(s, q.#qc);
+      q.frame(s, q.#qt, q.#qn, q.#qb);
+      const wx = px - q.#qc.x;
+      const wy = py - q.#qc.y;
+      const wz = pz - q.#qc.z;
+      const a = Math.atan2(
+        wx * q.#qb.x + wy * q.#qb.y + wz * q.#qb.z,
+        wx * q.#qn.x + wy * q.#qn.y + wz * q.#qn.z,
+      );
+      const d = Math.sqrt(wx * wx + wy * wy + wz * wz);
+      if (d - q.radius(s, a) > step) {
+        const hitT = Math.max(0.01, t - step / 2);
+        if (out) q.#fillRadialAt(hitT, s, a, out);
+        return hitT;
+      }
+    }
+    return -1;
+  }
+
+  /** write the hit point and radial normal of a ray hit at (hitT, s, a)
+   *  into out, reusing the scratch frame the march just filled */
+  #fillRadialAt(hitT: number, s: number, a: number, out: RadialHit) {
+    out.s = s;
+    out.a = a;
+    const c = this.#qc;
+    const r = this.radius(s, a);
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    out.hx = c.x + (this.#qn.x * ca + this.#qb.x * sa) * r;
+    out.hy = c.y + (this.#qn.y * ca + this.#qb.y * sa) * r;
+    out.hz = c.z + (this.#qn.z * ca + this.#qb.z * sa) * r;
+    // radial outward normal at the surface point
+    const nx = this.#qn.x * ca + this.#qb.x * sa;
+    const ny = this.#qn.y * ca + this.#qb.y * sa;
+    const nz = this.#qn.z * ca + this.#qb.z * sa;
+    out.nx = nx;
+    out.ny = ny;
+    out.nz = nz;
+    out.dist = hitT;
+  }
+
+  /** nearest point of the analytic surface to (p), searching the arc around
+   *  sHint. Fills out with the hit, its signed radial distance and its
+   *  radial outward normal. */
+  nearestRadial(
+    px: number,
+    py: number,
+    pz: number,
+    sHint: number,
+    out: RadialHit,
+  ) {
+    let bestS = sHint;
+    let bestA = 0;
+    let bestD = Infinity;
+    for (let s = sHint - 20; s <= sHint + 20; s += 4) {
+      if (s < 0) continue;
+      this.center(s, this.#qc);
+      this.frame(s, this.#qt, this.#qn, this.#qb);
+      const wx = px - this.#qc.x;
+      const wy = py - this.#qc.y;
+      const wz = pz - this.#qc.z;
+      const a = Math.atan2(
+        wx * this.#qb.x + wy * this.#qb.y + wz * this.#qb.z,
+        wx * this.#qn.x + wy * this.#qn.y + wz * this.#qn.z,
+      );
+      const d = Math.sqrt(wx * wx + wy * wy + wz * wz);
+      const dist = d - this.radius(s, a);
+      if (dist < bestD) {
+        bestD = dist;
+        bestS = s;
+        bestA = a;
+      }
+    }
+    this.center(bestS, this.#qc);
+    this.frame(bestS, this.#qt, this.#qn, this.#qb);
+    const wx = px - this.#qc.x;
+    const wy = py - this.#qc.y;
+    const wz = pz - this.#qc.z;
+    const d = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1;
+    out.s = bestS;
+    out.a = bestA;
+    out.dist = bestD;
+    out.nx = wx / d;
+    out.ny = wy / d;
+    out.nz = wz / d;
+    const r = this.radius(bestS, bestA);
+    const ca = Math.cos(bestA);
+    const sa = Math.sin(bestA);
+    out.hx = this.#qc.x + (this.#qn.x * ca + this.#qb.x * sa) * r;
+    out.hy = this.#qc.y + (this.#qn.y * ca + this.#qb.y * sa) * r;
+    out.hz = this.#qc.z + (this.#qn.z * ca + this.#qb.z * sa) * r;
+    return out;
+  }
+
+  /** the point of the cave axis at arc s, for the camera and the gates */
+  centerAt(s: number, out: Pt) {
+    return this.center(s, out);
+  }
+
+  /** the single start point, just inside the mouth, every car overlaps there */
+  getSpawn() {
+    const s = config.SPAWN_OFFSET;
+    const c = this.center(s, { x: 0, y: 0, z: 0 });
+    const t = this.tangent(s, { x: 0, y: 0, z: 0 });
+    return { x: c.x, y: c.y, z: c.z, tx: t.x, ty: t.y, tz: t.z, s };
+  }
+
+  /** build or drop the chunk meshes so the window [minS, maxS] stays meshed */
+  update(minS: number, maxS: number) {
+    const minChunk = Math.max(0, Math.floor(minS / LEN));
+    const maxChunk = Math.floor(maxS / LEN);
+    for (let i = minChunk; i <= maxChunk; i++) {
+      if (!this.#chunks.has(i)) this.#buildChunk(i);
+    }
+    for (const [i, chunk] of this.#chunks) {
+      if (i < minChunk || i > maxChunk) this.#removeChunk(chunk);
+    }
+    // the control line only needs to reach one chunk past the meshed range,
+    // trim what fell behind, the remaining control points are absolute
+    while (this.#controlOffset < minChunk && this.#control.length > 1) {
+      this.#control.shift();
+      this.#controlOffset++;
+    }
+  }
+
+  #removeChunk(chunk: ChunkData) {
+    if (chunk.mesh) {
+      this.#scene.remove(chunk.mesh);
+      chunk.mesh.geometry.dispose();
+    }
+    for (const gate of chunk.gates) {
+      this.#scene.remove(gate);
+      gate.geometry.dispose();
+    }
+    this.#chunks.delete(chunk.index);
+  }
+
+  /** precompute the sample table and build the tube mesh of one chunk */
+  #buildChunk(index: number) {
+    this.#ensureControl(index + 1);
+
+    const samples = new Float32Array((SAMPLES + 1) * 13);
+    const point: Pt = { x: 0, y: 0, z: 0 };
+    const t: Pt = { x: 0, y: 0, z: 0 };
+    const n: Pt = { x: 0, y: 0, z: 0 };
+    const b: Pt = { x: 0, y: 0, z: 0 };
+    for (let j = 0; j <= SAMPLES; j++) {
+      const s = index * LEN + j * PER;
+      this.#centerInChunk(index, j / SAMPLES, point);
+      this.#tangentInChunk(index, j / SAMPLES, t);
+      this.#frameFromTangent(t, n, b);
+      const o = j * 13;
+      samples[o] = point.x;
+      samples[o + 1] = point.y;
+      samples[o + 2] = point.z;
+      samples[o + 3] = t.x;
+      samples[o + 4] = t.y;
+      samples[o + 5] = t.z;
+      samples[o + 6] = n.x;
+      samples[o + 7] = n.y;
+      samples[o + 8] = n.z;
+      samples[o + 9] = b.x;
+      samples[o + 10] = b.y;
+      samples[o + 11] = b.z;
+      samples[o + 12] = this.#waveRadius(s);
+    }
+
+    // tube mesh: a ring of SIDES vertices per sample
+    const count = (SAMPLES + 1) * (SIDES + 1);
+    const positions = new Float32Array(count * 3);
+    const normals = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    let vi = 0;
+    for (let j = 0; j <= SAMPLES; j++) {
+      const o = j * 13;
+      for (let k = 0; k <= SIDES; k++) {
+        const a = (k / SIDES) * TWO_PI;
+        const s = index * LEN + j * PER;
+        const r = this.radius(s, a);
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        const nx = samples[o + 6] * ca + samples[o + 9] * sa;
+        const ny = samples[o + 7] * ca + samples[o + 10] * sa;
+        const nz = samples[o + 8] * ca + samples[o + 11] * sa;
+        positions[vi * 3] = samples[o] + nx * r;
+        positions[vi * 3 + 1] = samples[o + 1] + ny * r;
+        positions[vi * 3 + 2] = samples[o + 2] + nz * r;
+        normals[vi * 3] = nx;
+        normals[vi * 3 + 1] = ny;
+        normals[vi * 3 + 2] = nz;
+        // the bump decides the shade: high rock reads lighter than the hollows
+        const shade = 0.62 + 0.5 * this.#bumpNoise01(s, a);
+        colors[vi * 3] = shade;
+        colors[vi * 3 + 1] = shade;
+        colors[vi * 3 + 2] = shade;
+        vi++;
+      }
+    }
+    const indices: number[] = [];
+    for (let j = 0; j < SAMPLES; j++) {
+      for (let k = 0; k < SIDES; k++) {
+        const a0 = j * (SIDES + 1) + k;
+        const a1 = a0 + 1;
+        const b0 = a0 + SIDES + 1;
+        const b1 = b0 + 1;
+        indices.push(a0, b0, a1, a0, a1, b1);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    const mesh = new THREE.Mesh(geometry, this.#material);
+    this.#scene.add(mesh);
+
+    // the gates this chunk owns: a thin unlit ring across the cave
+    const gates: THREE.Mesh[] = [];
+    for (let g = 0; g < config.GATES_PER_SEED; g++) {
+      const gs = this.gatePositions[g];
+      if (Math.floor(gs / LEN) !== index) continue;
+      const t: Pt = { x: 0, y: 0, z: 0 };
+      const n: Pt = { x: 0, y: 0, z: 0 };
+      const b: Pt = { x: 0, y: 0, z: 0 };
+      this.tangent(gs, t);
+      this.#frameFromTangent(t, n, b);
+      const c = this.center(gs, { x: 0, y: 0, z: 0 });
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(this.#waveRadius(gs) * 0.99, 1.1, 6, 48),
+        this.#gateMaterial,
+      );
+      const m = new THREE.Matrix4().makeBasis(
+        new THREE.Vector3(n.x, n.y, n.z),
+        new THREE.Vector3(b.x, b.y, b.z),
+        new THREE.Vector3(t.x, t.y, t.z),
+      );
+      ring.quaternion.setFromRotationMatrix(m);
+      ring.position.set(c.x, c.y, c.z);
+      this.#scene.add(ring);
+      this.gateMeshes[g] = ring;
+      gates.push(ring);
+    }
+
+    const chunk: ChunkData = { index, samples, mesh, gates };
+    this.#chunks.set(index, chunk);
+    return chunk;
+  }
+
+  /** frame from a known tangent: world-up anchored normal, right-handed binormal */
+  #frameFromTangent(t: Pt, n: Pt, b: Pt) {
+    let ux = 0;
+    let uy = 1;
+    let uz = 0;
+    if (Math.abs(t.y) > 0.93) {
+      ux = 1;
+      uy = 0;
+      uz = 0;
+    }
+    const dot = t.x * ux + t.y * uy + t.z * uz;
+    let nx = ux - t.x * dot;
+    let ny = uy - t.y * dot;
+    let nz = uz - t.z * dot;
+    const nlen = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+    nx /= nlen;
+    ny /= nlen;
+    nz /= nlen;
+    n.x = nx;
+    n.y = ny;
+    n.z = nz;
+    b.x = t.y * nz - t.z * ny;
+    b.y = t.z * nx - t.x * nz;
+    b.z = t.x * ny - t.y * nx;
+  }
+
+  /** the bump in 0..1, for the vertex shade */
+  #bumpNoise01(s: number, a: number) {
+    const u = s / config.CAVE_BUMP_WAVE;
+    const v = (((a < 0 ? a + TWO_PI : a) / TWO_PI) * NOISE_CELLS) % NOISE_CELLS;
+    const u0 = Math.floor(u);
+    const v0 = Math.floor(v);
+    const fu = u - u0;
+    const fv = v - v0;
+    const su = fu * fu * (3 - 2 * fu);
+    const sv = fv * fv * (3 - 2 * fv);
+    const v1 = (v0 + 1) % NOISE_CELLS;
+    const n00 = this.#noiseCorner(u0, v0);
+    const n10 = this.#noiseCorner(u0 + 1, v0);
+    const n01 = this.#noiseCorner(u0, v1);
+    const n11 = this.#noiseCorner(u0 + 1, v1);
+    const nx0 = n00 + (n10 - n00) * su;
+    const nx1 = n01 + (n11 - n01) * su;
+    return nx0 + (nx1 - nx0) * sv;
+  }
+
+  /** dispose every chunk mesh and material, used when the whole cave is
+   *  regenerated */
+  clear() {
+    for (const chunk of [...this.#chunks.values()]) this.#removeChunk(chunk);
+    this.#chunks.clear();
+    this.#control.length = 0;
+    this.#controlOffset = 0;
+    this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
+    this.#material.dispose();
+    this.#gateMaterial.dispose();
+    this.#gateNextMaterial.dispose();
+    this.#generateControl(0);
+  }
+}
+
+/** rotate the unit vector v around the unit axis (ax,ay,az) by angle,
+ *  written into out. Rodrigues, no allocations. */
+function rotateAroundAxis(
+  v: Pt,
+  ax: number,
+  ay: number,
+  az: number,
+  angle: number,
+  out: Pt,
+) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const t = 1 - c;
+  const vx = v.x;
+  const vy = v.y;
+  const vz = v.z;
+  out.x =
+    (t * ax * ax + c) * vx +
+    (t * ax * ay - s * az) * vy +
+    (t * ax * az + s * ay) * vz;
+  out.y =
+    (t * ax * ay + s * az) * vx +
+    (t * ay * ay + c) * vy +
+    (t * ay * az - s * ax) * vz;
+  out.z =
+    (t * ax * az - s * ay) * vx +
+    (t * ay * az + s * ax) * vy +
+    (t * az * az + c) * vz;
+}
