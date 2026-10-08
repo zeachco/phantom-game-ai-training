@@ -248,3 +248,33 @@ test('a flipped car is not killed by the flip itself', () => {
   tick(car, cave, 3);
   expect(car.uy).toBeLessThan(-0.25);
 });
+
+test('upside-down wheel contacts cannot propel the car', () => {
+  const cave = floor();
+  cave.castWheelRay = (
+    _x,
+    y,
+    _z,
+    _dx,
+    dy,
+    _dz,
+    length,
+    _s,
+    out,
+  ) => {
+    // The inverted wheels point up into a ceiling surface.
+    const distance = (6.3 - y) / dy;
+    if (dy <= 0 || distance < 0 || distance > length) return -1;
+    Object.assign(out, { nx: 0, ny: 1, nz: 0 });
+    return distance;
+  };
+  const car = new Car({ ...spawn, y: 3.2 });
+  car.quat.set(1, 0, 0, 0);
+  car.controls.throttle = 1;
+
+  tick(car, cave, 1);
+
+  expect(car.uy).toBeLessThan(-0.9);
+  expect(car.grounded).toEqual([true, true, true, true]);
+  expect(Math.abs(car.vz)).toBeLessThan(0.001);
+});

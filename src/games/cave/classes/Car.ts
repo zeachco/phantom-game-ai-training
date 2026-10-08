@@ -555,7 +555,7 @@ export class Car {
     const dt = 1 / config.PHYSICS_SUBSTEPS;
     const throttle = clamp(-1, 1, this.controls.throttle);
     this.engineBuild =
-      throttle > 0
+      throttle > 0 && this.uy > 0
         ? Math.min(
             1,
             this.engineBuild + throttle / config.CAR_ENGINE_BUILD_FRAMES,
@@ -595,6 +595,8 @@ export class Car {
     }
     for (let step = 0; step < config.PHYSICS_SUBSTEPS; step++) {
       this.#refreshFrame();
+      // Tires cannot propel the car once its body-up points against gravity.
+      const uprightTraction = Math.max(0, this.uy);
       cave.tangent(this.s, this.#vector);
       this.cx = this.#vector.x;
       this.cy = this.#vector.y;
@@ -689,7 +691,11 @@ export class Car {
         const longitudinal = this.#velocity.dot(this.#forward);
         const lateral = this.#velocity.dot(this.#side);
         let drive = 0;
-        if (throttle > 0 && longitudinal < this.maxSpeed) {
+        if (
+          throttle > 0 &&
+          uprightTraction > 0 &&
+          longitudinal < this.maxSpeed
+        ) {
           // Compensate uphill gravity at the driven tires, so a gentle
           // throttle launch can climb instead of spending all torque on weight.
           // This stays inside the contact's friction circle and never acts in air.
@@ -697,18 +703,22 @@ export class Car {
             0,
             config.CAR_GRAVITY * this.#forward.y,
           );
-          drive = ((engine + uphillAssist) * throttle) / 4;
+          drive = ((engine + uphillAssist) * throttle * uprightTraction) / 4;
         }
-        if (throttle < 0)
-          drive =
-            longitudinal > 0.15
-              ? -Math.min(
-                  (config.CAR_BRAKE_DECEL * -throttle) / 4,
-                  longitudinal / (4 * dt),
-                )
-              : longitudinal > -this.maxSpeed / 2
-                ? (config.CAR_REVERSE_ACCEL * throttle) / 4
-                : 0;
+        if (throttle < 0) {
+          if (longitudinal > 0.15) {
+            drive = -Math.min(
+              (config.CAR_BRAKE_DECEL * -throttle) / 4,
+              longitudinal / (4 * dt),
+            );
+          } else if (
+            uprightTraction > 0 &&
+            longitudinal > -this.maxSpeed / 2
+          ) {
+            drive =
+              (config.CAR_REVERSE_ACCEL * throttle * uprightTraction) / 4;
+          }
+        }
         // Grounded tires lose momentum even at low speed. Bound resistance
         // by the wheel's stopping impulse so friction cannot reverse the car.
         const rollingResistance = Math.min(
