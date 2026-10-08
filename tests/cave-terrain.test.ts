@@ -76,3 +76,14 @@ test('seed 2 can drive through the opening terrain without getting stuck', () =>
   expect(car.nextGate).toBeGreaterThanOrEqual(1);
   expect(car.speed).toBeGreaterThan(1);
 });
+
+test('seed 25 can pull away on the hills around gate 6', () => {
+  const terrain = cave(25);
+  for (const start of [3000, 3200, 3400, 3600]) {
+    const car = new Car(terrain.groundSpawn(start));
+    for (let frame = 0; frame < 180; frame++) car.update(terrain);
+    expect(car.damaged).toBe(false);
+    expect(car.s - start).toBeGreaterThan(100);
+    expect(car.speed).toBeGreaterThan(0.8);
+  }
+});

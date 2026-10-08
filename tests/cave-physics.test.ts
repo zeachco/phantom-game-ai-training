@@ -4,7 +4,7 @@ import type { Cave, RadialHit } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 
 // An infinite plane isolates vehicle dynamics from procedural cave geometry.
-function floor(height = (_x: number, _z: number) => 0) {
+function floor(height = (_x: number, _z: number) => 0, grade = 0) {
   return {
     gatePositions: Array.from(
       { length: config.GATES_PER_SEED },
@@ -27,16 +27,20 @@ function floor(height = (_x: number, _z: number) => 0) {
       _s: number,
       out: RadialHit,
     ) {
-      const distance = (height(x, z) - y) / dy;
-      Object.assign(out, { nx: 0, ny: -1, nz: 0 });
+      const distance = (height(x, z) - y) / (dy + grade * dz);
+      Object.assign(out, {
+        nx: 0,
+        ny: -1 / Math.hypot(1, grade),
+        nz: -grade / Math.hypot(1, grade),
+      });
       return dy < 0 && distance >= 0 && distance <= length ? distance : -1;
     },
     nearestRadial(x: number, y: number, z: number, _s: number, out: RadialHit) {
       return Object.assign(out, {
         nx: 0,
-        ny: -1,
-        nz: 0,
-        dist: height(x, z) - y,
+        ny: -1 / Math.hypot(1, grade),
+        nz: -grade / Math.hypot(1, grade),
+        dist: (height(x, z) - y) / Math.hypot(1, grade),
       });
     },
   } as unknown as Cave;
@@ -131,6 +135,29 @@ describe('cave four-wheel chassis', () => {
     expect(car.steeringAngle).toBe(0);
     expect(car.grounded).toEqual([false, false, false, false]);
   });
+  test('airborne attitude assist levels a pitched jump before touchdown', () => {
+    const cave = floor();
+    const car = new Car({ ...spawn, y: 20 });
+    car.controls.throttle = 0;
+    car.vz = -3;
+    // nose-up take-off, as off a ramp: body x rotation of 0.3 rad
+    car.quat.set(Math.sin(0.15), 0, 0, Math.cos(0.15));
+    let landingFy = car.fy;
+    let wasAir = true;
+    for (let i = 0; i < 400; i++) {
+      car.update(cave);
+      const air = !car.grounded.some(Boolean);
+      if (wasAir && !air) {
+        landingFy = car.fy;
+        break;
+      }
+      wasAir = air;
+    }
+    // The take-off pitch survives to touchdown unassisted (~0.18); the assist
+    // lands the car close to level instead of nose-first.
+    expect(Math.abs(Math.asin(landingFy))).toBeLessThan(0.1);
+    expect(car.damaged).toBe(false);
+  });
 });
 
 test('chassis corners resolve a wall impact, with damage only on hard hits', () => {
@@ -149,5 +176,65 @@ test('chassis corners resolve a wall impact, with damage only on hard hits', () 
     expect(car.vx).toBeLessThan(speed);
     expect(car.x).toBeLessThan(0.3);
     expect(car.damaged).toBe(speed > config.CAR_CRASH_SPEED);
+  }
+});
+
+test('held throttle starts gently and builds stronger acceleration', () => {
+  const { car, cave } = settled();
+  car.controls.throttle = 1;
+  tick(car, cave, 20);
+  const earlyGain = -car.vz;
+  expect(earlyGain).toBeLessThan(0.7);
+  tick(car, cave, 70);
+  const before = -car.vz;
+  tick(car, cave, 20);
+  expect(-car.vz - before).toBeGreaterThan(earlyGain);
+  // Releasing gas clears the buildup, even if the driver immediately reapplies it.
+  car.controls.throttle = 0;
+  tick(car, cave, 1);
+  car.controls.throttle = 1;
+  const restart = -car.vz;
+  tick(car, cave, 1);
+  expect(-car.vz - restart).toBeLessThan(config.CAR_ENGINE_START);
+  car.reset(spawn);
+  car.controls.throttle = 0;
+  tick(car, cave, 100);
+  car.controls.throttle = 1;
+  tick(car, cave, 20);
+  expect(-car.vz).toBeCloseTo(earlyGain, 5);
+});
+
+test('wheel resistance settles coasting without sustained rollback or airborne drag', () => {
+  const { car, cave } = settled();
+  car.vz = -0.5;
+  for (let i = 0; i < 100; i++) {
+    tick(car, cave, 1);
+    // Pitch settling may produce a tiny rebound, but no sustained reverse drive.
+    expect(car.vz).toBeLessThanOrEqual(0.003);
+  }
+  expect(Math.abs(car.vz)).toBeLessThan(0.001);
+  const airborne = new Car({ ...spawn, y: 1000 });
+  airborne.controls.throttle = 0;
+  airborne.vz = -0.5;
+  tick(airborne, cave, 30);
+  expect(airborne.grounded).toEqual([false, false, false, false]);
+  expect(-airborne.vz).toBeGreaterThan(0.48);
+});
+
+test('held throttle can start and sustain a climb on steep grades', () => {
+  for (const grade of [0.35, 0.65]) {
+    const cave = floor((_x, z) => -z * grade, grade);
+    const length = Math.hypot(1, grade);
+    const car = new Car({
+      ...spawn,
+      y: 100 * grade + 3.5,
+      ty: grade / length,
+      tz: -1 / length,
+    });
+    const startY = car.y;
+    tick(car, cave, 180);
+    expect(car.y - startY).toBeGreaterThan(30);
+    expect(-car.vz).toBeGreaterThan(1.5);
+    expect(car.grounded.filter(Boolean).length).toBeGreaterThanOrEqual(2);
   }
 });

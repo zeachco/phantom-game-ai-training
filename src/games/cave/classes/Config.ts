@@ -119,7 +119,7 @@ class Config {
   public CAR_HEIGHT = 2.2;
   public CAR_LENGTH = 8.5;
   /** world down acceleration per frame^2 */
-  public CAR_GRAVITY = 0.18;
+  public CAR_GRAVITY = 0.12;
   public PHYSICS_SUBSTEPS = 4;
   public CAR_WHEEL_RADIUS = 1.1;
   /** Suspension mounts: local X right, Y up, negative Z forward. */
@@ -137,8 +137,36 @@ class Config {
   public TIRE_FRICTION = 2.8;
   /** Effective tire force height below the center of mass, an arcade roll assist. */
   public TIRE_ROLL_CENTER = 0.6;
-  /** forward acceleration at full throttle, u/f^2 */
-  public CAR_ENGINE = 0.06;
+  /** Anti-roll bar coupling within an axle, as a fraction of the suspension
+   *  spring. Transfers load toward the compressed wheel to resist body roll;
+   *  the paired forces cancel, so only a restoring roll torque remains. */
+  public CAR_ANTI_ROLL = 0.25;
+  /** Anti-pitch coupling between the front and rear axle pairs, same units.
+   *  Settles the nose after a jump instead of letting it oscillate. */
+  public CAR_ANTI_PITCH = 0.2;
+  /** Airborne attitude assist: target pitch/roll rate (rad/frame) per unit of
+   *  forward/right vertical error, pulling the car level before it lands. */
+  public CAR_AIR_LEVEL_GAIN = 0.06;
+  /** Cap on the air assist's target rate, rad/frame. */
+  public CAR_AIR_LEVEL_RATE = 0.05;
+  /** Fraction of the gap to the target rate the air assist closes per frame. */
+  public CAR_AIR_LEVEL_RESPONSE = 0.15;
+  /** Airborne frames before the leveling assist engages, so short hops over
+   *  bumps still let the car follow the ground instead of fighting it. */
+  public CAR_AIR_LEVEL_DELAY = 6;
+  /** Normal angular damping per frame, the mild arcade assist. */
+  public CAR_SPIN_DAMP = 0.94;
+  /** Pitch/roll damping per frame on the frame of touchdown, fading back to
+   *  CAR_SPIN_DAMP over CAR_LANDING_DAMP_FRAMES. Lower = more planted. */
+  public CAR_LANDING_SPIN_DAMP = 0.7;
+  /** Frames over which the landing damping fades out. */
+  public CAR_LANDING_DAMP_FRAMES = 10;
+  /** Forward acceleration builds over two seconds of held throttle. */
+  public CAR_ENGINE_START = 0.025;
+  public CAR_ENGINE = 0.1;
+  public CAR_ENGINE_BUILD_FRAMES = 120;
+  /** Rolling resistance per wheel, proportional to its suspension load. */
+  public WHEEL_ROLLING_RESISTANCE = 0.1;
   /** braking before the reverse drive kicks in */
   public CAR_BRAKE_DECEL = 0.2;
   /** reverse driving acceleration, the cap stays maxSpeed/2 */
@@ -183,7 +211,7 @@ class Config {
   /** distance between deterministic terrain feature cells */
   public CAVE_FEATURE_CELL = 280;
   /** clearance from the cave floor to a car's body center at spawn */
-  public CAVE_GROUND_CLEARANCE = 3.4;
+  public CAVE_GROUND_CLEARANCE = 3.5;
   /** max turn (rad) of the centerline per segment at difficulty 1 */
   public CAVE_TURN_BASE = 0.1;
   public CAVE_TURN_GROWTH = 0.22;

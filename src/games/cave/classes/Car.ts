@@ -116,6 +116,13 @@ export class Car {
   public grounded: boolean[] = [false, false, false, false];
 
   private stallFrames = 0;
+  private engineBuild = 0;
+  /** consecutive airborne frames, sets the strength of the landing damping */
+  private airFrames = 0;
+  /** 1 on the first grounded frame, decays to 0 over the landing window */
+  private landingDamp = 0;
+  /** anti-roll/pitch load transfer per wheel, rebuilt every substep */
+  private stab: number[] = [0, 0, 0, 0];
   /** penalty for the death that just happened, charged with the crash speed */
   private deathPenalty = 0;
   private prevS = 0;
@@ -264,11 +271,15 @@ export class Car {
     this.stallFrames = 0;
     this.deathPenalty = 0;
     this.speed = 0;
+    this.engineBuild = 0;
     this.steeringAngle = 0;
     this.wheelLengths.fill(config.SUSP_REST);
     this.wheelSpin.fill(0);
     this.compression.fill(0);
     this.grounded.fill(false);
+    this.airFrames = 0;
+    this.landingDamp = 0;
+    this.stab.fill(0);
     this.hasPrevSensors = false;
     this.prevSensorInputs.fill(0);
   }
@@ -542,11 +553,46 @@ export class Car {
 
   #move(cave: Cave) {
     const dt = 1 / config.PHYSICS_SUBSTEPS;
+    const throttle = clamp(-1, 1, this.controls.throttle);
+    this.engineBuild =
+      throttle > 0
+        ? Math.min(
+            1,
+            this.engineBuild + throttle / config.CAR_ENGINE_BUILD_FRAMES,
+          )
+        : 0;
+    const engine = lerp(
+      config.CAR_ENGINE_START,
+      config.CAR_ENGINE,
+      this.engineBuild,
+    );
     const targetSteer =
       (clamp(-1, 1, this.controls.left - this.controls.right) *
         config.CAR_STEER_MAX) /
       (1 + this.speed * 0.12);
     this.steeringAngle += (targetSteer - this.steeringAngle) * 0.2;
+    // Airborne timing: a frame with no grounded wheel counts toward air time,
+    // and the first frame back on the ground opens a short, strong pitch/roll
+    // damping window so a one-wheel touchdown cannot cartwheel the car.
+    const groundedLast =
+      this.grounded[0] ||
+      this.grounded[1] ||
+      this.grounded[2] ||
+      this.grounded[3];
+    if (this.landingDamp > 0)
+      this.landingDamp = Math.max(
+        0,
+        this.landingDamp - 1 / config.CAR_LANDING_DAMP_FRAMES,
+      );
+    if (!groundedLast) {
+      this.airFrames++;
+    } else if (this.airFrames > 0) {
+      this.landingDamp = Math.min(
+        1,
+        this.airFrames / config.CAR_LANDING_DAMP_FRAMES,
+      );
+      this.airFrames = 0;
+    }
     for (let step = 0; step < config.PHYSICS_SUBSTEPS; step++) {
       this.#refreshFrame();
       cave.tangent(this.s, this.#vector);
@@ -556,6 +602,36 @@ export class Car {
       this.#force.set(0, -config.CAR_GRAVITY, 0);
       this.#torque.set(0, 0, 0);
       this.#angular.set(this.avx, this.avy, this.avz);
+      // Anti-roll / anti-pitch bars: transfer suspension load toward the
+      // compressed wheel of an axle (and the compressed axle). The paired
+      // forces cancel, leaving a restoring roll/pitch torque that settles the
+      // car. Gated on both wheels of the pair touching down, so it can never
+      // add a spurious force during a one-wheel touchdown.
+      const barSpring = config.SUSP_SPRING * config.CAR_ANTI_ROLL;
+      const frontPair = this.grounded[0] && this.grounded[1];
+      const rearPair = this.grounded[2] && this.grounded[3];
+      const axlesDown =
+        (this.grounded[0] || this.grounded[1]) &&
+        (this.grounded[2] || this.grounded[3]);
+      const rollFront = frontPair
+        ? (this.compression[0] - this.compression[1]) * barSpring
+        : 0;
+      const rollRear = rearPair
+        ? (this.compression[2] - this.compression[3]) * barSpring
+        : 0;
+      const pitchBar = axlesDown
+        ? (this.compression[0] +
+            this.compression[1] -
+            this.compression[2] -
+            this.compression[3]) *
+          0.5 *
+          config.SUSP_SPRING *
+          config.CAR_ANTI_PITCH
+        : 0;
+      this.stab[0] = rollFront + pitchBar;
+      this.stab[1] = -rollFront + pitchBar;
+      this.stab[2] = rollRear - pitchBar;
+      this.stab[3] = -rollRear - pitchBar;
       for (let w = 0; w < 4; w++) {
         const off = config.WHEEL_OFFSETS[w];
         this.#toWorld(off[0], off[1], off[2], this.#anchor);
@@ -597,7 +673,8 @@ export class Car {
         const load = Math.max(
           0,
           config.SUSP_SPRING * this.compression[w] -
-            config.SUSP_DAMP * this.#velocity.dot(this.#normal),
+            config.SUSP_DAMP * this.#velocity.dot(this.#normal) +
+            this.stab[w],
         );
         const angle = w < 2 ? this.steeringAngle : 0;
         this.#forward.set(
@@ -611,10 +688,17 @@ export class Car {
         this.#side.crossVectors(this.#forward, this.#normal).normalize();
         const longitudinal = this.#velocity.dot(this.#forward);
         const lateral = this.#velocity.dot(this.#side);
-        const throttle = clamp(-1, 1, this.controls.throttle);
         let drive = 0;
-        if (throttle > 0 && longitudinal < this.maxSpeed)
-          drive = (config.CAR_ENGINE * throttle) / 4;
+        if (throttle > 0 && longitudinal < this.maxSpeed) {
+          // Compensate uphill gravity at the driven tires, so a gentle
+          // throttle launch can climb instead of spending all torque on weight.
+          // This stays inside the contact's friction circle and never acts in air.
+          const uphillAssist = Math.max(
+            0,
+            config.CAR_GRAVITY * this.#forward.y,
+          );
+          drive = ((engine + uphillAssist) * throttle) / 4;
+        }
         if (throttle < 0)
           drive =
             longitudinal > 0.15
@@ -625,7 +709,14 @@ export class Car {
               : longitudinal > -this.maxSpeed / 2
                 ? (config.CAR_REVERSE_ACCEL * throttle) / 4
                 : 0;
-        drive -= longitudinal * 0.002;
+        // Grounded tires lose momentum even at low speed. Bound resistance
+        // by the wheel's stopping impulse so friction cannot reverse the car.
+        const rollingResistance = Math.min(
+          load * config.WHEEL_ROLLING_RESISTANCE +
+            Math.abs(longitudinal) * 0.002,
+          Math.abs(longitudinal) / (4 * dt),
+        );
+        drive -= Math.sign(longitudinal) * rollingResistance;
         let side = (-lateral * config.CAR_GRIP) / 4;
         // Friction circle: airborne/unloaded wheels cannot propel the car,
         // and braking/acceleration share the available grip with cornering.
@@ -656,6 +747,47 @@ export class Car {
         );
         this.wheelSpin[w] += (longitudinal * dt) / config.CAR_WHEEL_RADIUS;
       }
+      // Airborne attitude assist: gravity acts at the center of mass, so in the
+      // air the whole take-off pitch carries straight into the landing. Build a
+      // world-frame angular velocity that rotates the forward toward the road
+      // tangent and the body up toward that tangent's up. Targeting the slope
+      // instead of the world horizon keeps hill climbs gripping while still
+      // flattening a jump. The rate is proportional to the error, so it settles
+      // without overshoot; the cap keeps a real jump arcing.
+      if (
+        this.airFrames >= config.CAR_AIR_LEVEL_DELAY &&
+        !this.grounded[0] &&
+        !this.grounded[1] &&
+        !this.grounded[2] &&
+        !this.grounded[3]
+      ) {
+        const tx = this.cx;
+        const ty = this.cy;
+        const tz = this.cz;
+        // target right = tangent x worldUp, target up = right x tangent
+        const trx = -tz;
+        const trz = tx;
+        const trl = Math.hypot(trx, trz) || 1;
+        const rnx = trx / trl;
+        const rnz = trz / trl;
+        const tux = -rnz * ty;
+        const tuy = rnz * tx - rnx * tz;
+        const tuz = rnx * ty;
+        // f x target-forward and u x target-up: the shortest arcs to align
+        let wx = this.fy * tz - this.fz * ty + (this.uy * tuz - this.uz * tuy);
+        let wz = this.fx * ty - this.fy * tx + (this.ux * tuy - this.uy * tux);
+        wx *= config.CAR_AIR_LEVEL_GAIN;
+        wz *= config.CAR_AIR_LEVEL_GAIN;
+        const rate = Math.hypot(wx, wz);
+        if (rate > config.CAR_AIR_LEVEL_RATE) {
+          const scale = config.CAR_AIR_LEVEL_RATE / rate;
+          wx *= scale;
+          wz *= scale;
+        }
+        const airResponse = config.CAR_AIR_LEVEL_RESPONSE * dt;
+        this.avx += (wx - this.avx) * airResponse;
+        this.avz += (wz - this.avz) * airResponse;
+      }
       this.vx += this.#force.x * dt;
       this.vy += this.#force.y * dt;
       this.vz += this.#force.z * dt;
@@ -665,11 +797,22 @@ export class Car {
       this.vz *= drag;
       this.#inverseInertia(this.#torque);
       // Mild angular damping is the arcade assist; never snap orientation or
-      // pull an airborne wheel toward the floor.
-      const angularDrag = Math.pow(0.94, dt);
-      this.avx = (this.avx + this.#torque.x * dt) * angularDrag;
+      // pull an airborne wheel toward the floor. Pitch and roll get extra
+      // damping for a short window after touchdown, while yaw keeps the normal
+      // rate so a landing never blunts the steering.
+      const spinDamp =
+        this.landingDamp > 0
+          ? lerp(
+              config.CAR_SPIN_DAMP,
+              config.CAR_LANDING_SPIN_DAMP,
+              this.landingDamp,
+            )
+          : config.CAR_SPIN_DAMP;
+      const angularDrag = Math.pow(config.CAR_SPIN_DAMP, dt);
+      const tippingDrag = Math.pow(spinDamp, dt);
+      this.avx = (this.avx + this.#torque.x * dt) * tippingDrag;
       this.avy = (this.avy + this.#torque.y * dt) * angularDrag;
-      this.avz = (this.avz + this.#torque.z * dt) * angularDrag;
+      this.avz = (this.avz + this.#torque.z * dt) * tippingDrag;
       const { x: qx, y: qy, z: qz, w: qw } = this.quat;
       this.quat.x += 0.5 * dt * (this.avx * qw + this.avy * qz - this.avz * qy);
       this.quat.y += 0.5 * dt * (this.avy * qw + this.avz * qx - this.avx * qz);
