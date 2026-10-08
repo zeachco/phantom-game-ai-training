@@ -180,8 +180,6 @@ class Config {
   public CAR_CRASH_SPEED = 5.5;
   /** fraction of the normal velocity kept after a wall bounce */
   public CAR_RESTITUTION = 0.05;
-  /** the car is upside down (and dead) below this dot with world up */
-  public UPSIDE_DOWN_LIMIT = -0.25;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */
@@ -210,6 +208,26 @@ class Config {
   public CAVE_TERRAIN_RAMP = 1400;
   /** distance between deterministic terrain feature cells */
   public CAVE_FEATURE_CELL = 280;
+  /** probability that a feature cell grows rock columns off the floor */
+  public CAVE_COLUMN_CHANCE = 0.6;
+  /** column height range (inward radius cut, world-scale units) */
+  public CAVE_COLUMN_MIN = 14;
+  public CAVE_COLUMN_MAX = 34;
+  /** probability that a feature cell carries a smooth raised road lane */
+  public CAVE_ROAD_CHANCE = 0.45;
+  /** road lane length along the cave axis, and its angular half-width */
+  public CAVE_ROAD_LENGTH = 190;
+  public CAVE_ROAD_WIDTH = 0.5;
+  /** how far the road lane raises the floor at full terrain progress */
+  public CAVE_ROAD_RISE = 18;
+  /** fixed dice on a jump ramp before a volatile stretch at volatility 1 */
+  public CAVE_RAMP_CHANCE = 0.85;
+  /** how far the ramp lip sits before the volatile stretch it launches over */
+  public CAVE_RAMP_LEAD = 76;
+  /** ramp approach length; the floor limiter turns it into a smooth climb */
+  public CAVE_RAMP_LENGTH = 40;
+  /** ramp lip height at full terrain progress (also its launch size) */
+  public CAVE_RAMP_HEIGHT = 18;
   /** clearance from the cave floor to a car's body center at spawn */
   public CAVE_GROUND_CLEARANCE = 3.5;
   /** max turn (rad) of the centerline per segment at difficulty 1 */

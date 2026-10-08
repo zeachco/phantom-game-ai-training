@@ -881,11 +881,13 @@ export class Car {
     }
     this.#refreshFrame();
     this.speed = Math.hypot(this.vx, this.vy, this.vz);
-    if (this.uy < config.UPSIDE_DOWN_LIMIT) this.damaged = true;
+    // A flipped car is not killed outright: landing on its side or roof only
+    // costs the car its traction, and the liveness timer (stall / section
+    // budget) is what eventually retires it if it never recovers.
   }
 
-  /** wall hits, tunneling and flips set damaged inside #move; this only
-   *  reports it. The debt is charged by update() together with the speed */
+  /** wall hits and tunneling set damaged inside #move; this only reports it.
+   *  The debt is charged by update() together with the speed */
   #assessDamage() {
     return this.damaged;
   }

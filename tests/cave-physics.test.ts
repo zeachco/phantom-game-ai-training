@@ -238,3 +238,13 @@ test('held throttle can start and sustain a climb on steep grades', () => {
     expect(car.grounded.filter(Boolean).length).toBeGreaterThanOrEqual(2);
   }
 });
+
+test('a flipped car is not killed by the flip itself', () => {
+  const cave = floor();
+  const car = new Car({ ...spawn, y: 20 });
+  car.controls.throttle = 0;
+  // 180 degrees about the body pitch axis: fully roof-down.
+  car.quat.set(1, 0, 0, 0);
+  tick(car, cave, 3);
+  expect(car.uy).toBeLessThan(-0.25);
+});

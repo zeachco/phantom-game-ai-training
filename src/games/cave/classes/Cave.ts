@@ -19,6 +19,38 @@ interface ChunkData {
   gates: THREE.Mesh[];
 }
 
+/** one deterministic terrain feature cell: how rough the stretch is and which
+ *  structures sit on it. Cached per cell so the radius hot path only reads
+ *  numbers instead of re-hashing. */
+interface FeatureCell {
+  /** 0..1 roughness of the stretch; the jump-ramp odds scale with it */
+  volatility: number;
+  /** smooth raised lane through the rough ground, or null */
+  road: {
+    centerS: number;
+    halfLen: number;
+    centerA: number;
+    halfA: number;
+    rise: number;
+  } | null;
+  /** rock columns rising off the floor */
+  columns: {
+    centerS: number;
+    halfLen: number;
+    angle: number;
+    angleWidth: number;
+    height: number;
+  }[];
+  /** a single launch ramp whose lip sits just before the volatile stretch */
+  ramp: {
+    centerS: number;
+    halfLen: number;
+    angle: number;
+    angleWidth: number;
+    height: number;
+  } | null;
+}
+
 const SAMPLES = config.CAVE_CHUNK_SAMPLES;
 const SIDES = config.CAVE_SIDES;
 const LEN = config.CAVE_SEGMENT_LENGTH;
@@ -295,59 +327,135 @@ export class Cave {
     return t * t * (3 - 2 * t);
   }
 
-  /** inward radial cuts make raised floor platforms and rock columns. They
-   *  are part of the analytic radius, so rendering, rays and wheel contact
-   *  all agree without a second obstacle system. */
+  /** cached feature descriptors, one per CAVE_FEATURE_CELL, rebuilt on
+   *  demand and trimmed with the meshed window like the floor profiles */
+  #featureCells = new Map<number, FeatureCell>();
+
+  /** Deterministic descriptor of one terrain feature cell. A seeded RNG makes
+   *  the draws independent: volatility drives how likely a single jump ramp is
+   *  placed just before the stretch, columns and roads are separate draws. */
+  #featureCell(index: number): FeatureCell {
+    const cached = this.#featureCells.get(index);
+    if (cached) return cached;
+    const rng = mulberry32(this.#hash(index * 7 + 11) || 1);
+    const center = index * config.CAVE_FEATURE_CELL;
+    const featureS = center + 70 + rng() * 140;
+
+    const columns: FeatureCell['columns'] = [];
+    if (rng() < config.CAVE_COLUMN_CHANCE) {
+      const count = rng() < 0.45 ? 1 : 2;
+      for (let k = 0; k < count; k++) {
+        const spread = count === 1 ? 0 : (k - 0.5) * (24 + rng() * 70);
+        columns.push({
+          centerS: featureS + spread,
+          halfLen: 20 + rng() * 18,
+          angle: Math.PI + (rng() < 0.5 ? -1 : 1) * (0.5 + rng() * 0.55),
+          angleWidth: 0.13 + rng() * 0.12,
+          height:
+            config.CAVE_COLUMN_MIN +
+            rng() * (config.CAVE_COLUMN_MAX - config.CAVE_COLUMN_MIN),
+        });
+      }
+    }
+
+    let road: FeatureCell['road'] = null;
+    if (rng() < config.CAVE_ROAD_CHANCE) {
+      road = {
+        centerS: center + 40 + rng() * (config.CAVE_FEATURE_CELL - 80),
+        halfLen: (config.CAVE_ROAD_LENGTH / 2) * (0.7 + 0.3 * rng()),
+        // Mostly on the driving line, so a spawn on the center of the cave
+        // lands on the lane instead of its lateral edge.
+        centerA: Math.PI + (rng() - 0.5) * 0.3,
+        halfA: config.CAVE_ROAD_WIDTH * (0.9 + 0.4 * rng()),
+        rise: config.CAVE_ROAD_RISE * (0.7 + 0.3 * rng()),
+      };
+    }
+
+    // Volatility is the roughness of the stretch: columns make it hard, a
+    // smooth road makes it easy, and the base draw keeps it varied.
+    let volatility = 0.2 + 0.8 * rng();
+    if (columns.length > 0)
+      volatility = Math.max(volatility, 0.55 + 0.45 * rng());
+    if (road) volatility *= 0.55;
+
+    // A single jump ramp, placed just before the volatile stretch and more
+    // probable the rougher that stretch is.
+    let ramp: FeatureCell['ramp'] = null;
+    if (rng() < volatility * config.CAVE_RAMP_CHANCE) {
+      const targetS = columns.length > 0 ? columns[0].centerS : featureS;
+      ramp = {
+        centerS: Math.max(
+          center + 8,
+          targetS - config.CAVE_RAMP_LEAD - rng() * 30,
+        ),
+        halfLen: config.CAVE_RAMP_LENGTH / 2,
+        angle: Math.PI + (rng() - 0.5) * 0.5,
+        angleWidth: 0.32 + rng() * 0.3,
+        height: config.CAVE_RAMP_HEIGHT * (0.6 + 0.4 * rng()),
+      };
+    }
+
+    const cell: FeatureCell = { volatility, road, columns, ramp };
+    this.#featureCells.set(index, cell);
+    return cell;
+  }
+
+  /** Smooth raised road lane mask in 0..1. Damps the bump noise where it is
+   *  high, so a road chunk genuinely reads and drives as smooth ground. */
+  #roadInfluence(s: number, a: number) {
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    let influence = 0;
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const road = this.#featureCell(i).road;
+      if (!road) continue;
+      const along = this.#smoothPulse(s, road.centerS, road.halfLen);
+      if (along <= 0) continue;
+      const acrossRaw = 1 - this.#angleDistance(a, road.centerA) / road.halfA;
+      if (acrossRaw <= 0) continue;
+      const across = acrossRaw * acrossRaw * (3 - 2 * acrossRaw);
+      influence = Math.max(influence, along * across);
+    }
+    return influence;
+  }
+
+  /** Inward radial cuts make raised road lanes, rock columns and jump ramps.
+   *  They are part of the analytic radius, so rendering, rays and wheel
+   *  contact all agree without a second obstacle system. */
   #featureRadiusDelta(s: number, a: number) {
     const progress = this.#terrainProgress(s);
     if (progress <= 0) return 0;
 
-    const cell = Math.floor(s / config.CAVE_FEATURE_CELL);
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
     let delta = 0;
-    for (let i = cell - 1; i <= cell + 1; i++) {
-      const center = i * config.CAVE_FEATURE_CELL;
-      const roll = this.#hash(i * 7 + 11) / 0xffffffff;
-      const featureS =
-        center + 70 + (this.#hash(i * 7 + 13) / 0xffffffff) * 140;
-      const lower = Math.max(0, -Math.cos(a));
-
-      // A broad, mostly flat raised section appears occasionally and gives a
-      // car a natural launch surface instead of making every bump a spike.
-      if (roll > 0.55) {
-        const platform =
-          this.#smoothPulse(
-            s,
-            featureS,
-            54 + (this.#hash(i * 7 + 17) / 0xffffffff) * 22,
-          ) *
-          lower ** 3;
-        delta -=
-          progress *
-          platform *
-          (18 + (this.#hash(i * 7 + 19) / 0xffffffff) * 16);
-      }
-
-      // Narrow lower-cave columns are sparse, seeded, and offset from the
-      // center line so some can be driven around while others need a jump.
-      if (roll < 0.7) {
-        const columnAngle =
-          Math.PI + (this.#hash(i * 7 + 23) / 0xffffffff - 0.5) * 1.15;
-        const angleWidth = 0.13 + (this.#hash(i * 7 + 29) / 0xffffffff) * 0.12;
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const cell = this.#featureCell(i);
+      for (const column of cell.columns) {
+        const along = this.#smoothPulse(s, column.centerS, column.halfLen);
+        if (along <= 0) continue;
         const angular = Math.exp(
-          -(this.#angleDistance(a, columnAngle) ** 2) /
-            (2 * angleWidth * angleWidth),
+          -(this.#angleDistance(a, column.angle) ** 2) /
+            (2 * column.angleWidth * column.angleWidth),
         );
-        const column = this.#smoothPulse(
-          s,
-          featureS,
-          20 + (this.#hash(i * 7 + 31) / 0xffffffff) * 18,
-        );
-        delta -=
-          progress *
-          column *
-          angular *
-          (24 + (this.#hash(i * 7 + 37) / 0xffffffff) * 24);
+        delta -= progress * along * angular * column.height;
       }
+
+      const ramp = cell.ramp;
+      if (!ramp) continue;
+      // Asymmetric on purpose: a smooth climb to the lip, then an immediate
+      // drop. The floor profile caps the uphill slope, while the drop stays
+      // sharp, so the car launches off the lip.
+      const span = ramp.halfLen * 2;
+      const f = (s - (ramp.centerS - span)) / span;
+      if (s > ramp.centerS || f <= 0) continue;
+      // Hold the top flat over the last stretch so the lip reads as a real
+      // jump platform instead of a single ridge, then drop immediately.
+      const g = f >= 0.8 ? 1 : f / 0.8;
+      const along = g * g * (3 - 2 * g);
+      const angular = Math.exp(
+        -(this.#angleDistance(a, ramp.angle) ** 2) /
+          (2 * ramp.angleWidth * ramp.angleWidth),
+      );
+      delta -= progress * along * angular * ramp.height;
     }
     return delta;
   }
@@ -386,10 +494,16 @@ export class Cave {
     return (n - 0.5) * 2 * amp;
   }
 
-  /** Original rock profile, before the directional floor ramp pass. */
+  /** Original rock profile, before the directional floor ramp pass. A road
+   *  lane both raises the floor and damps the bump noise, so it drives smooth. */
   #rawRadius(s: number, a: number) {
+    const road = this.#roadInfluence(s, a);
+    const bump = this.#bump(s, a) * (1 - road);
     const r =
-      this.#waveRadius(s) + this.#bump(s, a) + this.#featureRadiusDelta(s, a);
+      this.#waveRadius(s) +
+      bump +
+      this.#featureRadiusDelta(s, a) -
+      road * config.CAVE_ROAD_RISE * this.#terrainProgress(s);
     return r < config.CAVE_MIN_RADIUS ? config.CAVE_MIN_RADIUS : r;
   }
 
@@ -796,6 +910,10 @@ export class Cave {
       if (index < minChunk - 1 || index > maxChunk + 1)
         this.#floorProfiles.delete(index);
     }
+    for (const index of this.#featureCells.keys()) {
+      if (index < minChunk - 1 || index > maxChunk + 1)
+        this.#featureCells.delete(index);
+    }
     // the control line only needs to reach one chunk past the meshed range,
     // trim what fell behind, the remaining control points are absolute
     while (this.#controlOffset < minChunk && this.#control.length > 1) {
@@ -870,8 +988,11 @@ export class Cave {
         normals[vi * 3] = nx;
         normals[vi * 3 + 1] = ny;
         normals[vi * 3 + 2] = nz;
-        // the bump decides the shade: high rock reads lighter than the hollows
-        const shade = 0.62 + 0.5 * this.#bumpNoise01(s, a);
+        // the bump decides the shade: high rock reads lighter than the hollows,
+        // and a road lane reads lighter still so its surface stands out
+        const road = this.#roadInfluence(s, a);
+        const shade =
+          0.62 + 0.5 * this.#bumpNoise01(s, a) * (1 - road) + road * 0.22;
         colors[vi * 3] = shade;
         colors[vi * 3 + 1] = shade;
         colors[vi * 3 + 2] = shade;
@@ -988,6 +1109,7 @@ export class Cave {
     this.#chunks.clear();
     this.#control.length = 0;
     this.#controlOffset = 0;
+    this.#featureCells.clear();
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
     this.#material.dispose();
     this.#rockTexture.dispose();
