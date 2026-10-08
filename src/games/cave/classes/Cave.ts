@@ -23,7 +23,7 @@ interface ChunkData {
 /** one deterministic terrain feature cell: how rough the stretch is and which
  *  structures sit on it. Cached per cell so the radius hot path only reads
  *  numbers instead of re-hashing. */
-interface FeatureCell {
+export interface FeatureCell {
   /** 0..1 roughness of the stretch; the jump-ramp odds scale with it */
   volatility: number;
   /** smooth raised lane through the rough ground, or null */
@@ -121,10 +121,9 @@ export class Cave {
 
   constructor(seed: number, scene: THREE.Scene) {
     this.seed = seed;
-    this.difficulty = Math.min(
-      1,
-      Math.max(0, seed) / config.CAVE_DIFFICULTY_SEED_BASE,
-    );
+    this.difficulty =
+      Math.min(1, Math.max(0, seed) / config.CAVE_DIFFICULTY_SEED_BASE) *
+      config.CAVE_DIFFICULTY;
 
     const rng = mulberry32(seed >>> 0);
     for (let k = 0; k < config.CAVE_HARMONICS; k++) {
@@ -712,6 +711,11 @@ export class Cave {
     // Blend into untouched side walls and ceiling outside the driving arc.
     const blend = floor * floor * (3 - 2 * floor);
     return this.#rawRadius(s, a) * (1 - blend) + ramp * blend;
+  }
+
+  /** 0..1 jump platform deck influence at (s, a), public for the brain */
+  platformAt(s: number, a: number): number {
+    return this.#rampInfluence(s, a);
   }
 
   /** 0..1 boost pad influence at (s, a); the car triggers its push from it */

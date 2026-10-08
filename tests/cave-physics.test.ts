@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { Car } from '../src/games/cave/classes/Car';
+import { Car, getCaveBrainDimensions } from '../src/games/cave/classes/Car';
 import type { Cave, RadialHit } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
+import { ControlType } from '../src/games/cave/types';
 
 // An infinite plane isolates vehicle dynamics from procedural cave geometry.
 function floor(height = (_x: number, _z: number) => 0, grade = 0) {
@@ -18,6 +19,15 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
     },
     boostAt(_s: number, _a: number) {
       return 0;
+    },
+    platformAt(_s: number, _a: number) {
+      return 0;
+    },
+    featureCell(_index: number) {
+      return { volatility: 0, road: null, columns: [], ramp: null, boost: null };
+    },
+    castRay() {
+      return -1;
     },
     castWheelRay(
       x: number,
@@ -342,5 +352,13 @@ test('a boost pad lifts the speed cap and pushes the car past it', () => {
   tick(car, cave, 400);
   expect(car.speed).toBeGreaterThan(config.CAR_MAX_SPEED);
   expect(car.damaged).toBe(false);
+});
+
+test('an AI car assembles the full brain input vector and drives a frame', () => {
+  const cave = floor();
+  const car = new Car(spawn, ControlType.AI, config.CAR_MAX_SPEED, 't', 1);
+  const { inputCount } = getCaveBrainDimensions(car.sensor!.rayCount);
+  expect(inputCount).toBe(car.sensor!.rayCount * 2 + 4 + 11);
+  expect(() => car.update(cave)).not.toThrow();
 });
 

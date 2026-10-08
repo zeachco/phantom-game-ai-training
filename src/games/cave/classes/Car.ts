@@ -14,7 +14,10 @@ import { Sensor } from './Sensor';
  *  history, the four wheel compressions, then speed, velocity delta and gate
  *  delta. */
 const WHEEL_INPUTS = 4;
-const EXTRA_BRAIN_INPUTS = 3;
+/** speed, velocity delta, gate delta, then the feature block: airborne,
+ *  inverted, on platform, on boost, platform ahead, boost ahead, column
+ *  proximity and column side */
+const EXTRA_BRAIN_INPUTS = 11;
 
 export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
   // AI controls have no event handlers, so their enumerable fields are the
@@ -331,8 +334,11 @@ export class Car {
     this.prevS = this.s;
     this.#move(cave);
     if (this.boostFrames > 0) this.boostFrames--;
-    if (cave.boostAt(this.s, this.wheelHit.a) > 0.2)
+    if (cave.boostAt(this.s, this.wheelHit.a) > 0.2) {
+      if (this.boostFrames <= 0 && this.useAI)
+        this.brain.score += config.BOOST_SCORE;
       this.boostFrames = config.BOOST_DURATION;
+    }
     if (this.brain) this.#updateScore(cave);
     this.#updateSectionProgress();
 
@@ -357,6 +363,60 @@ export class Car {
         inputs.push(Math.min(1, this.speed / this.maxSpeed));
         inputs.push(this.#velocityDelta());
         inputs.push(this.gateDelta);
+        // Feature block: what the rays cannot say - the surface under the
+        // car, what sits ahead on the line, and the car's own attitude.
+        const surfaceA = this.wheelHit.a;
+        const cellIndex = Math.floor(this.s / config.CAVE_FEATURE_CELL);
+        const reach = config.CAVE_FEATURE_CELL * 1.5;
+        let platformAhead = 0;
+        let boostAhead = 0;
+        let columnProximity = 0;
+        let columnSide = 0;
+        for (let i = cellIndex; i <= cellIndex + 2; i++) {
+          const cell = cave.featureCell(i);
+          if (cell.ramp) {
+            const d = (cell.ramp.centerS - cell.ramp.halfLen - this.s) / reach;
+            if (d >= 0)
+              platformAhead = Math.max(platformAhead, 1 - Math.min(1, d));
+          }
+          if (cell.boost) {
+            const d = (cell.boost.centerS - cell.boost.halfLen - this.s) / reach;
+            if (d >= 0)
+              boostAhead = Math.max(boostAhead, 1 - Math.min(1, d));
+          }
+          for (const col of cell.columns) {
+            const d = (col.centerS - col.halfLen - this.s) / reach;
+            if (d < 0 || d >= 1) continue;
+            const wrap = (col.angle - surfaceA) % (Math.PI * 2);
+            const offset =
+              wrap > Math.PI
+                ? wrap - Math.PI * 2
+                : wrap < -Math.PI
+                  ? wrap + Math.PI * 2
+                  : wrap;
+            const lateral = Math.abs(offset) * config.CAVE_RADIUS;
+            const threat = (1 - d) * Math.max(0, 1 - lateral / 45);
+            if (threat > columnProximity) {
+              columnProximity = threat;
+              columnSide = clamp(-1, 1, offset * 4);
+            }
+          }
+        }
+        inputs.push(
+          this.grounded[0] ||
+          this.grounded[1] ||
+          this.grounded[2] ||
+          this.grounded[3]
+            ? 0
+            : 1,
+        );
+        inputs.push(clamp(0, 1, -this.uy));
+        inputs.push(clamp(0, 1, cave.platformAt(this.s, surfaceA)));
+        inputs.push(clamp(0, 1, cave.boostAt(this.s, surfaceA)));
+        inputs.push(platformAhead);
+        inputs.push(boostAhead);
+        inputs.push(columnProximity);
+        inputs.push(columnSide);
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);

@@ -203,6 +203,8 @@ class Config {
   /** frames a boost lasts after (re)triggering; overlapping pads refresh
    *  the timer, they never stack */
   public BOOST_DURATION = 90;
+  /** score bonus for triggering a boost pad, small next to GATE_SCORE */
+  public BOOST_SCORE = 2;
   /** Body-up (uy) below this means the car is past the flip point,
    *  roof-down. Above it the car is still in control: no auto-righting
    *  interference, the driver/AI can tilt and recover on its own. */
@@ -303,6 +305,9 @@ class Config {
   public CAVE_TURN_GROWTH = 0.22;
   /** seed at which the cave difficulty reaches its maximum */
   public CAVE_DIFFICULTY_SEED_BASE = 100;
+  /** overall difficulty multiplier (0..1): training can anneal the cave
+   *  from easy to full roughness without changing the seeds */
+  public CAVE_DIFFICULTY = 1;
   /** segments kept generated ahead of the furthest car / behind the spawn */
   public CAVE_CHUNKS_AHEAD = 6;
   public CAVE_CHUNKS_BEHIND = 1;
