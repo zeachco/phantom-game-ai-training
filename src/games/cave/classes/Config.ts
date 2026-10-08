@@ -129,11 +129,11 @@ class Config {
     [-(this.CAR_WIDTH / 2 + 0.2), -0.6, 3.1],
     [this.CAR_WIDTH / 2 + 0.2, -0.6, 3.1],
   ];
-  public SUSP_REST = 2.0;
-  public SUSP_TRAVEL = 1.5;
+  public SUSP_REST = 2.3;
+  public SUSP_TRAVEL = 2.2;
   /** Per-wheel spring and damper, unit chassis mass, frame-based units. */
-  public SUSP_SPRING = 0.14;
-  public SUSP_DAMP = 0.22;
+  public SUSP_SPRING = 0.09;
+  public SUSP_DAMP = 0.45;
   public TIRE_FRICTION = 2.8;
   /** Effective tire force height below the center of mass, an arcade roll assist. */
   public TIRE_ROLL_CENTER = 0.6;
@@ -154,6 +154,10 @@ class Config {
   /** Airborne frames before the leveling assist engages, so short hops over
    *  bumps still let the car follow the ground instead of fighting it. */
   public CAR_AIR_LEVEL_DELAY = 6;
+  /** Target yaw rate (rad/frame) applied in the air at full steer:
+   *  Mario Kart style, steering keeps working mid-jump with reduced
+   *  authority. */
+  public CAR_AIR_STEER_TORQUE = 0.02;
   /** Normal angular damping per frame, the mild arcade assist. */
   public CAR_SPIN_DAMP = 0.94;
   /** Pitch/roll damping per frame on the frame of touchdown, fading back to
@@ -161,6 +165,9 @@ class Config {
   public CAR_LANDING_SPIN_DAMP = 0.7;
   /** Frames over which the landing damping fades out. */
   public CAR_LANDING_DAMP_FRAMES = 10;
+  /** Fraction of the impact velocity absorbed along the first wheel normal
+   *  on a landing: hard landings squat the car instead of bouncing it. */
+  public CAR_LANDING_VEL_ABSORB = 0.85;
   /** Forward acceleration builds over two seconds of held throttle. */
   public CAR_ENGINE_START = 0.025;
   public CAR_ENGINE = 0.1;
@@ -171,15 +178,41 @@ class Config {
   public CAR_BRAKE_DECEL = 0.2;
   /** reverse driving acceleration, the cap stays maxSpeed/2 */
   public CAR_REVERSE_ACCEL = 0.06;
-  /** Lateral slip response per frame, divided between four tires and
-   *  limited by each wheel's available traction. */
-  public CAR_GRIP = 0.75;
+  /** Lateral slip response per frame at mid speed, divided between four
+   *  tires and limited by each wheel's available traction: grippy, not
+   *  drifty. */
+  public CAR_GRIP = 0.9;
+  /** Grip relaxes toward top speed so the car goes straight when it should
+   *  go straight. */
+  public CAR_GRIP_AT_TOP = 0.75;
   /** max steering angle of the front wheels in rad at full steer */
   public CAR_STEER_MAX = 0.45;
+  /** Lateral force cap per wheel, in load fractions: lower than the tire
+   *  friction circle, so a too-tight turn understeers (slides its nose
+   *  wide) instead of lifting the inner wheels and rolling the car over. */
+  public CAR_LATERAL_FRICTION = 1.2;
   /** normal impact speed (u/f) at which a wall hit kills the car */
   public CAR_CRASH_SPEED = 5.5;
   /** fraction of the normal velocity kept after a wall bounce */
   public CAR_RESTITUTION = 0.05;
+  /** Body-up (uy) below this means the car is past the flip point,
+   *  roof-down. Above it the car is still in control: no auto-righting
+   *  interference, the driver/AI can tilt and recover on its own. */
+  public CAR_INVERT_THRESHOLD = -0.5;
+  /** Speed (u/f) above which an inverted car starts flipping back; below it
+   *  the car rests on its roof and is left to drag, stall or be pushed off. */
+  public CAR_SELF_RIGHT_SPEED = 3.5;
+  /** Substeps of the scripted flip-back (180 substeps = 45 frames = 0.75s):
+   *  a car that flipped while moving fast rotates back onto its wheels over
+   *  this many substeps, imposed as an arcade moment. */
+  public CAR_SELF_RIGHT_SUBSTEPS = 180;
+  /** Drag on a roof-down chassis: body velocity fraction removed per
+   *  substep while the roof touches. Grippier than the wheels: the car
+   *  slides to a stop, it does not skid. */
+  public ROOF_FRICTION = 0.2;
+  /** Pitch/roll angular damping per substep while the roof touches: an
+   *  upside-down car settles onto its roof instead of spinning. */
+  public ROOF_SPIN_DAMP = 0.9;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */
@@ -201,6 +234,10 @@ class Config {
   public CAVE_BUMP_WAVE = 6;
   /** Maximum terrain rise in world Y per forward unit; downhill faces stay sharp. */
   public CAVE_FLOOR_MAX_CLIMB = 0.1;
+  /** Maximum terrain drop in world Y per forward unit: steep enough that a
+   *  driving car still leaves the ground off a lip, gentle enough that a
+   *  slow car noses over it instead of flipping. */
+  public CAVE_FLOOR_MAX_DROP = 0.3;
   /** angular cell of the fine bumps around the circumference */
   public CAVE_BUMP_ANGLE = 0.35;
   /** angular half-width of the flat driving band around the cave floor

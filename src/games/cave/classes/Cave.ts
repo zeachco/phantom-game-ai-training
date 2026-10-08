@@ -331,6 +331,11 @@ export class Cave {
    *  demand and trimmed with the meshed window like the floor profiles */
   #featureCells = new Map<number, FeatureCell>();
 
+  /** cached feature cell, exposed for the path check and debug tooling */
+  featureCell(index: number): FeatureCell {
+    return this.#featureCell(index);
+  }
+
   /** Deterministic descriptor of one terrain feature cell. A seeded RNG makes
    *  the draws independent: volatility drives how likely a single jump ramp is
    *  placed just before the stretch, columns and roads are separate draws. */
@@ -441,19 +446,27 @@ export class Cave {
 
       const ramp = cell.ramp;
       if (!ramp) continue;
-      // Asymmetric on purpose: a smooth climb to the lip, then an immediate
-      // drop. The floor profile caps the uphill slope, while the drop stays
-      // sharp, so the car launches off the lip.
+      // A climb to a flat lip, then a smooth back slope: the launch comes
+      // from leaving the lip at speed, not from a sharp back edge, so a
+      // slow car rolls over the lip instead of pivoting over it.
       const span = ramp.halfLen * 2;
+      const back = ramp.height / 0.35;
       const f = (s - (ramp.centerS - span)) / span;
-      if (s > ramp.centerS || f <= 0) continue;
+      if (s > ramp.centerS + back || f <= 0) continue;
       // Hold the top flat over the last stretch so the lip reads as a real
-      // jump platform instead of a single ridge, then drop immediately.
+      // jump platform instead of a single ridge.
       const g = f >= 0.8 ? 1 : f / 0.8;
-      const along = g * g * (3 - 2 * g);
-      const angular = Math.exp(
-        -(this.#angleDistance(a, ramp.angle) ** 2) /
-          (2 * ramp.angleWidth * ramp.angleWidth),
+      let along = g * g * (3 - 2 * g);
+      if (s > ramp.centerS) {
+        const b = 1 - (s - ramp.centerS) / back;
+        along *= b * b * (3 - 2 * b);
+      }
+      // Plateau across the whole band (the deck never crowns it and tips
+      // a car driving beside its center), falling away into the banks.
+      const angular = this.#plateauAcross(
+        a,
+        config.CAVE_BAND_HALF_WIDTH * 0.9,
+        config.CAVE_BAND_HALF_WIDTH + 0.25,
       );
       delta -= progress * along * angular * ramp.height;
     }
@@ -515,6 +528,18 @@ export class Cave {
     return config.CAVE_BANK_RISE * t * t;
   }
 
+  /** Plateau across the driving band: one over the whole inner span, then
+   *  a smooth fall to zero just past the band edge, into the banks. Used
+   *  by band-wide features (the launch ramp) so their deck never crowns
+   *  the band and tips a car driving beside its center. */
+  #plateauAcross(a: number, inner: number, outer: number) {
+    const d = this.#angleDistance(a, Math.PI);
+    if (d <= inner) return 1;
+    if (d >= outer) return 0;
+    const t = (d - inner) / (outer - inner);
+    return 1 - t * t * (3 - 2 * t);
+  }
+
   /** Original rock profile, before the directional floor ramp pass. The flat
    *  driving band keeps no bump skin and only a sliver of the long waves;
    *  outside it the floor rises steeply into the side walls. A road lane
@@ -522,10 +547,23 @@ export class Cave {
   #rawRadius(s: number, a: number) {
     const road = this.#roadInfluence(s, a);
     const band = this.#bandInfluence(a);
+    // The band keeps only a sliver of the long waves; the rest of the wave
+    // breathing ramps back in over the bank span (mirroring the bank's own
+    // quadratic), so the ledge between the flat plateau and the breathing
+    // tube is a gentle shoulder instead of a step that tips slow cars.
+    const d = this.#angleDistance(a, Math.PI);
+    let waveKeep = 1 - config.CAVE_BAND_WAVE_DAMP;
+    const x = d - config.CAVE_BAND_HALF_WIDTH;
+    if (x > 0) {
+      const edge = Math.PI / 2 - config.CAVE_BAND_HALF_WIDTH;
+      waveKeep = Math.min(
+        1,
+        waveKeep + (1 - waveKeep) * ((x / edge) * (x / edge)),
+      );
+    }
     const wave =
       config.CAVE_RADIUS +
-      (this.#waveRadius(s) - config.CAVE_RADIUS) *
-        (1 - band * config.CAVE_BAND_WAVE_DAMP);
+      (this.#waveRadius(s) - config.CAVE_RADIUS) * waveKeep;
     const bump = this.#bump(s, a) * (1 - road) * (1 - band);
     const r =
       wave +
@@ -546,6 +584,8 @@ export class Cave {
     if (cached) return cached;
     const rise = config.CAVE_FLOOR_MAX_CLIMB / config.CAVE_VERTICAL_SCALE;
     const stepRise = rise * PER;
+    const drop = config.CAVE_FLOOR_MAX_DROP / config.CAVE_VERTICAL_SCALE;
+    const stepDrop = drop * PER;
     // Features only subtract radius. This upper bound guarantees that no
     // farther peak can affect this chunk, keeping independently built chunk
     // edges identical regardless of generation/query order.
@@ -563,12 +603,19 @@ export class Cave {
       let nextRadius = Infinity;
       for (let j = last; j >= 0; j--) {
         const arc = index * LEN + j * PER;
-        // Smaller radius raises the floor. Anticipate the next peak with a
-        // bounded uphill slope; increasing radius (a drop) remains immediate.
-        nextRadius = Math.min(
-          this.#rawRadius(arc, angle),
-          nextRadius + stepRise,
-        );
+        // Smaller radius raises the floor. The uphill slope is bounded so a
+        // distant peak is climbed gradually; the downhill drop is bounded
+        // too, so a slow car noses over a ramp lip or a lane edge instead
+        // of flipping over it. Fast cars still leave the ground: the capped
+        // drop outruns gravity at driving speed.
+        const raw = this.#rawRadius(arc, angle);
+        nextRadius =
+          nextRadius === Infinity
+            ? raw
+            : Math.min(
+                Math.max(raw, nextRadius - stepDrop),
+                nextRadius + stepRise,
+              );
         if (j <= SAMPLES) profile[j * SIDES + k] = nextRadius;
       }
     }

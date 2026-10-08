@@ -121,6 +121,17 @@ export class Car {
   private airFrames = 0;
   /** 1 on the first grounded frame, decays to 0 over the landing window */
   private landingDamp = 0;
+  /** per-wheel grounded state from the previous substep, landing detection */
+  private wasGrounded: boolean[] = [false, false, false, false];
+  /** true once the first wheel of a landing has absorbed the impact */
+  private landingAbsorbed = false;
+  /** substeps of the scripted flip-back remaining, 0 = not flipping */
+  private selfRightFrames = 0;
+  /** the world axis and total angle of the scripted flip, captured at start */
+  private flipAxisX = 1;
+  private flipAxisY = 0;
+  private flipAxisZ = 0;
+  private flipAngle = 0;
   /** anti-roll/pitch load transfer per wheel, rebuilt every substep */
   private stab: number[] = [0, 0, 0, 0];
   /** penalty for the death that just happened, charged with the crash speed */
@@ -279,6 +290,9 @@ export class Car {
     this.grounded.fill(false);
     this.airFrames = 0;
     this.landingDamp = 0;
+    this.wasGrounded.fill(false);
+    this.landingAbsorbed = false;
+    this.selfRightFrames = 0;
     this.stab.fill(0);
     this.hasPrevSensors = false;
     this.prevSensorInputs.fill(0);
@@ -586,6 +600,7 @@ export class Car {
       );
     if (!groundedLast) {
       this.airFrames++;
+      this.landingAbsorbed = false;
     } else if (this.airFrames > 0) {
       this.landingDamp = Math.min(
         1,
@@ -664,6 +679,28 @@ export class Car {
           -this.wheelHit.ny,
           -this.wheelHit.nz,
         );
+        // First contact of a landing: absorb most of the impact velocity
+        // along the wheel normal. The car squats into the spring instead of
+        // rebounding; the landing spin-damp window settles the rotation.
+        if (
+          this.grounded[w] &&
+          !this.wasGrounded[w] &&
+          !this.landingAbsorbed
+        ) {
+          const impact =
+            this.vx * this.#normal.x +
+            this.vy * this.#normal.y +
+            this.vz * this.#normal.z;
+          if (impact < 0) {
+            this.landingAbsorbed = true;
+            this.vx -=
+              this.#normal.x * impact * config.CAR_LANDING_VEL_ABSORB;
+            this.vy -=
+              this.#normal.y * impact * config.CAR_LANDING_VEL_ABSORB;
+            this.vz -=
+              this.#normal.z * impact * config.CAR_LANDING_VEL_ABSORB;
+          }
+        }
         // Apply suspension and tire forces at the contact patch. This gives
         // one chassis real pitch, roll and yaw from four independent wheels.
         this.#anchor.addScaledVector(
@@ -727,7 +764,20 @@ export class Car {
           Math.abs(longitudinal) / (4 * dt),
         );
         drive -= Math.sign(longitudinal) * rollingResistance;
-        let side = (-lateral * config.CAR_GRIP) / 4;
+        // Lateral grip relaxes toward top speed: grippy in the corners,
+        // straight-line stable at speed.
+        const grip = lerp(
+          config.CAR_GRIP,
+          config.CAR_GRIP_AT_TOP,
+          clamp(0, 1, this.speed / this.maxSpeed),
+        );
+        let side = (-lateral * grip) / 4;
+        // Arcade rollover guard: the lateral force per wheel is capped below
+        // the friction circle, so a too-tight turn understeers instead of
+        // lifting the inner wheels and rolling the car over.
+        const sideCap = load * config.CAR_LATERAL_FRICTION;
+        if (side > sideCap) side = sideCap;
+        else if (side < -sideCap) side = -sideCap;
         // Friction circle: airborne/unloaded wheels cannot propel the car,
         // and braking/acceleration share the available grip with cornering.
         const limit = load * config.TIRE_FRICTION;
@@ -757,6 +807,7 @@ export class Car {
         );
         this.wheelSpin[w] += (longitudinal * dt) / config.CAR_WHEEL_RADIUS;
       }
+      for (let w = 0; w < 4; w++) this.wasGrounded[w] = this.grounded[w];
       // Airborne attitude assist: gravity acts at the center of mass, so in the
       // air the whole take-off pitch carries straight into the landing. Build a
       // world-frame angular velocity that rotates the forward toward the road
@@ -766,6 +817,7 @@ export class Car {
       // without overshoot; the cap keeps a real jump arcing.
       if (
         this.airFrames >= config.CAR_AIR_LEVEL_DELAY &&
+        this.uy > config.CAR_INVERT_THRESHOLD &&
         !this.grounded[0] &&
         !this.grounded[1] &&
         !this.grounded[2] &&
@@ -797,6 +849,90 @@ export class Car {
         const airResponse = config.CAR_AIR_LEVEL_RESPONSE * dt;
         this.avx += (wx - this.avx) * airResponse;
         this.avz += (wz - this.avz) * airResponse;
+        // Steering keeps working in the air with reduced authority, so a
+        // jump can be aimed.
+        const steer = clamp(-1, 1, this.controls.left - this.controls.right);
+        this.avy +=
+          (steer * config.CAR_AIR_STEER_TORQUE - this.avy) * airResponse;
+      }
+      // Upside-down handling: past the flip point the wheels are in the sky
+      // and the chassis meets the ground. The roof is grippier than the
+      // wheels (it bleeds speed and spin instead of skidding). A car that
+      // flipped while moving fast performs a scripted flip back onto its
+      // wheels; a slow one rests on its roof and is left to drag, stall or
+      // be pushed off. A tilted car above the threshold is still in control
+      // and gets none of this.
+      if (this.selfRightFrames > 0) {
+        // The rotation is imposed (an arcade moment): the roof drag, the
+        // corner collisions and the landing settle keep running underneath.
+        this.selfRightFrames--;
+        const t = 1 - this.selfRightFrames / config.CAR_SELF_RIGHT_SUBSTEPS;
+        const e = t * t * (3 - 2 * t);
+        const theta = this.flipAngle * e;
+        const sh = Math.sin(theta / 2);
+        const ch = Math.cos(theta / 2);
+        const { x: px, y: py, z: pz, w: pw } = this.quat;
+        this.quat.x =
+          ch * px +
+          this.flipAxisX * sh * pw +
+          this.flipAxisY * sh * pz -
+          this.flipAxisZ * sh * py;
+        this.quat.y =
+          ch * py +
+          this.flipAxisY * sh * pw +
+          this.flipAxisZ * sh * px -
+          this.flipAxisX * sh * pz;
+        this.quat.z =
+          ch * pz +
+          this.flipAxisZ * sh * pw +
+          this.flipAxisX * sh * py -
+          this.flipAxisY * sh * px;
+        this.quat.w =
+          ch * pw -
+          this.flipAxisX * sh * px -
+          this.flipAxisY * sh * py -
+          this.flipAxisZ * sh * pz;
+        this.quat.normalize();
+        // the angular velocity tracks the scripted rate, so the landing
+        // momentum and the spin damping stay continuous
+        const rate =
+          (this.flipAngle * 6 * t * (1 - t)) / config.CAR_SELF_RIGHT_SUBSTEPS;
+        this.avx = this.flipAxisX * rate;
+        this.avy = this.flipAxisY * rate;
+        this.avz = this.flipAxisZ * rate;
+      }
+      if (this.uy < 0) {
+        const roofDist = cave.castWheelRay(
+          this.x,
+          this.y,
+          this.z,
+          this.ux,
+          this.uy,
+          this.uz,
+          config.CAR_HEIGHT / 2 + 1.5,
+          this.s,
+          this.wheelHit,
+        );
+        if (roofDist >= 0) {
+          this.#force.x -= this.vx * config.ROOF_FRICTION;
+          this.#force.y -= this.vy * config.ROOF_FRICTION;
+          this.#force.z -= this.vz * config.ROOF_FRICTION;
+          this.avx *= config.ROOF_SPIN_DAMP;
+          this.avz *= config.ROOF_SPIN_DAMP;
+        }
+      }
+      if (
+        this.uy < config.CAR_INVERT_THRESHOLD &&
+        this.selfRightFrames === 0 &&
+        this.speed > config.CAR_SELF_RIGHT_SPEED
+      ) {
+        // start the flip about the body lateral axis, as oriented now: the
+        // rotation carries the car nose-first back onto its wheels
+        this.selfRightFrames = config.CAR_SELF_RIGHT_SUBSTEPS;
+        this.flipAxisX = this.rx;
+        this.flipAxisY = this.ry;
+        this.flipAxisZ = this.rz;
+        this.flipAngle = Math.acos(clamp(-1, 1, this.uy));
       }
       this.vx += this.#force.x * dt;
       this.vy += this.#force.y * dt;

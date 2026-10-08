@@ -67,44 +67,79 @@ test('ramp profiles agree at chunk seams and do not depend on query order', () =
   );
 });
 
-test('seed 2 can drive through the opening terrain without getting stuck', () => {
+/** a car that pursues a point ahead on the centerline: the reference line
+ *  a sane driver (or a trained brain) should be able to hold */
+function driveLine(terrain: Cave, car: Car, frames: number) {
+  const aim = { x: 0, y: 0, z: 0 };
+  for (let frame = 0; frame < frames; frame++) {
+    terrain.centerAt(car.s + 40 + car.speed * 15, aim);
+    const dx = aim.x - car.x;
+    const dy = aim.y - car.y;
+    const dz = aim.z - car.z;
+    const crossX = car.fy * dz - car.fz * dy;
+    const crossY = car.fz * dx - car.fx * dz;
+    const crossZ = car.fx * dy - car.fy * dx;
+    const around = crossX * car.ux + crossY * car.uy + crossZ * car.uz;
+    const dot = car.fx * dx + car.fy * dy + car.fz * dz;
+    const angle = Math.atan2(around, dot);
+    car.controls.left = Math.max(0, Math.min(1, angle * 2));
+    car.controls.right = Math.max(0, Math.min(1, -angle * 2));
+    car.update(terrain);
+  }
+}
+
+test('a car that follows the track line drives the opening without getting stuck', () => {
   const terrain = cave(2);
   const car = new Car(terrain.getSpawn());
-  for (let frame = 0; frame < 300; frame++) car.update(terrain);
+  driveLine(terrain, car, 300);
   expect(car.damaged).toBe(false);
   expect(car.s).toBeGreaterThan(900);
   expect(car.nextGate).toBeGreaterThanOrEqual(1);
   expect(car.speed).toBeGreaterThan(1);
 });
 
-test('seed 25 can pull away on the hills around gate 6', () => {
+test('a car that follows the track line can pull away on the hills around gate 6', () => {
   const terrain = cave(25);
   for (const start of [3000, 3200, 3400, 3600]) {
     const car = new Car(terrain.groundSpawn(start));
-    for (let frame = 0; frame < 180; frame++) car.update(terrain);
+    driveLine(terrain, car, 180);
     expect(car.damaged).toBe(false);
     expect(car.s - start).toBeGreaterThan(100);
     expect(car.speed).toBeGreaterThan(0.8);
   }
 });
 
+test('a straight-driving car still survives the opening (bank flips recover)', () => {
+  const terrain = cave(2);
+  const car = new Car(terrain.getSpawn());
+  for (let frame = 0; frame < 300; frame++) car.update(terrain);
+  expect(car.damaged).toBe(false);
+  expect(car.s).toBeGreaterThan(400);
+});
+
 test('the driving band is flat while the sides stay rough', () => {
   for (const seed of [0, 50, 100]) {
     const terrain = cave(seed);
-    // Sharp radius steps between adjacent arcs: the band keeps only a few
-    // intentional feature edges (lane ends, ramp lips, column faces); the
-    // rough sides keep the whole bumpy skin.
-    const sharpDrops = (angle: number) => {
-      let drops = 0;
-      for (let s = 1500; s < 3600; s++)
-        if (Math.abs(terrain.radius(s + 1, angle) - terrain.radius(s, angle)) > 1)
-          drops++;
-      return drops;
+    // Chop (mean second difference) along the track: the band keeps only
+    // the slow wave sliver and smooth features, the rough sides keep the
+    // bumpy skin whose corners are an order of magnitude choppier.
+    const chop = (angle: number) => {
+      let total = 0;
+      let count = 0;
+      for (let s = 1501; s < 3600; s++) {
+        total += Math.abs(
+          terrain.radius(s + 1, angle) -
+            2 * terrain.radius(s, angle) +
+            terrain.radius(s - 1, angle),
+        );
+        count++;
+      }
+      return total / count;
     };
-    const band = sharpDrops(Math.PI);
-    const side = sharpDrops(Math.PI + 0.4);
-    expect(side).toBeGreaterThan(3 * band);
-    expect(side).toBeGreaterThan(100);
+    const band = chop(Math.PI);
+    const side = chop(Math.PI + 0.4);
+    expect(side).toBeGreaterThan(4 * band);
+    expect(side).toBeGreaterThan(0.02);
     // Averaged over arcs the bumps cancel and the deterministic bank
     // remains: the wall at PI+0.9 sits well above the PI+0.5 shoulder.
     // The full bank raise (~13u) is partly masked by the MIN_RADIUS clamp

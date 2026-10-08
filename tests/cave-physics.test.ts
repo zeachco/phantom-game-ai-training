@@ -278,3 +278,55 @@ test('upside-down wheel contacts cannot propel the car', () => {
   expect(car.grounded).toEqual([true, true, true, true]);
   expect(Math.abs(car.vz)).toBeLessThan(0.001);
 });
+
+describe('arcade car feel', () => {
+  test('a fast inverted car is tempted to flip back onto its wheels', () => {
+  const cave = floor();
+  const car = new Car(spawn);
+  car.quat.set(1, 0, 0, 0); // fully roof-down, moving with the flow
+  car.vz = -6;
+  for (let frame = 0; frame < 600; frame++) car.update(cave);
+  expect(car.uy).toBeGreaterThan(0.5);
+  expect(car.damaged).toBe(false);
+});
+
+test('a slow inverted car rests on its roof, dragged and unpowered', () => {
+  const cave = floor();
+  const car = new Car(spawn);
+  car.quat.set(1, 0, 0, 0);
+  car.vz = -1.5; // below the self-righting gate
+  for (let frame = 0; frame < 200; frame++) car.update(cave);
+  expect(car.uy).toBeLessThan(-0.5);
+  expect(car.speed).toBeLessThan(0.9);
+  expect(car.damaged).toBe(false);
+});
+
+test('a hard landing squats into the suspension instead of bouncing', () => {
+  const cave = floor();
+  const car = new Car({ ...spawn, y: 30 });
+  let maxRebound = 0;
+  let landed = false;
+  for (let frame = 0; frame < 200; frame++) {
+    car.update(cave);
+    if (!landed && car.grounded.some(Boolean)) landed = true;
+    if (landed && car.vy > 0) maxRebound = Math.max(maxRebound, car.vy);
+  }
+  expect(maxRebound).toBeLessThan(1.5);
+  expect(car.damaged).toBe(false);
+});
+
+test('steering still works in the air', () => {
+  const cave = floor();
+  const car = new Car(spawn);
+  car.vz = -5;
+  car.vy = 4;
+  car.controls.left = 1;
+  let maxDev = 0;
+  for (let frame = 0; frame < 60; frame++) {
+    car.update(cave);
+    maxDev = Math.max(maxDev, Math.abs(Math.atan2(car.fx, -car.fz)));
+  }
+  expect(car.grounded.some(Boolean)).toBe(false); // still airborne
+  expect(maxDev).toBeGreaterThan(0.3);
+});
+});
