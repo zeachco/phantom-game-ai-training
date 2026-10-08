@@ -3,6 +3,7 @@ import { GameLoop } from '../../utilities/three/GameLoop';
 import { drawControlAxes } from '../circuit/ui/driveIndicators';
 import { Car, getCaveBrainDimensions } from './classes/Car';
 import { Cave } from './classes/Cave';
+import { ChaseCamera } from './classes/ChaseCamera';
 import { config } from './classes/Config';
 import { ControlType } from './types';
 
@@ -88,7 +89,14 @@ export default async (state: CaveState) => {
   }
 
   const carGeometry = new THREE.BoxGeometry(4.4, 2.2, 8.5);
-  const wheelGeometry = new THREE.BoxGeometry(1.25, 1.1, 2.0);
+  const wheelGeometry = new THREE.CylinderGeometry(
+    config.CAR_WHEEL_RADIUS,
+    config.CAR_WHEEL_RADIUS,
+    0.9,
+    12,
+  );
+  wheelGeometry.rotateZ(Math.PI / 2);
+  const wheelMeshes = new Map<Car, THREE.Group[]>();
   const markerGeometry = new THREE.SphereGeometry(1.4, 12, 8);
   const carMeshes = new Map<Car, THREE.Group>();
   for (const car of state.cars) {
@@ -124,16 +132,16 @@ export default async (state: CaveState) => {
       color: 0x15181d,
       roughness: 0.9,
     });
-    for (const [x, z] of [
-      [-2.0, -3.1],
-      [2.0, -3.1],
-      [-2.0, 3.1],
-      [2.0, 3.1],
-    ]) {
+    const wheels: THREE.Group[] = [];
+    for (const [x, y, z] of config.WHEEL_OFFSETS) {
+      const mount = new THREE.Group();
+      mount.position.set(x, y - config.SUSP_REST, z);
       const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-      wheel.position.set(x, -1.35, z);
-      group.add(wheel);
+      mount.add(wheel);
+      group.add(mount);
+      wheels.push(mount);
     }
+    wheelMeshes.set(car, wheels);
     group.visible = false;
     scene.add(group);
     carMeshes.set(car, group);
@@ -151,13 +159,14 @@ export default async (state: CaveState) => {
       const materials = Array.isArray(object.material)
         ? object.material
         : [object.material];
+      object.renderOrder = focused ? 10 : 1;
       for (const material of materials) {
         material.transparent = opacity < 1;
         material.opacity = opacity;
         material.depthWrite = focused;
-        // The human is drawn over the cave only while it is focused. A faded
-        // human follows the same depth rules as every other background car.
-        material.depthTest = focused || car !== human;
+        // Normal depth testing is restored before the camera applies its
+        // close-obstruction visibility fallback to the followed car.
+        material.depthTest = true;
       }
     });
   };
@@ -285,11 +294,7 @@ export default async (state: CaveState) => {
   let lastStatsText = '';
   let followed = human;
   let lastHud = 0;
-  const lookAt = new THREE.Vector3();
-  const desiredLookAt = new THREE.Vector3();
-  const desiredCamera = new THREE.Vector3();
-  const center = { x: 0, y: 0, z: 0 };
-  camera.position.set(spawn.x, spawn.y + 4, spawn.z + 20);
+  const chaseCamera = new ChaseCamera();
 
   const respawn = (car: Car) => {
     // Cars intentionally share one starting transform; there is no
@@ -299,19 +304,26 @@ export default async (state: CaveState) => {
   };
 
   const loop = new GameLoop();
-  loop.play((_elapsed, _dt) => {
+  let accumulator = 0;
+  loop.play((_elapsed, dt) => {
+    // Keep physics, AI and race timers at 60 Hz on every display. Limit
+    // catch-up after tab suspension so it cannot spiral into a long frame.
+    accumulator = Math.min(accumulator + dt, 5 / 60);
     const now = performance.now();
-    for (const car of state.cars) {
-      if (car.damaged) {
-        if (now - car.deathTime > 900) {
-          respawn(car);
-          car.deathTime = 0;
+    while (accumulator >= 1 / 60) {
+      accumulator -= 1 / 60;
+      for (const car of state.cars) {
+        if (car.damaged) {
+          if (now - car.deathTime > 900) {
+            respawn(car);
+            car.deathTime = 0;
+          }
+          continue;
         }
-        continue;
+        const alive = !car.damaged;
+        car.update(cave);
+        if (alive && car.damaged) car.deathTime = now;
       }
-      const alive = !car.damaged;
-      car.update(cave);
-      if (alive && car.damaged) car.deathTime = now;
     }
 
     let minS = human.s;
@@ -343,22 +355,25 @@ export default async (state: CaveState) => {
       if (!visible) continue;
       mesh.position.set(car.x, car.y, car.z);
       mesh.quaternion.copy(car.quat);
+      const wheels = wheelMeshes.get(car)!;
+      for (let w = 0; w < wheels.length; w++) {
+        wheels[w].position.y = config.WHEEL_OFFSETS[w][1] - car.wheelLengths[w];
+        wheels[w].rotation.y = w < 2 ? car.steeringAngle : 0;
+        wheels[w].children[0].rotation.x = -car.wheelSpin[w];
+      }
     }
 
-    // The camera sits behind the car but always looks at the cave axis ahead,
-    // rather than staring at the car's local tilt.
-    cave.centerAt(followed.s + config.CAMERA_LOOK_AHEAD, center);
-    // Keep the optical axis on the tunnel center, while the chase position
-    // leaves the car visible at the lower edge like the circuit camera.
-    desiredLookAt.set(center.x, followed.y, center.z);
-    lookAt.lerp(desiredLookAt, 0.16);
-    desiredCamera.set(
-      followed.x - followed.fx * 22,
-      followed.y + 4,
-      followed.z - followed.fz * 22,
-    );
-    camera.position.lerp(desiredCamera, 0.12);
-    camera.lookAt(lookAt);
+    const cameraObstructed = chaseCamera.update(camera, followed, cave, dt);
+    if (cameraObstructed) {
+      carMeshes.get(followed)?.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const materials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+        object.renderOrder = 10;
+        for (const material of materials) material.depthTest = false;
+      });
+    }
     caveLight.position.copy(camera.position);
 
     // Highlight the followed car's next ring without rebuilding the mesh.

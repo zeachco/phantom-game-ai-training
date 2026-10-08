@@ -115,52 +115,41 @@ class Config {
   /** top speed in u/f */
   public CAR_MAX_SPEED = 7;
   /** world down acceleration per frame^2 */
-  public CAR_GRAVITY = 0.28;
-  /** the body collides with the cave as a sphere around its center */
-  public CAR_BODY_RADIUS = 3.2;
-  /** each wheel is a sphere for the embed test and a ray for the suspension */
-  public CAR_WHEEL_RADIUS = 2.6;
-  /** wheel anchor offsets in body space: x right, y up, z back (front = -z) */
+  public CAR_GRAVITY = 0.18;
+  public PHYSICS_SUBSTEPS = 4;
+  public CAR_WHEEL_RADIUS = 1.1;
+  /** Suspension mounts: local X right, Y up, negative Z forward. */
   public WHEEL_OFFSETS: [number, number, number][] = [
-    [2.4, -1.5, -4.4], // front left
-    [-2.4, -1.5, -4.4], // front right
-    [2.4, -1.5, 4.4], // rear left
-    [-2.4, -1.5, 4.4], // rear right
+    [-2.4, -0.6, -3.1],
+    [2.4, -0.6, -3.1],
+    [-2.4, -0.6, 3.1],
+    [2.4, -0.6, 3.1],
   ];
-  /** suspension rest length of the wheel ray, travel below it is spring */
-  public SUSP_REST = 3.0;
-  public SUSP_TRAVEL = 4.0;
-  /** softer spring acceleration per unit of compression for smoother bumps */
-  public SUSP_SPRING = 0.35;
-  /** critical-ish damping keeps the elastic contact from oscillating */
-  public SUSP_DAMP = 1.25;
-  /** hard contact solve: wheel centers are snapped to the rendered/queried
-   *  cave surface after integration instead of being allowed to bounce away */
-  public WHEEL_SNAP = 1;
-  /** wheel contacts only support the lower floor arc, not tunnel side walls;
-   *  the radial angle is measured from the cave frame's upward normal */
-  public WHEEL_GROUND_ANGLE_COS = -0.8;
+  public SUSP_REST = 2.0;
+  public SUSP_TRAVEL = 1.5;
+  /** Per-wheel spring and damper, unit chassis mass, frame-based units. */
+  public SUSP_SPRING = 0.14;
+  public SUSP_DAMP = 0.22;
+  public TIRE_FRICTION = 2.8;
+  /** Effective tire force height below the center of mass, an arcade roll assist. */
+  public TIRE_ROLL_CENTER = 0.6;
   /** forward acceleration at full throttle, u/f^2 */
   public CAR_ENGINE = 0.06;
   /** braking before the reverse drive kicks in */
   public CAR_BRAKE_DECEL = 0.2;
   /** reverse driving acceleration, the cap stays maxSpeed/2 */
   public CAR_REVERSE_ACCEL = 0.06;
-  /** fraction of the lateral wheel velocity cancelled per frame, divided by
-   *  the four wheels; falls with speed so the car drifts at the top end */
-  public CAR_GRIP = 0.42;
+  /** Lateral slip response per frame, divided between four tires and
+   *  limited by each wheel's available traction. */
+  public CAR_GRIP = 0.75;
   /** max steering angle of the front wheels in rad at full steer */
   public CAR_STEER_MAX = 0.45;
-  /** body moment of inertia for the wheel torque, larger = slower yaw */
-  public CAR_INERTIA = 9;
   /** normal impact speed (u/f) at which a wall hit kills the car */
   public CAR_CRASH_SPEED = 5.5;
   /** fraction of the normal velocity kept after a wall bounce */
   public CAR_RESTITUTION = 0.05;
   /** the car is upside down (and dead) below this dot with world up */
   public UPSIDE_DOWN_LIMIT = -0.25;
-  /** upright assist keeps the lightweight emulated body drivable over bumps */
-  public CAR_UPRIGHT_RESPONSE = 0.35;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */
@@ -180,6 +169,8 @@ class Config {
   public CAVE_HARMONICS = 3;
   /** arc wavelength of the fine bumps, the bumpy rock skin */
   public CAVE_BUMP_WAVE = 6;
+  /** Maximum terrain rise in world Y per forward unit; downhill faces stay sharp. */
+  public CAVE_FLOOR_MAX_CLIMB = 0.1;
   /** angular cell of the fine bumps around the circumference */
   public CAVE_BUMP_ANGLE = 0.35;
   /** distance over which the initially smooth cave grows into its full
@@ -188,7 +179,7 @@ class Config {
   /** distance between deterministic terrain feature cells */
   public CAVE_FEATURE_CELL = 280;
   /** clearance from the cave floor to a car's body center at spawn */
-  public CAVE_GROUND_CLEARANCE = 4.1;
+  public CAVE_GROUND_CLEARANCE = 3.4;
   /** max turn (rad) of the centerline per segment at difficulty 1 */
   public CAVE_TURN_BASE = 0.1;
   public CAVE_TURN_GROWTH = 0.22;

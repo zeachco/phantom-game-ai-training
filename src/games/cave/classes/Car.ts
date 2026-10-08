@@ -33,8 +33,8 @@ const STALL_SPEED_SQ = config.CAR_STALL_SPEED * config.CAR_STALL_SPEED;
 
 /**
  * A car with an emulated rigid body: one body (position, quaternion, linear
- * and angular velocity) and four raycast wheel contacts that pull the body
- * back to the cave floor with a spring-damper and apply the tire forces in
+ * and angular velocity) and four raycast wheel contacts that support the body
+ * with spring-dampers and apply load-limited tire forces in
  * the wheel frame. The cave is never a physics object: the body and the
  * wheels are tested against the analytic tube, the same surface the mesh
  * renders, so what the wheels feel is exactly what is drawn.
@@ -149,7 +149,15 @@ export class Car {
   };
 
   constructor(
-    spawn: { x: number; y: number; z: number; tx: number; ty: number; tz: number; s: number },
+    spawn: {
+      x: number;
+      y: number;
+      z: number;
+      tx: number;
+      ty: number;
+      tz: number;
+      s: number;
+    },
     controlType = ControlType.DUMMY,
     public maxSpeed = config.CAR_MAX_SPEED,
     public label = '',
@@ -256,6 +264,9 @@ export class Car {
     this.stallFrames = 0;
     this.deathPenalty = 0;
     this.speed = 0;
+    this.steeringAngle = 0;
+    this.wheelLengths.fill(config.SUSP_REST);
+    this.wheelSpin.fill(0);
     this.compression.fill(0);
     this.grounded.fill(false);
     this.hasPrevSensors = false;
@@ -281,6 +292,7 @@ export class Car {
       new THREE.Vector3(-fwdx, -fwdy, -fwdz),
     );
     this.quat.setFromRotationMatrix(m);
+    this.#refreshFrame();
   }
 
   update(cave: Cave) {
@@ -293,9 +305,7 @@ export class Car {
     this.#updateSectionProgress();
 
     this.damaged =
-      this.#assessDamage() ||
-      this.#checkStall() ||
-      this.#checkSectionBudget();
+      this.#assessDamage() || this.#checkStall() || this.#checkSectionBudget();
     if (this.damaged && this.brain) {
       this.brain.score -= this.deathPenalty + this.speed;
     }
@@ -311,13 +321,7 @@ export class Car {
           for (let i = 0; i < prev.length; i++) prev[i] = readings[i];
         for (let i = 0; i < prev.length; i++) inputs.push(prev[i]);
         for (let i = 0; i < 4; i++)
-          inputs.push(
-            clamp(
-              0,
-              1,
-              this.compression[i] / config.SUSP_TRAVEL,
-            ),
-          );
+          inputs.push(clamp(0, 1, this.compression[i] / config.SUSP_TRAVEL));
         inputs.push(Math.min(1, this.speed / this.maxSpeed));
         inputs.push(this.#velocityDelta());
         inputs.push(this.gateDelta);
@@ -354,7 +358,10 @@ export class Car {
    *  simulation frames has stalled: it dies and its brain pays STALL_PENALTY
    *  once. Any frame at or above the speed threshold resets the streak. */
   #checkStall() {
-    if (this.vx * this.vx + this.vy * this.vy + this.vz * this.vz >= STALL_SPEED_SQ) {
+    if (
+      this.vx * this.vx + this.vy * this.vy + this.vz * this.vz >=
+      STALL_SPEED_SQ
+    ) {
       this.stallFrames = 0;
       return false;
     }
@@ -444,13 +451,11 @@ export class Car {
 
   /** signed angle between the velocity and the front, in [-1, 1] */
   #velocityDelta() {
-    const dot =
-      this.vx * this.fx + this.vy * this.fy + this.vz * this.fz;
+    const dot = this.vx * this.fx + this.vy * this.fy + this.vz * this.fz;
     const crossX = this.vy * this.fz - this.vz * this.fy;
     const crossY = this.vz * this.fx - this.vx * this.fz;
     const crossZ = this.vx * this.fy - this.vy * this.fx;
-    const around =
-      crossX * this.ux + crossY * this.uy + crossZ * this.uz;
+    const around = crossX * this.ux + crossY * this.uy + crossZ * this.uz;
     if (around === 0 && dot === 0) return 0;
     return clamp(-1, 1, Math.atan2(around, dot) / Math.PI);
   }
@@ -482,359 +487,258 @@ export class Car {
     return out;
   }
 
-  #fw: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-  #rw: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-  #uw: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-  #down: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-  #anchor: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-  #tangent: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-  #uprightMatrix = new THREE.Matrix4();
-  #uprightQuaternion = new THREE.Quaternion();
+  public steeringAngle = 0;
+  public wheelLengths = [
+    config.SUSP_REST,
+    config.SUSP_REST,
+    config.SUSP_REST,
+    config.SUSP_REST,
+  ];
+  public wheelSpin = [0, 0, 0, 0];
+  #vector = new THREE.Vector3();
+  #force = new THREE.Vector3();
+  #torque = new THREE.Vector3();
+  #angular = new THREE.Vector3();
+  #anchor = new THREE.Vector3();
+  #forward = new THREE.Vector3();
+  #side = new THREE.Vector3();
+  #normal = new THREE.Vector3();
+  #velocity = new THREE.Vector3();
+  #inverse = new THREE.Quaternion();
+
+  #refreshFrame() {
+    this.#toWorld(0, 0, -1, this.#vector);
+    this.fx = this.#vector.x;
+    this.fy = this.#vector.y;
+    this.fz = this.#vector.z;
+    this.#toWorld(1, 0, 0, this.#vector);
+    this.rx = this.#vector.x;
+    this.ry = this.#vector.y;
+    this.rz = this.#vector.z;
+    this.#toWorld(0, 1, 0, this.#vector);
+    this.ux = this.#vector.x;
+    this.uy = this.#vector.y;
+    this.uz = this.#vector.z;
+  }
+
+  // Unit chassis mass, with the box's inertia tensor in its own frame.
+  #inverseInertia(v: THREE.Vector3) {
+    this.#inverse.copy(this.quat).conjugate();
+    v.applyQuaternion(this.#inverse);
+    v.x *= 12 / (this.height ** 2 + this.length ** 2);
+    v.y *= 12 / (this.width ** 2 + this.length ** 2);
+    v.z *= 12 / (this.width ** 2 + this.height ** 2);
+    return v.applyQuaternion(this.quat);
+  }
+
+  #applyForce(x: number, y: number, z: number) {
+    this.#force.x += x;
+    this.#force.y += y;
+    this.#force.z += z;
+    this.#torque.x += this.#anchor.y * z - this.#anchor.z * y;
+    this.#torque.y += this.#anchor.z * x - this.#anchor.x * z;
+    this.#torque.z += this.#anchor.x * y - this.#anchor.y * x;
+  }
 
   #move(cave: Cave) {
-    // 1. body frame from the quaternion
-    this.#toWorld(0, 0, -1, this.#fw);
-    this.#toWorld(1, 0, 0, this.#rw);
-    this.#toWorld(0, 1, 0, this.#uw);
-    this.fx = this.#fw.x;
-    this.fy = this.#fw.y;
-    this.fz = this.#fw.z;
-    this.rx = this.#rw.x;
-    this.ry = this.#rw.y;
-    this.rz = this.#rw.z;
-    this.ux = this.#uw.x;
-    this.uy = this.#uw.y;
-    this.uz = this.#uw.z;
-    this.#down.x = -this.ux;
-    this.#down.y = -this.uy;
-    this.#down.z = -this.uz;
-    cave.tangent(this.s, this.#tangent);
-    this.cx = this.#tangent.x;
-    this.cy = this.#tangent.y;
-    this.cz = this.#tangent.z;
-
-    // 2. steering fades in with speed: a stationary car cannot pivot hard
-    const steer = this.controls.left - this.controls.right;
-    const steerEffect = lerp(0.25, 1, Math.min(1, this.speed / 3));
-    const steerAngle = steer * config.CAR_STEER_MAX * steerEffect;
-    const cs = Math.cos(steerAngle);
-    const ss = Math.sin(steerAngle);
-
-    // 3. the four wheels: suspension ray, tire forces in the wheel frame
-    let accX = 0;
-    let accY = -config.CAR_GRAVITY;
-    let accZ = 0;
-    let tqX = 0;
-    let tqY = 0;
-    let tqZ = 0;
-    let groundedCount = 0;
-    const speedRatio = Math.min(1, this.speed / this.maxSpeed);
-    const grip = config.CAR_GRIP * (1 - 0.45 * speedRatio);
-    for (let w = 0; w < 4; w++) {
-      const off = config.WHEEL_OFFSETS[w];
-      // wheel anchor in world space
-      this.#toWorld(off[0], off[1], off[2], this.#anchor);
-      this.#anchor.x += this.x;
-      this.#anchor.y += this.y;
-      this.#anchor.z += this.z;
-
-      // Query the wheel point directly against the analytic surface. A
-      // downward ray can miss a steep/bumpy wall between frames; the radial
-      // point query cannot tunnel and still represents a four-point vehicle.
-      cave.nearestRadial(
-        this.#anchor.x,
-        this.#anchor.y,
-        this.#anchor.z,
-        this.s,
-        this.wheelHit,
-      );
-      // Snap target is the point where this wheel sphere touches the exact
-      // surface used by the cave mesh (including generated rock features).
-      // Unlike the old radial compression check, this remains correct when
-      // the rendered cave is vertically scaled.
-      const targetX = this.wheelHit.hx - this.wheelHit.nx * config.CAR_WHEEL_RADIUS;
-      const targetY = this.wheelHit.hy - this.wheelHit.ny * config.CAR_WHEEL_RADIUS;
-      const targetZ = this.wheelHit.hz - this.wheelHit.nz * config.CAR_WHEEL_RADIUS;
-      const toTargetX = targetX - this.#anchor.x;
-      const toTargetY = targetY - this.#anchor.y;
-      const toTargetZ = targetZ - this.#anchor.z;
-      const targetDistance = Math.sqrt(
-        toTargetX * toTargetX +
-          toTargetY * toTargetY +
-          toTargetZ * toTargetZ,
-      );
-      const compression = clamp(
+    const dt = 1 / config.PHYSICS_SUBSTEPS;
+    const targetSteer =
+      (clamp(-1, 1, this.controls.left - this.controls.right) *
+        config.CAR_STEER_MAX) /
+      (1 + this.speed * 0.12);
+    this.steeringAngle += (targetSteer - this.steeringAngle) * 0.2;
+    for (let step = 0; step < config.PHYSICS_SUBSTEPS; step++) {
+      this.#refreshFrame();
+      cave.tangent(this.s, this.#vector);
+      this.cx = this.#vector.x;
+      this.cy = this.#vector.y;
+      this.cz = this.#vector.z;
+      this.#force.set(0, -config.CAR_GRAVITY, 0);
+      this.#torque.set(0, 0, 0);
+      this.#angular.set(this.avx, this.avy, this.avz);
+      for (let w = 0; w < 4; w++) {
+        const off = config.WHEEL_OFFSETS[w];
+        this.#toWorld(off[0], off[1], off[2], this.#anchor);
+        const distance = cave.castWheelRay(
+          this.x + this.#anchor.x,
+          this.y + this.#anchor.y,
+          this.z + this.#anchor.z,
+          -this.ux,
+          -this.uy,
+          -this.uz,
+          config.SUSP_REST + config.CAR_WHEEL_RADIUS,
+          this.s,
+          this.wheelHit,
+        );
+        this.grounded[w] = distance >= 0;
+        this.wheelLengths[w] =
+          distance < 0
+            ? config.SUSP_REST
+            : clamp(
+                config.SUSP_REST - config.SUSP_TRAVEL,
+                config.SUSP_REST,
+                distance - config.CAR_WHEEL_RADIUS,
+              );
+        this.compression[w] = config.SUSP_REST - this.wheelLengths[w];
+        if (distance < 0) continue;
+        this.#normal.set(
+          -this.wheelHit.nx,
+          -this.wheelHit.ny,
+          -this.wheelHit.nz,
+        );
+        // Apply suspension and tire forces at the contact patch. This gives
+        // one chassis real pitch, roll and yaw from four independent wheels.
+        this.#anchor.addScaledVector(
+          this.#vector.set(this.ux, this.uy, this.uz),
+          -distance,
+        );
+        this.#velocity.crossVectors(this.#angular, this.#anchor);
+        this.#velocity.add(this.#vector.set(this.vx, this.vy, this.vz));
+        const load = Math.max(
+          0,
+          config.SUSP_SPRING * this.compression[w] -
+            config.SUSP_DAMP * this.#velocity.dot(this.#normal),
+        );
+        const angle = w < 2 ? this.steeringAngle : 0;
+        this.#forward.set(
+          this.fx * Math.cos(angle) - this.rx * Math.sin(angle),
+          this.fy * Math.cos(angle) - this.ry * Math.sin(angle),
+          this.fz * Math.cos(angle) - this.rz * Math.sin(angle),
+        );
+        this.#forward
+          .addScaledVector(this.#normal, -this.#forward.dot(this.#normal))
+          .normalize();
+        this.#side.crossVectors(this.#forward, this.#normal).normalize();
+        const longitudinal = this.#velocity.dot(this.#forward);
+        const lateral = this.#velocity.dot(this.#side);
+        const throttle = clamp(-1, 1, this.controls.throttle);
+        let drive = 0;
+        if (throttle > 0 && longitudinal < this.maxSpeed)
+          drive = (config.CAR_ENGINE * throttle) / 4;
+        if (throttle < 0)
+          drive =
+            longitudinal > 0.15
+              ? -Math.min(
+                  (config.CAR_BRAKE_DECEL * -throttle) / 4,
+                  longitudinal / (4 * dt),
+                )
+              : longitudinal > -this.maxSpeed / 2
+                ? (config.CAR_REVERSE_ACCEL * throttle) / 4
+                : 0;
+        drive -= longitudinal * 0.002;
+        let side = (-lateral * config.CAR_GRIP) / 4;
+        // Friction circle: airborne/unloaded wheels cannot propel the car,
+        // and braking/acceleration share the available grip with cornering.
+        const limit = load * config.TIRE_FRICTION;
+        const scale = Math.min(1, limit / (Math.hypot(drive, side) || 1));
+        drive *= scale;
+        side *= scale;
+        this.#applyForce(
+          this.#normal.x * load,
+          this.#normal.y * load,
+          this.#normal.z * load,
+        );
+        // Arcade roll-center assist: suspension keeps its full lever arm,
+        // while tire forces act nearer the center of mass. This preserves
+        // yaw and weight transfer without rolling over on ordinary turns.
+        const contactHeight =
+          this.#anchor.x * this.ux +
+          this.#anchor.y * this.uy +
+          this.#anchor.z * this.uz;
+        this.#anchor.addScaledVector(
+          this.#vector.set(this.ux, this.uy, this.uz),
+          -config.TIRE_ROLL_CENTER - contactHeight,
+        );
+        this.#applyForce(
+          this.#forward.x * drive + this.#side.x * side,
+          this.#forward.y * drive + this.#side.y * side,
+          this.#forward.z * drive + this.#side.z * side,
+        );
+        this.wheelSpin[w] += (longitudinal * dt) / config.CAR_WHEEL_RADIUS;
+      }
+      this.vx += this.#force.x * dt;
+      this.vy += this.#force.y * dt;
+      this.vz += this.#force.z * dt;
+      const drag = Math.pow(0.999, dt);
+      this.vx *= drag;
+      this.vy *= drag;
+      this.vz *= drag;
+      this.#inverseInertia(this.#torque);
+      // Mild angular damping is the arcade assist; never snap orientation or
+      // pull an airborne wheel toward the floor.
+      const angularDrag = Math.pow(0.94, dt);
+      this.avx = (this.avx + this.#torque.x * dt) * angularDrag;
+      this.avy = (this.avy + this.#torque.y * dt) * angularDrag;
+      this.avz = (this.avz + this.#torque.z * dt) * angularDrag;
+      const { x: qx, y: qy, z: qz, w: qw } = this.quat;
+      this.quat.x += 0.5 * dt * (this.avx * qw + this.avy * qz - this.avz * qy);
+      this.quat.y += 0.5 * dt * (this.avy * qw + this.avz * qx - this.avx * qz);
+      this.quat.z += 0.5 * dt * (this.avz * qw + this.avx * qy - this.avy * qx);
+      this.quat.w -= 0.5 * dt * (this.avx * qx + this.avy * qy + this.avz * qz);
+      this.quat.normalize();
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.z += this.vz * dt;
+      this.s = Math.max(
         0,
-        config.SUSP_TRAVEL,
-        config.SUSP_TRAVEL - targetDistance,
+        this.s +
+          dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
       );
-      // Only the lower-facing surface is a wheel/ground contact. Without
-      // this guard a wheel can snap to a nearby side or ceiling wall and
-      // launch the whole car up the tunnel.
-      const groundContact =
-        this.wheelHit.ny < -0.25 &&
-        Math.cos(this.wheelHit.a) < config.WHEEL_GROUND_ANGLE_COS;
-      const grounded = groundContact && targetDistance <= config.SUSP_TRAVEL;
-      this.grounded[w] = grounded;
-      if (!grounded) {
-        this.compression[w] = 0;
-        continue;
-      }
-      groundedCount++;
-      this.compression[w] = compression;
-
-      // wheel velocity = body velocity + angular velocity x radius
-      const rlx = this.#anchor.x - this.x;
-      const rly = this.#anchor.y - this.y;
-      const rlz = this.#anchor.z - this.z;
-      const wvx = this.vx + (this.avy * rlz - this.avz * rly);
-      const wvy = this.vy + (this.avz * rlx - this.avx * rlz);
-      const wvz = this.vz + (this.avx * rly - this.avy * rlx);
-
-      // wheel frame: the front wheels steer around the body up axis
-      let fwX: number;
-      let fwY: number;
-      let fwZ: number;
-      let flX: number;
-      let flY: number;
-      let flZ: number;
-      if (w < 2) {
-        // forward = -ss*right - cs*forward, right = cs*right - ss*forward
-        fwX = -ss * this.rx - cs * this.fx;
-        fwY = -ss * this.ry - cs * this.fy;
-        fwZ = -ss * this.rz - cs * this.fz;
-        flX = cs * this.rx - ss * this.fx;
-        flY = cs * this.ry - ss * this.fy;
-        flZ = cs * this.rz - ss * this.fz;
-      } else {
-        fwX = this.fx;
-        fwY = this.fy;
-        fwZ = this.fz;
-        flX = this.rx;
-        flY = this.ry;
-        flZ = this.rz;
-      }
-      const oldVL = wvx * fwX + wvy * fwY + wvz * fwZ;
-      const oldVLat = wvx * flX + wvy * flY + wvz * flZ;
-      let vL = oldVL;
-      // engine: positive drives, negative brakes then reverses
-      if (this.controls.throttle > 0)
-        vL += config.CAR_ENGINE * this.controls.throttle;
-      else if (this.controls.throttle < 0) {
-        const t = -this.controls.throttle;
-        if (vL > 0.3) vL -= config.CAR_BRAKE_DECEL * t;
-        else vL -= config.CAR_REVERSE_ACCEL * t;
-      }
-      vL *= 0.999;
-      const dvL = vL - oldVL;
-      // tire grip: cancel the lateral slip, shared over the grounded wheels
-      const dvLat = -oldVLat * grip * (groundedCount / 4);
-      // This is a real elastic vector from the wheel to its contact point.
-      // It pulls a wheel down onto the floor when it is above it and pushes
-      // it back into the cave when it is embedded, rather than applying the
-      // old one-sided spring that repeatedly launched the rigid body.
-      let elasticX = 0;
-      let elasticY = 0;
-      let elasticZ = 0;
-      if (targetDistance > 1e-4) {
-        const invDistance = 1 / targetDistance;
-        const dirX = toTargetX * invDistance;
-        const dirY = toTargetY * invDistance;
-        const dirZ = toTargetZ * invDistance;
-        const targetSpeed = wvx * dirX + wvy * dirY + wvz * dirZ;
-        const elastic =
-          config.SUSP_SPRING * targetDistance -
-          config.SUSP_DAMP * targetSpeed;
-        elasticX = dirX * elastic;
-        elasticY = dirY * elastic;
-        elasticZ = dirZ * elastic;
-      }
-      const tireX = fwX * dvL + flX * dvLat;
-      const tireY = fwY * dvL + flY * dvLat;
-      const tireZ = fwZ * dvL + flZ * dvLat;
-      const aX = tireX + elasticX;
-      const aY = tireY + elasticY;
-      const aZ = tireZ + elasticZ;
-
-      accX += aX / 4;
-      accY += aY / 4;
-      accZ += aZ / 4;
-      // The elastic contact moves the rigid body but does not inject pitch or
-      // roll torque; the hard snap below already aligns each wheel to ground.
-      tqX += (rly * tireZ - rlz * tireY) / config.CAR_INERTIA;
-      tqY += (rlz * tireX - rlx * tireZ) / config.CAR_INERTIA;
-      tqZ += (rlx * tireY - rly * tireX) / config.CAR_INERTIA;
-    }
-
-    // 4. integrate the body
-    this.vx += accX;
-    this.vy += accY;
-    this.vz += accZ;
-    this.vx *= 0.999;
-    this.vy *= 0.999;
-    this.vz *= 0.999;
-    // caps: forward <= maxSpeed, reverse >= -maxSpeed/2
-    const fSpeed = this.vx * this.fx + this.vy * this.fy + this.vz * this.fz;
-    if (fSpeed > this.maxSpeed) {
-      const over = fSpeed - this.maxSpeed;
-      this.vx -= this.fx * over;
-      this.vy -= this.fy * over;
-      this.vz -= this.fz * over;
-    } else if (fSpeed < -this.maxSpeed / 2) {
-      const under = fSpeed + this.maxSpeed / 2;
-      this.vx -= this.fx * under;
-      this.vy -= this.fy * under;
-      this.vz -= this.fz * under;
-    }
-    this.avx += tqX;
-    this.avy += tqY;
-    this.avz += tqZ;
-    // A simple anti-roll damper keeps a single wheel hitting a bump from
-    // tumbling the lightweight body. Yaw remains responsive; pitch and roll
-    // settle quickly toward the cave surface.
-    this.avx *= 0.82;
-    this.avy *= 0.97;
-    this.avz *= 0.82;
-    // integrate the orientation: dq = 0.5 * (w quat) x q
-    const qx = this.quat.x;
-    const qy = this.quat.y;
-    const qz = this.quat.z;
-    const qw = this.quat.w;
-    this.quat.x += 0.5 * (this.avx * qw + this.avy * qz - this.avz * qy);
-    this.quat.y += 0.5 * (this.avy * qw + this.avz * qx - this.avx * qz);
-    this.quat.z += 0.5 * (this.avz * qw + this.avx * qy - this.avy * qx);
-    this.quat.w += -0.5 * (this.avx * qx + this.avy * qy + this.avz * qz);
-    this.quat.normalize();
-    this.#stabilizeUpright();
-    this.x += this.vx;
-    this.y += this.vy;
-    this.z += this.vz;
-    this.speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy + this.vz * this.vz);
-
-    // 5. progress along the cave axis
-    this.s = Math.max(0, this.s + this.vx * this.cx + this.vy * this.cy + this.vz * this.cz);
-
-    // 6. the body is a sphere against the cave walls: push out, bounce, and
-    //  kill the car on a hard enough hit
-    const body = this.hit;
-    cave.nearestRadial(this.x, this.y, this.z, this.s, body);
-    // body.dist is negative while inside the tube. The sphere touches a wall
-    // when its radial clearance is smaller than its radius, i.e. dist > -R.
-    // Push inward (toward the cave axis), not outward into the wall.
-    if (body.dist > -config.CAR_BODY_RADIUS) {
-      const pen = body.dist + config.CAR_BODY_RADIUS;
-      this.x -= body.nx * pen;
-      this.y -= body.ny * pen;
-      this.z -= body.nz * pen;
-      const vn = this.vx * body.nx + this.vy * body.ny + this.vz * body.nz;
-      if (vn > 0) {
-        const j = vn * (1 + config.CAR_RESTITUTION);
-        this.vx -= body.nx * j;
-        this.vy -= body.ny * j;
-        this.vz -= body.nz * j;
-        if (vn > config.CAR_CRASH_SPEED) {
-          // head-on hits cost the most, a sideways brush the least
-          const directness = clamp(0, 1, vn / (this.speed || 1));
+      // The chassis is a box, not the oversized sphere that used to float
+      // above the wheels. Resolve corner penetration with contact impulses.
+      for (let corner = 0; corner < 8; corner++) {
+        this.#toWorld(
+          ((corner & 1 ? 1 : -1) * this.width) / 2,
+          ((corner & 2 ? 1 : -1) * this.height) / 2,
+          ((corner & 4 ? 1 : -1) * this.length) / 2,
+          this.#anchor,
+        );
+        cave.nearestRadial(
+          this.x + this.#anchor.x,
+          this.y + this.#anchor.y,
+          this.z + this.#anchor.z,
+          this.s,
+          this.hit,
+        );
+        if (this.hit.dist <= 0) continue;
+        this.#normal.set(this.hit.nx, this.hit.ny, this.hit.nz);
+        this.x -= this.hit.nx * this.hit.dist;
+        this.y -= this.hit.ny * this.hit.dist;
+        this.z -= this.hit.nz * this.hit.dist;
+        this.#angular.set(this.avx, this.avy, this.avz);
+        this.#velocity
+          .crossVectors(this.#angular, this.#anchor)
+          .add(this.#vector.set(this.vx, this.vy, this.vz));
+        const impact = this.#velocity.dot(this.#normal);
+        if (impact <= 0) continue;
+        this.#vector.crossVectors(this.#anchor, this.#normal);
+        this.#inverseInertia(this.#vector);
+        const effectiveMass =
+          1 +
+          this.#torque
+            .crossVectors(this.#vector, this.#anchor)
+            .dot(this.#normal);
+        const impulse = (impact * (1 + config.CAR_RESTITUTION)) / effectiveMass;
+        this.vx -= this.hit.nx * impulse;
+        this.vy -= this.hit.ny * impulse;
+        this.vz -= this.hit.nz * impulse;
+        this.avx -= this.#vector.x * impulse;
+        this.avy -= this.#vector.y * impulse;
+        this.avz -= this.#vector.z * impulse;
+        if (impact > config.CAR_CRASH_SPEED) {
           this.deathPenalty = lerp(
             1,
             5,
-            directness,
+            clamp(0, 1, impact / (this.speed || 1)),
           );
           this.damaged = true;
         }
       }
+      if (this.damaged) break;
     }
-    // Resolve every wheel against its exact contact point after integration.
-    // The averaged correction moves the rigid body, rather than leaving each
-    // wheel to bounce independently. Removing only velocity into the surface
-    // keeps the car planted without adding restitution to ground contacts.
-    let snapX = 0;
-    let snapY = 0;
-    let snapZ = 0;
-    let snapCount = 0;
-    for (let w = 0; w < 4; w++) {
-      const off = config.WHEEL_OFFSETS[w];
-      this.#toWorld(off[0], off[1], off[2], this.#anchor);
-      this.#anchor.x += this.x;
-      this.#anchor.y += this.y;
-      this.#anchor.z += this.z;
-      cave.nearestRadial(
-        this.#anchor.x,
-        this.#anchor.y,
-        this.#anchor.z,
-        this.s,
-        this.wheelHit,
-      );
-      const targetX = this.wheelHit.hx - this.wheelHit.nx * config.CAR_WHEEL_RADIUS;
-      const targetY = this.wheelHit.hy - this.wheelHit.ny * config.CAR_WHEEL_RADIUS;
-      const targetZ = this.wheelHit.hz - this.wheelHit.nz * config.CAR_WHEEL_RADIUS;
-      const toTargetX = targetX - this.#anchor.x;
-      const toTargetY = targetY - this.#anchor.y;
-      const toTargetZ = targetZ - this.#anchor.z;
-      const targetDistance = Math.sqrt(
-        toTargetX * toTargetX +
-          toTargetY * toTargetY +
-          toTargetZ * toTargetZ,
-      );
-      if (
-        this.wheelHit.ny >= -0.25 ||
-        Math.cos(this.wheelHit.a) >= config.WHEEL_GROUND_ANGLE_COS ||
-        targetDistance > config.SUSP_TRAVEL
-      )
-        continue;
-      snapX += toTargetX;
-      snapY += toTargetY;
-      snapZ += toTargetZ;
-      snapCount++;
-
-      // Ground contacts do not bounce: cancel only velocity into the wall.
-      const nx = this.wheelHit.nx;
-      const ny = this.wheelHit.ny;
-      const nz = this.wheelHit.nz;
-      const vn = this.vx * nx + this.vy * ny + this.vz * nz;
-      if (vn > 0) {
-        this.vx -= nx * vn;
-        this.vy -= ny * vn;
-        this.vz -= nz * vn;
-      }
-    }
-    if (snapCount > 0) {
-      this.x += (snapX / snapCount) * config.WHEEL_SNAP;
-      this.y += (snapY / snapCount) * config.WHEEL_SNAP;
-      this.z += (snapZ / snapCount) * config.WHEEL_SNAP;
-    }
-    // a car that ends up outside the cave has tunneled: it is dead
-    if (body.dist > 50) this.damaged = true;
-    // upside down is not a driving position
+    this.#refreshFrame();
+    this.speed = Math.hypot(this.vx, this.vy, this.vz);
     if (this.uy < config.UPSIDE_DOWN_LIMIT) this.damaged = true;
-  }
-
-  /** Keep the car's visual/physical up direction close to world up. The
-   *  wheel springs still supply the actual contact forces, but this bounded
-   *  assist prevents one uneven wheel from flipping the simple rigid body and
-   *  sending it through the cave. Yaw is preserved. */
-  #stabilizeUpright() {
-    let fx = this.#fw.x;
-    let fz = this.#fw.z;
-    const horizontal = Math.hypot(fx, fz);
-    if (horizontal < 1e-4) {
-      fx = this.#tangent.x;
-      fz = this.#tangent.z;
-    }
-    const length = Math.hypot(fx, fz) || 1;
-    fx /= length;
-    fz /= length;
-    const rx = -fz;
-    const rz = fx;
-    this.#uprightMatrix.makeBasis(
-      new THREE.Vector3(rx, 0, rz),
-      new THREE.Vector3(0, 1, 0),
-      new THREE.Vector3(-fx, 0, -fz),
-    );
-    this.#uprightQuaternion.setFromRotationMatrix(this.#uprightMatrix);
-    this.quat.slerp(this.#uprightQuaternion, config.CAR_UPRIGHT_RESPONSE);
-    this.avx *= 0.25;
-    this.avz *= 0.25;
   }
 
   /** wall hits, tunneling and flips set damaged inside #move; this only

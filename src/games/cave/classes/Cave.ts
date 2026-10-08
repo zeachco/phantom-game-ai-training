@@ -96,7 +96,7 @@ export class Cave {
         phase: rng() * TWO_PI,
       });
     }
-    this.#noiseSalt = ((seed ^ 0x51ab3f) >>> 0) || 1;
+    this.#noiseSalt = (seed ^ 0x51ab3f) >>> 0 || 1;
 
     for (let i = 0; i < config.GATES_PER_SEED; i++)
       this.gatePositions.push((i + 1) * config.GATE_SPACING);
@@ -202,12 +202,9 @@ export class Cave {
     const h10 = t3 - 2 * t2 + t;
     const h01 = -2 * t3 + 3 * t2;
     const h11 = t3 - t2;
-    out.x =
-      h00 * a.p.x + h10 * a.d.x * LEN + h01 * b.p.x + h11 * b.d.x * LEN;
-    out.y =
-      h00 * a.p.y + h10 * a.d.y * LEN + h01 * b.p.y + h11 * b.d.y * LEN;
-    out.z =
-      h00 * a.p.z + h10 * a.d.z * LEN + h01 * b.p.z + h11 * b.d.z * LEN;
+    out.x = h00 * a.p.x + h10 * a.d.x * LEN + h01 * b.p.x + h11 * b.d.x * LEN;
+    out.y = h00 * a.p.y + h10 * a.d.y * LEN + h01 * b.p.y + h11 * b.d.y * LEN;
+    out.z = h00 * a.p.z + h10 * a.d.z * LEN + h01 * b.p.z + h11 * b.d.z * LEN;
   }
 
   /** Hermite centerline tangent (normalized) of chunk i at normalized t */
@@ -248,7 +245,8 @@ export class Cave {
     const image = context.createImageData(canvas.width, canvas.height);
     for (let y = 0; y < canvas.height; y++) {
       for (let x = 0; x < canvas.width; x++) {
-        let h = (x * 374761393 + y * 668265263 + (this.seed + 17) * 1442695041) | 0;
+        let h =
+          (x * 374761393 + y * 668265263 + (this.seed + 17) * 1442695041) | 0;
         h = Math.imul(h ^ (h >>> 13), 1274126177);
         const noise = ((h ^ (h >>> 16)) >>> 0) / 4294967295;
         const shade = Math.round(48 + noise * 38);
@@ -270,10 +268,7 @@ export class Cave {
   #terrainProgress(s: number) {
     const t = Math.max(
       0,
-      Math.min(
-        1,
-        (s - config.SPAWN_OFFSET) / config.CAVE_TERRAIN_RAMP,
-      ),
+      Math.min(1, (s - config.SPAWN_OFFSET) / config.CAVE_TERRAIN_RAMP),
     );
     return t * t * (3 - 2 * t);
   }
@@ -312,32 +307,46 @@ export class Cave {
     for (let i = cell - 1; i <= cell + 1; i++) {
       const center = i * config.CAVE_FEATURE_CELL;
       const roll = this.#hash(i * 7 + 11) / 0xffffffff;
-      const featureS = center + 70 + (this.#hash(i * 7 + 13) / 0xffffffff) * 140;
+      const featureS =
+        center + 70 + (this.#hash(i * 7 + 13) / 0xffffffff) * 140;
       const lower = Math.max(0, -Math.cos(a));
 
       // A broad, mostly flat raised section appears occasionally and gives a
       // car a natural launch surface instead of making every bump a spike.
       if (roll > 0.55) {
         const platform =
-          this.#smoothPulse(s, featureS, 54 + (this.#hash(i * 7 + 17) / 0xffffffff) * 22) *
+          this.#smoothPulse(
+            s,
+            featureS,
+            54 + (this.#hash(i * 7 + 17) / 0xffffffff) * 22,
+          ) *
           lower ** 3;
-        delta -= progress * platform * (18 + (this.#hash(i * 7 + 19) / 0xffffffff) * 16);
+        delta -=
+          progress *
+          platform *
+          (18 + (this.#hash(i * 7 + 19) / 0xffffffff) * 16);
       }
 
       // Narrow lower-cave columns are sparse, seeded, and offset from the
       // center line so some can be driven around while others need a jump.
       if (roll < 0.7) {
         const columnAngle =
-          Math.PI +
-          (this.#hash(i * 7 + 23) / 0xffffffff - 0.5) * 1.15;
+          Math.PI + (this.#hash(i * 7 + 23) / 0xffffffff - 0.5) * 1.15;
         const angleWidth = 0.13 + (this.#hash(i * 7 + 29) / 0xffffffff) * 0.12;
         const angular = Math.exp(
           -(this.#angleDistance(a, columnAngle) ** 2) /
             (2 * angleWidth * angleWidth),
         );
-        const column = this.#smoothPulse(s, featureS, 20 + (this.#hash(i * 7 + 31) / 0xffffffff) * 18);
+        const column = this.#smoothPulse(
+          s,
+          featureS,
+          20 + (this.#hash(i * 7 + 31) / 0xffffffff) * 18,
+        );
         delta -=
-          progress * column * angular * (24 + (this.#hash(i * 7 + 37) / 0xffffffff) * 24);
+          progress *
+          column *
+          angular *
+          (24 + (this.#hash(i * 7 + 37) / 0xffffffff) * 24);
       }
     }
     return delta;
@@ -377,13 +386,78 @@ export class Cave {
     return (n - 0.5) * 2 * amp;
   }
 
-  /** full radius at (arc, angle), clamped so the cave stays passable */
-  radius(s: number, a: number) {
+  /** Original rock profile, before the directional floor ramp pass. */
+  #rawRadius(s: number, a: number) {
     const r =
-      this.#waveRadius(s) +
-      this.#bump(s, a) +
-      this.#featureRadiusDelta(s, a);
+      this.#waveRadius(s) + this.#bump(s, a) + this.#featureRadiusDelta(s, a);
     return r < config.CAVE_MIN_RADIUS ? config.CAVE_MIN_RADIUS : r;
+  }
+
+  /** Floor profiles share the mesh grid, so a wheel never meets a hidden
+   * six-unit spike between the visible vertices. Each angular lane is kept
+   * independent: broadening a ramp along the road does not flatten it across X. */
+  #floorProfiles = new Map<number, Float64Array>();
+
+  #floorProfile(index: number) {
+    const cached = this.#floorProfiles.get(index);
+    if (cached) return cached;
+    const rise = config.CAVE_FLOOR_MAX_CLIMB / config.CAVE_VERTICAL_SCALE;
+    const stepRise = rise * PER;
+    // Features only subtract radius. This upper bound guarantees that no
+    // farther peak can affect this chunk, keeping independently built chunk
+    // edges identical regardless of generation/query order.
+    const maxRadius =
+      config.CAVE_RADIUS +
+      this.#waves.reduce((sum, wave) => sum + wave.amp, 0) +
+      16 +
+      24 * this.difficulty;
+    const lookAhead =
+      Math.ceil((maxRadius - config.CAVE_MIN_RADIUS) / stepRise) + 1;
+    const last = SAMPLES + lookAhead;
+    const profile = new Float64Array((SAMPLES + 1) * SIDES);
+    for (let k = 0; k < SIDES; k++) {
+      const angle = (k * TWO_PI) / SIDES;
+      let nextRadius = Infinity;
+      for (let j = last; j >= 0; j--) {
+        const arc = index * LEN + j * PER;
+        // Smaller radius raises the floor. Anticipate the next peak with a
+        // bounded uphill slope; increasing radius (a drop) remains immediate.
+        nextRadius = Math.min(
+          this.#rawRadius(arc, angle),
+          nextRadius + stepRise,
+        );
+        if (j <= SAMPLES) profile[j * SIDES + k] = nextRadius;
+      }
+    }
+    this.#floorProfiles.set(index, profile);
+    return profile;
+  }
+
+  /** One surface for rendering, sensors, chassis collisions and suspension. */
+  radius(s: number, a: number) {
+    const floor = Math.max(0, Math.min(1, -Math.cos(a) * 2));
+    if (floor === 0) return this.#rawRadius(s, a);
+    const arc = Math.max(0, s);
+    const index = Math.floor(arc / LEN);
+    const profile = this.#floorProfile(index);
+    const along = (arc - index * LEN) / PER;
+    const row = Math.min(SAMPLES - 1, Math.floor(along));
+    const forward = along - row;
+    const around = ((((a % TWO_PI) + TWO_PI) % TWO_PI) * SIDES) / TWO_PI;
+    const column = Math.floor(around) % SIDES;
+    const across = around - Math.floor(around);
+    const nextColumn = (column + 1) % SIDES;
+    const first =
+      profile[row * SIDES + column] * (1 - across) +
+      profile[row * SIDES + nextColumn] * across;
+    const second =
+      profile[(row + 1) * SIDES + column] * (1 - across) +
+      profile[(row + 1) * SIDES + nextColumn] * across;
+    const ramp = first + (second - first) * forward;
+    if (floor === 1) return ramp;
+    // Blend into untouched side walls and ceiling outside the driving arc.
+    const blend = floor * floor * (3 - 2 * floor);
+    return this.#rawRadius(s, a) * (1 - blend) + ramp * blend;
   }
 
   /** centerline point at arc s, into out */
@@ -482,8 +556,8 @@ export class Cave {
       const px = ox + dx * t;
       // Collision space is the unscaled generator space. Convert world Y
       // through the same vertical scale used by the rendered chunk mesh.
-      const py = oy / config.CAVE_VERTICAL_SCALE +
-        (dy / config.CAVE_VERTICAL_SCALE) * t;
+      const py =
+        oy / config.CAVE_VERTICAL_SCALE + (dy / config.CAVE_VERTICAL_SCALE) * t;
       const pz = oz + dz * t;
       const s = Math.max(0, sHint + t * dotDT);
       q.center(s, q.#qc);
@@ -527,6 +601,67 @@ export class Cave {
     out.dist = hitT;
   }
 
+  /** Short suspension ray, refined to avoid stepping over the rest length.
+   * Uses world-space clearance, so it matches the vertically scaled cave. */
+  castWheelRay(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    length: number,
+    sHint: number,
+    out: RadialHit,
+  ) {
+    const sample = (t: number) =>
+      this.nearestRadial(ox + dx * t, oy + dy * t, oz + dz * t, sHint, out)
+        .dist;
+    let low = 0;
+    if (sample(0) >= 0) return 0;
+    for (let high = Math.min(1, length); ; high = Math.min(length, high + 1)) {
+      if (sample(high) >= 0) {
+        for (let i = 0; i < 7; i++) {
+          const mid = (low + high) / 2;
+          if (sample(mid) >= 0) high = mid;
+          else low = mid;
+        }
+        sample(high);
+        // The terrain varies along and around the cave. Its radial direction
+        // alone is not a surface normal on ramps or rock features.
+        const arc = out.s;
+        const angle = out.a;
+        this.surface(arc + 0.25, angle, this.#surfaceA);
+        this.surface(Math.max(0, arc - 0.25), angle, this.#surfaceB);
+        this.#surfaceT.subVectors(this.#surfaceA, this.#surfaceB);
+        this.surface(arc, angle + 0.005, this.#surfaceA);
+        this.surface(arc, angle - 0.005, this.#surfaceB);
+        this.#surfaceN.subVectors(this.#surfaceA, this.#surfaceB);
+        this.#surfaceT.y *= config.CAVE_VERTICAL_SCALE;
+        this.#surfaceN.y *= config.CAVE_VERTICAL_SCALE;
+        this.#surfaceN.cross(this.#surfaceT).normalize();
+        if (
+          this.#surfaceN.x * out.nx +
+            this.#surfaceN.y * out.ny +
+            this.#surfaceN.z * out.nz <
+          0
+        )
+          this.#surfaceN.negate();
+        out.nx = this.#surfaceN.x;
+        out.ny = this.#surfaceN.y;
+        out.nz = this.#surfaceN.z;
+        return high;
+      }
+      if (high === length) return -1;
+      low = high;
+    }
+  }
+
+  #surfaceA = new THREE.Vector3();
+  #surfaceB = new THREE.Vector3();
+  #surfaceT = new THREE.Vector3();
+  #surfaceN = new THREE.Vector3();
+
   /** nearest point of the analytic surface to (p), searching the arc around
    *  sHint. Fills out with the hit, its signed radial distance and its
    *  radial outward normal. */
@@ -561,12 +696,27 @@ export class Cave {
         bestA = a;
       }
     }
+    // Refine the closest axis coordinate instead of quantizing contacts to
+    // four-unit slices (which made suspension jump as the car moved).
+    this.center(bestS, this.#qc);
+    this.tangent(bestS, this.#qt);
+    bestS = Math.max(
+      0,
+      bestS +
+        (px - this.#qc.x) * this.#qt.x +
+        (py / config.CAVE_VERTICAL_SCALE - this.#qc.y) * this.#qt.y +
+        (pz - this.#qc.z) * this.#qt.z,
+    );
     this.center(bestS, this.#qc);
     this.frame(bestS, this.#qt, this.#qn, this.#qb);
     const wx = px - this.#qc.x;
     const wy = py / config.CAVE_VERTICAL_SCALE - this.#qc.y;
     const wz = pz - this.#qc.z;
     const d = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1;
+    bestA = Math.atan2(
+      wx * this.#qb.x + wy * this.#qb.y + wz * this.#qb.z,
+      wx * this.#qn.x + wy * this.#qn.y + wz * this.#qn.z,
+    );
     out.s = bestS;
     out.a = bestA;
     out.dist = d - this.radius(bestS, bestA);
@@ -575,7 +725,9 @@ export class Cave {
     const rawNx = wx / d;
     const rawNy = wy / d;
     const rawNz = wz / d;
-    const worldLength = Math.hypot(rawNx, rawNy / config.CAVE_VERTICAL_SCALE, rawNz) || 1;
+    const worldLength =
+      Math.hypot(rawNx, rawNy / config.CAVE_VERTICAL_SCALE, rawNz) || 1;
+    out.dist /= worldLength;
     out.nx = rawNx / worldLength;
     out.ny = rawNy / config.CAVE_VERTICAL_SCALE / worldLength;
     out.nz = rawNz / worldLength;
@@ -583,7 +735,9 @@ export class Cave {
     const ca = Math.cos(bestA);
     const sa = Math.sin(bestA);
     out.hx = this.#qc.x + (this.#qn.x * ca + this.#qb.x * sa) * r;
-    out.hy = (this.#qc.y + (this.#qn.y * ca + this.#qb.y * sa) * r) * config.CAVE_VERTICAL_SCALE;
+    out.hy =
+      (this.#qc.y + (this.#qn.y * ca + this.#qb.y * sa) * r) *
+      config.CAVE_VERTICAL_SCALE;
     out.hz = this.#qc.z + (this.#qn.z * ca + this.#qb.z * sa) * r;
     return out;
   }
@@ -637,6 +791,10 @@ export class Cave {
     }
     for (const [i, chunk] of this.#chunks) {
       if (i < minChunk || i > maxChunk) this.#removeChunk(chunk);
+    }
+    for (const index of this.#floorProfiles.keys()) {
+      if (index < minChunk - 1 || index > maxChunk + 1)
+        this.#floorProfiles.delete(index);
     }
     // the control line only needs to reach one chunk past the meshed range,
     // trim what fell behind, the remaining control points are absolute
