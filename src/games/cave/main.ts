@@ -88,7 +88,11 @@ export default async (state: CaveState) => {
     state.cars.push(ai);
   }
 
-  const carGeometry = new THREE.BoxGeometry(4.4, 2.2, 8.5);
+  const carGeometry = new THREE.BoxGeometry(
+    config.CAR_WIDTH,
+    config.CAR_HEIGHT,
+    config.CAR_LENGTH,
+  );
   const wheelGeometry = new THREE.CylinderGeometry(
     config.CAR_WHEEL_RADIUS,
     config.CAR_WHEEL_RADIUS,

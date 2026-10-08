@@ -114,16 +114,20 @@ class Config {
   // car, an emulated rigid body: one body with four raycast wheel contacts
   /** top speed in u/f */
   public CAR_MAX_SPEED = 7;
+  /** Shared chassis dimensions for collision, inertia, rendering and camera framing. */
+  public CAR_WIDTH = 6.4;
+  public CAR_HEIGHT = 2.2;
+  public CAR_LENGTH = 8.5;
   /** world down acceleration per frame^2 */
   public CAR_GRAVITY = 0.18;
   public PHYSICS_SUBSTEPS = 4;
   public CAR_WHEEL_RADIUS = 1.1;
   /** Suspension mounts: local X right, Y up, negative Z forward. */
   public WHEEL_OFFSETS: [number, number, number][] = [
-    [-2.4, -0.6, -3.1],
-    [2.4, -0.6, -3.1],
-    [-2.4, -0.6, 3.1],
-    [2.4, -0.6, 3.1],
+    [-(this.CAR_WIDTH / 2 + 0.2), -0.6, -3.1],
+    [this.CAR_WIDTH / 2 + 0.2, -0.6, -3.1],
+    [-(this.CAR_WIDTH / 2 + 0.2), -0.6, 3.1],
+    [this.CAR_WIDTH / 2 + 0.2, -0.6, 3.1],
   ];
   public SUSP_REST = 2.0;
   public SUSP_TRAVEL = 1.5;

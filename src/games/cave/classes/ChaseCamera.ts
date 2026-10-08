@@ -1,5 +1,6 @@
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
 import type { Car } from './Car';
+import { config } from './Config';
 import type { Cave, RadialHit } from './Cave';
 
 /** Follow the chassis itself. Smooth the orbit, never lag behind its position. */
@@ -51,7 +52,13 @@ export class ChaseCamera {
       verticalFov,
       2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect),
     );
-    const distance = Math.max(25, 7 / Math.sin(limitingFov / 2));
+    const vehicleRadius = Math.hypot(
+      car.width / 2 + 0.7,
+      config.SUSP_REST + config.CAR_WHEEL_RADIUS + 1.1,
+      car.length / 2 + 0.95,
+    );
+    const minimumDistance = vehicleRadius + 2.5;
+    const distance = Math.max(25, vehicleRadius / Math.sin(limitingFov / 2));
     this.offset.set(-this.heading.x, 0.28, -this.heading.z).normalize();
     const obstruction = cave.castWheelRay(
       this.target.x,
@@ -65,13 +72,14 @@ export class ChaseCamera {
       this.hit,
     );
     const actualDistance =
-      obstruction < 0 ? distance : Math.max(10, obstruction - 1);
+      obstruction < 0 ? distance : Math.max(minimumDistance, obstruction - 1);
     camera.position
       .copy(this.target)
       .addScaledVector(this.offset, actualDistance);
     // A nearby wall pulls the camera in; widen the lens enough to retain the
     // whole chassis instead of letting the car fill or clip the viewport.
-    const requiredFov = 2 * Math.asin(Math.min(0.95, 7.5 / actualDistance));
+    const requiredFov =
+      2 * Math.asin(Math.min(0.95, vehicleRadius / actualDistance));
     const fittedFov =
       camera.aspect < 1
         ? 2 * Math.atan(Math.tan(requiredFov / 2) / camera.aspect)
@@ -85,6 +93,6 @@ export class ChaseCamera {
     camera.lookAt(this.target);
     // If a rock leaves less than a car length of room, the focused car can
     // be drawn through that obstruction while retaining a usable camera view.
-    return obstruction >= 0 && obstruction < 11;
+    return obstruction >= 0 && obstruction < minimumDistance + 1;
   }
 }

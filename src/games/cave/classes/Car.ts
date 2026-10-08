@@ -73,9 +73,9 @@ export class Car {
   public sensor?: Sensor;
   public brain: NeuralNetwork;
   public controls: Controls;
-  public width = 4.4;
-  public height = 2.2;
-  public length = 8.5;
+  public width = config.CAR_WIDTH;
+  public height = config.CAR_HEIGHT;
+  public length = config.CAR_LENGTH;
   /** index of the next gate to claim, the gates go forward in order */
   public nextGate = 0;
   /** set for one frame when the car claims a gate in order */

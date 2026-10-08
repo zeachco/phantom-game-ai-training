@@ -1,11 +1,15 @@
 import { expect, test } from 'bun:test';
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { config } from '../src/games/cave/classes/Config';
 import type { Car } from '../src/games/cave/classes/Car';
 import type { Cave } from '../src/games/cave/classes/Cave';
 import { ChaseCamera } from '../src/games/cave/classes/ChaseCamera';
 
 function car() {
   return {
+    width: config.CAR_WIDTH,
+    height: config.CAR_HEIGHT,
+    length: config.CAR_LENGTH,
     x: 0,
     y: 0,
     z: 0,
@@ -21,7 +25,7 @@ function cave(obstruction = -1) {
 function expectVisible(camera: PerspectiveCamera, target: Car) {
   camera.updateMatrixWorld(true);
   // Includes the full body, extended suspension, wheels and front marker.
-  for (const x of [-3, 3])
+  for (const x of [-(target.width / 2 + 0.7), target.width / 2 + 0.7])
     for (const y of [-3.7, 3.2])
       for (const z of [-5.2, 5.2]) {
         const point = new Vector3(x, y, z)
