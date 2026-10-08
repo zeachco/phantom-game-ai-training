@@ -83,16 +83,15 @@ Each feature cell can carry a vertical wall across the driving band:
 - `CAVE_WALL_CHANCE` per cell; the wall's length along the cave is a fraction
   of `CAVE_SEGMENT_LENGTH` between `CAVE_WALL_MIN_FRACTION` (1/8) and
   `CAVE_WALL_MAX_FRACTION` (1/3), so it takes 30-80 of the section's 240 units.
-- Height `CAVE_WALL_MIN..CAVE_WALL_MAX` (generator cut; world = x0.5), with a
-  Gaussian falloff over `CAVE_WALL_ANGLE` so it spans the band, and a face
-  that climbs at `CAVE_WALL_MAX_CLIMB` (0.6 world/unit, far steeper than the
-  gentle `CAVE_FLOOR_MAX_CLIMB` used everywhere else).
-- The face is part of the analytic radius (tinted `CAVE_WALL_COLOR` in the
-  mesh), and the ball resolves it with a *predictive swept barrier*
-  (`Cave.wallAt` + the crossing test in `Ball.#move`): the radial query would
-  pop the ball onto the wall top, so a crossing from below is bounced back
-  instead. A jump already above the top sails over; a jumped ball lands on
-  the flat top and rolls across it.
+- Height `CAVE_WALL_MIN..CAVE_WALL_MAX` (generator units, world Y = x0.5),
+  with a Gaussian falloff over `CAVE_WALL_ANGLE` so it spans the band. The
+  analytic ground profile rises at `CAVE_WALL_MAX_CLIMB`; an explicit
+  double-sided vertical face mesh is also built across the band at the leading
+  edge. The ground cut alone only rendered as a brown patch, not a wall.
+- The ball resolves the face with a *predictive swept barrier*
+  (`Cave.wallAt` + the pre-integration crossing test in `Ball.#move`): a
+  crossing from below is bounced back instead of being popped onto the wall
+  top by the radial query. A jump already above the top sails over.
 
 ## Boost items
 

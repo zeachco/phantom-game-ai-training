@@ -236,9 +236,10 @@ class Config {
   public CAVE_WALL_MIN_FRACTION = 1 / 8;
   public CAVE_WALL_MAX_FRACTION = 1 / 3;
   /** wall height range (inward radius cut, generator units; world = x0.5).
-   *  Kept well under the jump's ~9u apex so a committed jump clears it */
-  public CAVE_WALL_MIN = 5;
-  public CAVE_WALL_MAX = 8;
+   *  High enough to read as a wall from the chase camera, but under the
+   *  jump's ~9u apex so a committed jump clears it */
+  public CAVE_WALL_MIN = 10;
+  public CAVE_WALL_MAX = 14;
   /** angular half-width of a wall: wide enough to span the driving band */
   public CAVE_WALL_ANGLE = 0.5;
   /** uphill slope allowed over a wall face, world units per forward unit:

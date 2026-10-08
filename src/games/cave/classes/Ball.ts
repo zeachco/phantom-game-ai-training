@@ -583,6 +583,25 @@ export class Ball {
         this.vx *= scale;
         this.vz *= scale;
       }
+      // predictive wall barrier: a wall face is steep, and the radial query
+      // would pop the ball onto its top instead of stopping it. Resolve it
+      // BEFORE integration; compare the ball's bottom to the wall's absolute
+      // top so a jump already above the face can clear it.
+      const wall = cave.wallAt(this.s, this.a);
+      const along =
+        this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
+      if (
+        wall &&
+        this.s < wall.front - this.radius &&
+        this.s + dt * along >= wall.front - this.radius &&
+        this.y - this.radius < wall.topY &&
+        along > 0
+      ) {
+        const impulse = along * 1.3;
+        this.vx -= this.cx * impulse;
+        this.vy -= this.cy * impulse;
+        this.vz -= this.cz * impulse;
+      }
       // integrate
       this.x += this.vx * dt;
       this.y += this.vy * dt;
@@ -592,34 +611,6 @@ export class Ball {
         this.s +
           dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
       );
-      // predictive wall barrier: a wall face is steep, and the radial query
-      // would pop the ball onto its top instead of stopping it, so a crossing
-      // is blocked before the ball can enter the face. A jump that is already
-      // above the top sails over.
-      const wall = cave.wallAt(this.s, this.a);
-      if (
-        wall &&
-        this.s < wall.front &&
-        this.s +
-          dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz) >=
-          wall.front &&
-        -this.hit.dist - this.radius < wall.top
-      ) {
-        const back = wall.front - (this.radius + 0.2);
-        const d = back - this.s;
-        this.x += this.cx * d;
-        this.y += this.cy * d;
-        this.z += this.cz * d;
-        this.s = Math.max(0, back);
-        const along =
-          this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
-        if (along > 0) {
-          const j = along * 1.3;
-          this.vx -= this.cx * j;
-          this.vy -= this.cy * j;
-          this.vz -= this.cz * j;
-        }
-      }
       // collision: the tube surface is everything the ball can touch
       cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
       this.a = this.hit.a;

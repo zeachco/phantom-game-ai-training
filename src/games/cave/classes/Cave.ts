@@ -20,6 +20,8 @@ interface ChunkData {
   gates: THREE.Mesh[];
   /** glowing boost items floating over this chunk's boost pads */
   items: THREE.Mesh[];
+  /** explicit vertical front faces; the terrain cut alone only looks like a ramp */
+  walls: THREE.Mesh[];
 }
 
 /** one deterministic terrain feature cell: how rough the stretch is and which
@@ -133,6 +135,7 @@ export class Cave {
   #gateNextMaterial: THREE.MeshBasicMaterial;
   #boostItemGeometry: THREE.IcosahedronGeometry;
   #boostItemMaterial: THREE.MeshBasicMaterial;
+  #wallMaterial: THREE.MeshStandardMaterial;
   /** animation clock for the spinning boost items, advanced by update() */
   #time = 0;
 
@@ -189,6 +192,13 @@ export class Cave {
       color: new THREE.Color(config.CAVE_BOOST_ITEM_COLOR),
       transparent: true,
       opacity: 0.9,
+    });
+    this.#wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x9b4b2e,
+      emissive: 0x281006,
+      roughness: 0.95,
+      metalness: 0,
+      side: THREE.DoubleSide,
     });
 
     this.#generateControl(0);
@@ -574,15 +584,15 @@ export class Cave {
   }
 
   /** Nearest wall ahead of or at the arc s, within the ball's angular band,
-   *  for the ball's swept collision. `top` is the wall's world height at the
-   *  angle a, so the caller can tell a clear jump from a block. */
+   *  for the ball's swept collision. `topY` is the wall top's absolute world
+   *  Y at the angle a, so the caller can tell a clear jump from a block. */
   public wallAt(
     s: number,
     a: number,
-  ): { front: number; back: number; top: number } | null {
+  ): { front: number; back: number; topY: number } | null {
     if (this.#terrainProgress(s) <= 0) return null;
     const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
-    let best: { front: number; back: number; top: number } | null = null;
+    let best: { front: number; back: number; topY: number } | null = null;
     let bestDistance = Infinity;
     for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
       const wall = this.#featureCell(i).wall;
@@ -594,17 +604,17 @@ export class Cave {
       const abs = Math.abs(distance);
       if (abs >= bestDistance) continue;
       bestDistance = abs;
+      const base = this.surface(wall.centerS, a, { x: 0, y: 0, z: 0 });
+      const progress = this.#terrainProgress(wall.centerS);
+      const angular = Math.exp(
+        -(this.#angleDistance(a, wall.angle) ** 2) /
+          (2 * wall.angleWidth * wall.angleWidth),
+      );
       best = {
         front: wall.centerS,
         back: wall.centerS + wall.halfLen * 2,
-        // the cut is Gaussian across the band, so the top at the caller's
-        // angle is the nominal height scaled by the same falloff
-        top:
-          wall.height *
-          Math.exp(
-            -(this.#angleDistance(a, wall.angle) ** 2) /
-              (2 * wall.angleWidth * wall.angleWidth),
-          ) *
+        topY:
+          (base.y + wall.height * progress * angular) *
           config.CAVE_VERTICAL_SCALE,
       };
     }
@@ -1277,6 +1287,10 @@ export class Cave {
       gate.geometry.dispose();
     }
     for (const item of chunk.items) this.#scene.remove(item);
+    for (const wall of chunk.walls) {
+      this.#scene.remove(wall);
+      wall.geometry.dispose();
+    }
     this.#chunks.delete(chunk.index);
   }
 
@@ -1284,6 +1298,13 @@ export class Cave {
   public boostItemCount() {
     let count = 0;
     for (const chunk of this.#chunks.values()) count += chunk.items.length;
+    return count;
+  }
+
+  /** number of explicit vertical obstacle faces currently meshed */
+  public wallFaceCount() {
+    let count = 0;
+    for (const chunk of this.#chunks.values()) count += chunk.walls.length;
     return count;
   }
 
@@ -1435,11 +1456,59 @@ export class Cave {
     // glowing boost items floating over this chunk's boost pads: collected by
     // rolling through the pad underneath (boostAt drives the push)
     const items: THREE.Mesh[] = [];
+    const walls: THREE.Mesh[] = [];
     const firstCell = Math.floor((index * LEN) / config.CAVE_FEATURE_CELL) - 1;
     const lastCell =
       Math.floor(((index + 1) * LEN) / config.CAVE_FEATURE_CELL) + 1;
     for (let c = firstCell; c <= lastCell; c++) {
-      const pad = this.#featureCell(c).boost;
+      const feature = this.#featureCell(c);
+      const wall = feature.wall;
+      if (wall && Math.floor(wall.centerS / LEN) === index) {
+        const segments = 32;
+        const positions = new Float32Array((segments + 1) * 2 * 3);
+        const indices: number[] = [];
+        const front = wall.centerS;
+        const halfAngle = Math.min(
+          wall.angleWidth * 1.5,
+          config.CAVE_BAND_HALF_WIDTH + 0.12,
+        );
+        const progress = this.#terrainProgress(front);
+        for (let j = 0; j <= segments; j++) {
+          const a = wall.angle - halfAngle + (2 * halfAngle * j) / segments;
+          const base = this.surface(front, a, { x: 0, y: 0, z: 0 });
+          const angular = Math.exp(
+            -(this.#angleDistance(a, wall.angle) ** 2) /
+              (2 * wall.angleWidth * wall.angleWidth),
+          );
+          const bottom = j * 2;
+          positions[bottom * 3] = base.x;
+          positions[bottom * 3 + 1] = base.y * config.CAVE_VERTICAL_SCALE;
+          positions[bottom * 3 + 2] = base.z;
+          positions[(bottom + 1) * 3] = base.x;
+          positions[(bottom + 1) * 3 + 1] =
+            (base.y + wall.height * progress * angular) *
+            config.CAVE_VERTICAL_SCALE;
+          positions[(bottom + 1) * 3 + 2] = base.z;
+          if (j < segments) {
+            const next = bottom + 2;
+            indices.push(bottom, next, bottom + 1, next, next + 1, bottom + 1);
+          }
+        }
+        const wallGeometry = new THREE.BufferGeometry();
+        wallGeometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(positions, 3),
+        );
+        wallGeometry.setIndex(indices);
+        wallGeometry.computeVertexNormals();
+        wallGeometry.computeBoundingSphere();
+        const wallMesh = new THREE.Mesh(wallGeometry, this.#wallMaterial);
+        wallMesh.frustumCulled = false;
+        this.#scene.add(wallMesh);
+        walls.push(wallMesh);
+      }
+
+      const pad = feature.boost;
       if (!pad) continue;
       if (Math.floor(pad.centerS / LEN) !== index) continue;
       const at = this.surface(pad.centerS, pad.centerA, {
@@ -1466,7 +1535,7 @@ export class Cave {
       items.push(orb);
     }
 
-    const chunk: ChunkData = { index, samples, mesh, gates, items };
+    const chunk: ChunkData = { index, samples, mesh, gates, items, walls };
     this.#chunks.set(index, chunk);
     return chunk;
   }
@@ -1532,6 +1601,7 @@ export class Cave {
     this.#gateNextMaterial.dispose();
     this.#boostItemGeometry.dispose();
     this.#boostItemMaterial.dispose();
+    this.#wallMaterial.dispose();
     this.#generateControl(0);
   }
 }

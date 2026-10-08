@@ -1,16 +1,16 @@
 import { expect, test } from 'bun:test';
-import { Scene } from 'three';
+import { Mesh, Scene } from 'three';
 import { Cave } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 import { Ball } from '../src/games/cave/classes/Ball';
 
-function cave(seed: number) {
+function cave(seed: number, scene = new Scene()) {
   const previous = globalThis.document;
   globalThis.document = {
     createElement: () => ({ getContext: () => null }),
   } as unknown as Document;
   try {
-    return new Cave(seed, new Scene());
+    return new Cave(seed, scene);
   } finally {
     if (previous) globalThis.document = previous;
     else delete (globalThis as { document?: Document }).document;
@@ -143,4 +143,26 @@ test('variation compounds with depth: deeper cells are wilder', () => {
   expect(deep.features / deep.cells).toBeGreaterThanOrEqual(
     (shallow.features / shallow.cells) * 0.8,
   );
+});
+
+test('wall obstacles include explicit vertical face geometry', () => {
+  const scene = new Scene();
+  const terrain = cave(7, scene);
+  terrain.update(0, config.CAVE_SEGMENT_LENGTH * 12);
+
+  const faces = scene.children.filter(
+    (object): object is Mesh =>
+      object instanceof Mesh &&
+      object.geometry.getAttribute('position')?.count === 66,
+  );
+  expect(faces.length).toBeGreaterThan(0);
+
+  const face = faces[0].geometry.getAttribute('position');
+  let tallest = 0;
+  for (let vertex = 0; vertex < face.count; vertex += 2) {
+    expect(face.getX(vertex)).toBeCloseTo(face.getX(vertex + 1), 4);
+    expect(face.getZ(vertex)).toBeCloseTo(face.getZ(vertex + 1), 4);
+    tallest = Math.max(tallest, face.getY(vertex + 1) - face.getY(vertex));
+  }
+  expect(tallest).toBeGreaterThan(1.5);
 });
