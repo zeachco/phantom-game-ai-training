@@ -195,6 +195,14 @@ class Config {
   public CAR_CRASH_SPEED = 5.5;
   /** fraction of the normal velocity kept after a wall bounce */
   public CAR_RESTITUTION = 0.05;
+  /** acceleration (u/f^2) of a boost pad while its timer runs */
+  public BOOST_ACCEL = 0.3;
+  /** extra top speed while a boost is active, fading linearly to zero over
+   *  BOOST_DURATION */
+  public BOOST_SPEED_BONUS = 3;
+  /** frames a boost lasts after (re)triggering; overlapping pads refresh
+   *  the timer, they never stack */
+  public BOOST_DURATION = 90;
   /** Body-up (uy) below this means the car is past the flip point,
    *  roof-down. Above it the car is still in control: no auto-righting
    *  interference, the driver/AI can tilt and recover on its own. */
@@ -274,6 +282,20 @@ class Config {
   public CAVE_RAMP_LENGTH = 40;
   /** ramp lip height at full terrain progress (also its launch size) */
   public CAVE_RAMP_HEIGHT = 18;
+  /** probability that a feature cell carries a boost pad on the driving band */
+  public CAVE_BOOST_CHANCE = 0.5;
+  /** probability that a rock column spans the whole cave (floor to wall) */
+  public CAVE_COLUMN_FULL_HEIGHT_CHANCE = 0.5;
+  /** probability that a column grows inside the driving band but never on
+   *  its center, forcing a weave; the rest grow on the banks as before */
+  public CAVE_COLUMN_IN_BAND_CHANCE = 0.35;
+  /** the smallest drivable gap the path check keeps open around columns,
+   *  in world units (one car width plus margin) */
+  public CAVE_PATH_MIN_GAP = 9;
+  /** emissive tints (r, g, b in 0..1) blending over the rock vertex colors:
+   *  the jump platform deck and the boost pads */
+  public CAVE_PLATFORM_COLOR: [number, number, number] = [0.25, 0.9, 1.0];
+  public CAVE_BOOST_COLOR: [number, number, number] = [1.0, 0.85, 0.25];
   /** clearance from the cave floor to a car's body center at spawn */
   public CAVE_GROUND_CLEARANCE = 3.5;
   /** max turn (rad) of the centerline per segment at difficulty 1 */

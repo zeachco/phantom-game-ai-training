@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../../../utilities/math';
 import { config } from './Config';
+import { ensureDrivablePath } from './PathCheck';
 
 /** plain 3D point, no allocation churn in the query hot paths */
 interface Pt {
@@ -40,6 +41,8 @@ interface FeatureCell {
     angle: number;
     angleWidth: number;
     height: number;
+    /** a full-height column spans floor to wall: it cannot be jumped */
+    full: boolean;
   }[];
   /** a single launch ramp whose lip sits just before the volatile stretch */
   ramp: {
@@ -48,6 +51,13 @@ interface FeatureCell {
     angle: number;
     angleWidth: number;
     height: number;
+  } | null;
+  /** boost pad on the driving band: a glowing patch that pushes the car */
+  boost: {
+    centerS: number;
+    halfLen: number;
+    centerA: number;
+    halfA: number;
   } | null;
 }
 
@@ -157,6 +167,12 @@ export class Cave {
     });
 
     this.#generateControl(0);
+    ensureDrivablePath(
+      this,
+      config.SPAWN_OFFSET +
+        config.GATES_PER_SEED * config.GATE_SPACING +
+        config.CAVE_FEATURE_CELL * 2,
+    );
   }
 
   /** deterministic 32-bit mix of the seed and a chunk index */
@@ -354,11 +370,18 @@ export class Cave {
         columns.push({
           centerS: featureS + spread,
           halfLen: 20 + rng() * 18,
-          angle: Math.PI + (rng() < 0.5 ? -1 : 1) * (0.5 + rng() * 0.55),
+          // In-band columns sit off the center line (never dead ahead) so a
+          // car holding the line weaves past them; the rest grow on banks.
+          angle:
+            rng() < config.CAVE_COLUMN_IN_BAND_CHANCE
+              ? Math.PI +
+                (rng() < 0.5 ? -1 : 1) * (0.12 + rng() * 0.13)
+              : Math.PI + (rng() < 0.5 ? -1 : 1) * (0.5 + rng() * 0.55),
           angleWidth: 0.13 + rng() * 0.12,
           height:
             config.CAVE_COLUMN_MIN +
             rng() * (config.CAVE_COLUMN_MAX - config.CAVE_COLUMN_MIN),
+          full: rng() < config.CAVE_COLUMN_FULL_HEIGHT_CHANCE,
         });
       }
     }
@@ -373,6 +396,15 @@ export class Cave {
         centerA: Math.PI + (rng() - 0.5) * 0.3,
         halfA: config.CAVE_ROAD_WIDTH * (0.9 + 0.4 * rng()),
         rise: config.CAVE_ROAD_RISE * (0.7 + 0.3 * rng()),
+      };
+    }
+    let boost: FeatureCell['boost'] = null;
+    if (rng() < config.CAVE_BOOST_CHANCE) {
+      boost = {
+        centerS: center + 20 + rng() * (config.CAVE_FEATURE_CELL - 40),
+        halfLen: 30 + rng() * 30,
+        centerA: Math.PI + (rng() - 0.5) * 0.2,
+        halfA: 0.18 + rng() * 0.12,
       };
     }
 
@@ -400,7 +432,7 @@ export class Cave {
       };
     }
 
-    const cell: FeatureCell = { volatility, road, columns, ramp };
+    const cell: FeatureCell = { volatility, road, columns, ramp, boost };
     this.#featureCells.set(index, cell);
     return cell;
   }
@@ -441,7 +473,12 @@ export class Cave {
           -(this.#angleDistance(a, column.angle) ** 2) /
             (2 * column.angleWidth * column.angleWidth),
         );
-        delta -= progress * along * angular * column.height;
+        // A full-height column cuts down to the floor clamp, so it spans
+        // the whole cave: it cannot be jumped, only gone around.
+        const cut = column.full
+          ? this.#waveRadius(s) - config.CAVE_MIN_RADIUS + 40
+          : column.height;
+        delta -= progress * along * angular * cut;
       }
 
       const ramp = cell.ramp;
@@ -538,6 +575,33 @@ export class Cave {
     if (d >= outer) return 0;
     const t = (d - inner) / (outer - inner);
     return 1 - t * t * (3 - 2 * t);
+  }
+
+  /** 0..1 ramp deck mask (climb, lip and back slope) for the mesh tint */
+  #rampInfluence(s: number, a: number) {
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    let influence = 0;
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const ramp = this.#featureCell(i).ramp;
+      if (!ramp) continue;
+      const span = ramp.halfLen * 2;
+      const back = ramp.height / 0.35;
+      const f = (s - (ramp.centerS - span)) / span;
+      if (s > ramp.centerS + back || f <= 0) continue;
+      const g = f >= 0.8 ? 1 : f / 0.8;
+      let along = g * g * (3 - 2 * g);
+      if (s > ramp.centerS) {
+        const b = 1 - (s - ramp.centerS) / back;
+        along *= b * b * (3 - 2 * b);
+      }
+      const angular = this.#plateauAcross(
+        a,
+        config.CAVE_BAND_HALF_WIDTH * 0.9,
+        config.CAVE_BAND_HALF_WIDTH + 0.25,
+      );
+      influence = Math.max(influence, along * angular);
+    }
+    return influence;
   }
 
   /** Original rock profile, before the directional floor ramp pass. The flat
@@ -648,6 +712,24 @@ export class Cave {
     // Blend into untouched side walls and ceiling outside the driving arc.
     const blend = floor * floor * (3 - 2 * floor);
     return this.#rawRadius(s, a) * (1 - blend) + ramp * blend;
+  }
+
+  /** 0..1 boost pad influence at (s, a); the car triggers its push from it */
+  boostAt(s: number, a: number): number {
+    const progress = this.#terrainProgress(s);
+    if (progress <= 0) return 0;
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    let influence = 0;
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const pad = this.#featureCell(i).boost;
+      if (!pad) continue;
+      const along = this.#smoothPulse(s, pad.centerS, pad.halfLen);
+      if (along <= 0) continue;
+      const acrossRaw = 1 - this.#angleDistance(a, pad.centerA) / pad.halfA;
+      if (acrossRaw <= 0) continue;
+      influence = Math.max(influence, along * acrossRaw);
+    }
+    return influence * progress;
   }
 
   /** centerline point at arc s, into out */
@@ -1069,9 +1151,29 @@ export class Cave {
         const road = this.#roadInfluence(s, a);
         const shade =
           0.62 + 0.5 * this.#bumpNoise01(s, a) * (1 - road) + road * 0.22;
-        colors[vi * 3] = shade;
-        colors[vi * 3 + 1] = shade;
-        colors[vi * 3 + 2] = shade;
+        // Feature tints over the rock shade: the jump platform deck reads as
+        // a cyan slab, boost pads as glowing amber patches.
+        let cr = shade;
+        let cg = shade;
+        let cb = shade;
+        const platform = this.#rampInfluence(s, a);
+        if (platform > 0.05) {
+          const tint = config.CAVE_PLATFORM_COLOR;
+          cr = cr * (1 - platform) + tint[0] * platform;
+          cg = cg * (1 - platform) + tint[1] * platform;
+          cb = cb * (1 - platform) + tint[2] * platform;
+        }
+        const pad = this.boostAt(s, a);
+        if (pad > 0.35) {
+          const tint = config.CAVE_BOOST_COLOR;
+          const t = (pad - 0.35) / 0.65;
+          cr = cr * (1 - t) + tint[0] * t;
+          cg = cg * (1 - t) + tint[1] * t;
+          cb = cb * (1 - t) + tint[2] * t;
+        }
+        colors[vi * 3] = cr;
+        colors[vi * 3 + 1] = cg;
+        colors[vi * 3 + 2] = cb;
         uvs[vi * 2] = (k / SIDES) * 4;
         uvs[vi * 2 + 1] = (j / SAMPLES) * 12;
         vi++;

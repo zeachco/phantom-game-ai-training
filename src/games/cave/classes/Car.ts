@@ -127,6 +127,9 @@ export class Car {
   private landingAbsorbed = false;
   /** substeps of the scripted flip-back remaining, 0 = not flipping */
   private selfRightFrames = 0;
+  /** frames of boost remaining: a pad on the ground pushes the car and
+   *  lifts its speed cap while this runs; overlapping pads refresh it */
+  private boostFrames = 0;
   /** the world axis and total angle of the scripted flip, captured at start */
   private flipAxisX = 1;
   private flipAxisY = 0;
@@ -293,6 +296,7 @@ export class Car {
     this.wasGrounded.fill(false);
     this.landingAbsorbed = false;
     this.selfRightFrames = 0;
+    this.boostFrames = 0;
     this.stab.fill(0);
     this.hasPrevSensors = false;
     this.prevSensorInputs.fill(0);
@@ -326,6 +330,9 @@ export class Car {
     this.sectionFramesRemaining--;
     this.prevS = this.s;
     this.#move(cave);
+    if (this.boostFrames > 0) this.boostFrames--;
+    if (cave.boostAt(this.s, this.wheelHit.a) > 0.2)
+      this.boostFrames = config.BOOST_DURATION;
     if (this.brain) this.#updateScore(cave);
     this.#updateSectionProgress();
 
@@ -474,6 +481,16 @@ export class Car {
     }
   }
 
+  /** the speed cap right now: a running boost lifts it above the normal
+   *  top speed, fading back down as the boost timer runs out */
+  effectiveMaxSpeed(): number {
+    if (this.boostFrames <= 0) return this.maxSpeed;
+    return (
+      this.maxSpeed +
+      config.BOOST_SPEED_BONUS * (this.boostFrames / config.BOOST_DURATION)
+    );
+  }
+
   /** signed angle between the velocity and the front, in [-1, 1] */
   #velocityDelta() {
     const dot = this.vx * this.fx + this.vy * this.fy + this.vz * this.fz;
@@ -618,6 +635,19 @@ export class Car {
       this.cz = this.#vector.z;
       this.#force.set(0, -config.CAR_GRAVITY, 0);
       this.#torque.set(0, 0, 0);
+      // Boost: a pad on the ground pushes the car along the cave tangent
+      // up to the lifted speed cap, which fades back over the timer. The
+      // push is capped like the drive force, so a pad is a burst to the
+      // boosted top speed, not a rocket.
+      if (this.boostFrames > 0) {
+        const alongSpeed =
+          this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
+        if (alongSpeed < this.effectiveMaxSpeed()) {
+          this.#force.x += this.cx * config.BOOST_ACCEL;
+          this.#force.y += this.cy * config.BOOST_ACCEL;
+          this.#force.z += this.cz * config.BOOST_ACCEL;
+        }
+      }
       this.#angular.set(this.avx, this.avy, this.avz);
       // Anti-roll / anti-pitch bars: transfer suspension load toward the
       // compressed wheel of an axle (and the compressed axle). The paired
@@ -731,7 +761,7 @@ export class Car {
         if (
           throttle > 0 &&
           uprightTraction > 0 &&
-          longitudinal < this.maxSpeed
+          longitudinal < this.effectiveMaxSpeed()
         ) {
           // Compensate uphill gravity at the driven tires, so a gentle
           // throttle launch can climb instead of spending all torque on weight.
@@ -750,7 +780,7 @@ export class Car {
             );
           } else if (
             uprightTraction > 0 &&
-            longitudinal > -this.maxSpeed / 2
+            longitudinal > -this.effectiveMaxSpeed() / 2
           ) {
             drive =
               (config.CAR_REVERSE_ACCEL * throttle * uprightTraction) / 4;

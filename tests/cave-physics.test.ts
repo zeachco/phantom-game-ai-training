@@ -16,6 +16,9 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
     centerAt(s: number, out: object) {
       return Object.assign(out, { x: 0, y: 0, z: -s });
     },
+    boostAt(_s: number, _a: number) {
+      return 0;
+    },
     castWheelRay(
       x: number,
       y: number,
@@ -330,3 +333,14 @@ test('steering still works in the air', () => {
   expect(maxDev).toBeGreaterThan(0.3);
 });
 });
+
+test('a boost pad lifts the speed cap and pushes the car past it', () => {
+  const cave = floor();
+  cave.boostAt = (s: number) => (s > 200 ? 1 : 0);
+  const { car } = settled();
+  car.controls.throttle = 1;
+  tick(car, cave, 400);
+  expect(car.speed).toBeGreaterThan(config.CAR_MAX_SPEED);
+  expect(car.damaged).toBe(false);
+});
+
