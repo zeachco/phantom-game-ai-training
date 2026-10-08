@@ -494,16 +494,45 @@ export class Cave {
     return (n - 0.5) * 2 * amp;
   }
 
-  /** Original rock profile, before the directional floor ramp pass. A road
-   *  lane both raises the floor and damps the bump noise, so it drives smooth. */
+  /** Smooth 1..0 mask of the flat driving band centered on the cave floor
+   *  (a = PI): one at the center, zero at the band edge and beyond. */
+  #bandInfluence(a: number) {
+    const d = this.#angleDistance(a, Math.PI);
+    if (d >= config.CAVE_BAND_HALF_WIDTH) return 0;
+    const t = 1 - d / config.CAVE_BAND_HALF_WIDTH;
+    return t * t * (3 - 2 * t);
+  }
+
+  /** Steep side walls: outside the driving band the floor is raised
+   *  quadratically toward the tube wall, so most of the cross-section stays
+   *  a flat plateau and the sides read as cliffs. */
+  #bankRise(a: number) {
+    const d = this.#angleDistance(a, Math.PI);
+    const x = d - config.CAVE_BAND_HALF_WIDTH;
+    if (x <= 0) return 0;
+    const edge = Math.PI / 2 - config.CAVE_BAND_HALF_WIDTH;
+    const t = Math.min(1, x / edge);
+    return config.CAVE_BANK_RISE * t * t;
+  }
+
+  /** Original rock profile, before the directional floor ramp pass. The flat
+   *  driving band keeps no bump skin and only a sliver of the long waves;
+   *  outside it the floor rises steeply into the side walls. A road lane
+   *  raises the floor and damps the bump noise, so it drives smooth. */
   #rawRadius(s: number, a: number) {
     const road = this.#roadInfluence(s, a);
-    const bump = this.#bump(s, a) * (1 - road);
+    const band = this.#bandInfluence(a);
+    const wave =
+      config.CAVE_RADIUS +
+      (this.#waveRadius(s) - config.CAVE_RADIUS) *
+        (1 - band * config.CAVE_BAND_WAVE_DAMP);
+    const bump = this.#bump(s, a) * (1 - road) * (1 - band);
     const r =
-      this.#waveRadius(s) +
+      wave +
       bump +
       this.#featureRadiusDelta(s, a) -
-      road * config.CAVE_ROAD_RISE * this.#terrainProgress(s);
+      road * config.CAVE_ROAD_RISE * this.#terrainProgress(s) -
+      this.#bankRise(a) * this.#terrainProgress(s);
     return r < config.CAVE_MIN_RADIUS ? config.CAVE_MIN_RADIUS : r;
   }
 

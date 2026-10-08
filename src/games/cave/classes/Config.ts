@@ -203,6 +203,15 @@ class Config {
   public CAVE_FLOOR_MAX_CLIMB = 0.1;
   /** angular cell of the fine bumps around the circumference */
   public CAVE_BUMP_ANGLE = 0.35;
+  /** angular half-width of the flat driving band around the cave floor
+   *  (a = PI): the bump skin is gone there and the long waves are damped */
+  public CAVE_BAND_HALF_WIDTH = 0.36;
+  /** fraction of the long wave undulation the driving band keeps, so the
+   *  plateau rides a slow residual instead of the full tube breathing */
+  public CAVE_BAND_WAVE_DAMP = 0.85;
+  /** lateral floor raise (inward radius cut) at the horizontal wall, making
+   *  the side sections steep cliffs around the flat plateau */
+  public CAVE_BANK_RISE = 30;
   /** distance over which the initially smooth cave grows into its full
    *  bumpy/obstacle-filled terrain */
   public CAVE_TERRAIN_RAMP = 1400;
@@ -214,12 +223,12 @@ class Config {
   public CAVE_COLUMN_MIN = 14;
   public CAVE_COLUMN_MAX = 34;
   /** probability that a feature cell carries a smooth raised road lane */
-  public CAVE_ROAD_CHANCE = 0.45;
+  public CAVE_ROAD_CHANCE = 0.95;
   /** road lane length along the cave axis, and its angular half-width */
   public CAVE_ROAD_LENGTH = 190;
-  public CAVE_ROAD_WIDTH = 0.5;
+  public CAVE_ROAD_WIDTH = 0.4;
   /** how far the road lane raises the floor at full terrain progress */
-  public CAVE_ROAD_RISE = 18;
+  public CAVE_ROAD_RISE = 8;
   /** fixed dice on a jump ramp before a volatile stretch at volatility 1 */
   public CAVE_RAMP_CHANCE = 0.85;
   /** how far the ramp lip sits before the volatile stretch it launches over */

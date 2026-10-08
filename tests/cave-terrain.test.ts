@@ -87,3 +87,33 @@ test('seed 25 can pull away on the hills around gate 6', () => {
     expect(car.speed).toBeGreaterThan(0.8);
   }
 });
+
+test('the driving band is flat while the sides stay rough', () => {
+  for (const seed of [0, 50, 100]) {
+    const terrain = cave(seed);
+    // Sharp radius steps between adjacent arcs: the band keeps only a few
+    // intentional feature edges (lane ends, ramp lips, column faces); the
+    // rough sides keep the whole bumpy skin.
+    const sharpDrops = (angle: number) => {
+      let drops = 0;
+      for (let s = 1500; s < 3600; s++)
+        if (Math.abs(terrain.radius(s + 1, angle) - terrain.radius(s, angle)) > 1)
+          drops++;
+      return drops;
+    };
+    const band = sharpDrops(Math.PI);
+    const side = sharpDrops(Math.PI + 0.4);
+    expect(side).toBeGreaterThan(3 * band);
+    expect(side).toBeGreaterThan(100);
+    // Averaged over arcs the bumps cancel and the deterministic bank
+    // remains: the wall at PI+0.9 sits well above the PI+0.5 shoulder.
+    // The full bank raise (~13u) is partly masked by the MIN_RADIUS clamp
+    // and the floor envelope, so the measured average is 4-7u.
+    let wall = 0;
+    for (let s = 1500; s < 3600; s += 10)
+      wall +=
+        terrain.radius(s, Math.PI + 0.5) - terrain.radius(s, Math.PI + 0.9);
+    wall /= 210;
+    expect(wall).toBeGreaterThan(4);
+  }
+});
