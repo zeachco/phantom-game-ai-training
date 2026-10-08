@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { Scene } from 'three';
 import { Cave } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
+import { Ball } from '../src/games/cave/classes/Ball';
 
 function cave(seed: number) {
   const previous = globalThis.document;
@@ -85,4 +86,31 @@ test('a boosted line exists: pads and platforms appear on the early cave', () =>
   expect(pads).toBeGreaterThan(0);
   expect(platforms).toBeGreaterThan(0);
   expect(terrain.boostAt(terrain.featureCell(2).boost?.centerS ?? 0, Math.PI)).toBeGreaterThan(0.2);
+});
+
+test('walls span a fraction of their section and stop a rolling ball', () => {
+  for (const seed of [7, 40]) {
+    const terrain = cave(seed);
+    let wall: NonNullable<
+      ReturnType<Cave['featureCell']>['wall']
+    > | null = null;
+    for (let i = 1; i < 24 && !wall; i++) {
+      const cell = terrain.featureCell(i);
+      if (cell.wall) wall = cell.wall;
+    }
+    if (!wall) continue;
+    const fraction = (wall.halfLen * 2) / config.CAVE_SEGMENT_LENGTH;
+    expect(fraction).toBeGreaterThanOrEqual(
+      config.CAVE_WALL_MIN_FRACTION - 1e-9,
+    );
+    expect(fraction).toBeLessThanOrEqual(
+      config.CAVE_WALL_MAX_FRACTION + 1e-9,
+    );
+
+    const front = wall.centerS;
+    const ball = new Ball(terrain.groundSpawn(front - 20));
+    ball.controls.moveY = 1;
+    for (let f = 0; f < 240 && !ball.damaged; f++) ball.update(terrain);
+    expect(ball.s).toBeLessThanOrEqual(front + 1);
+  }
 });

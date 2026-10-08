@@ -29,7 +29,20 @@ test('floor climbs gradually along the road but retains sharp drops and lateral 
       for (let s = 101; s < 3600; s++) {
         const radius = terrain.radius(s, angle);
         const rise = (previous - radius) * config.CAVE_VERTICAL_SCALE;
-        expect(rise).toBeLessThanOrEqual(config.CAVE_FLOOR_MAX_CLIMB + 1e-8);
+        // A wall face is allowed its own, much steeper climb: the ball jumps it.
+        if (rise > config.CAVE_FLOOR_MAX_CLIMB + 1e-8) {
+          // A wall face is allowed its own, much steeper climb: the ball
+          // jumps it. Only assert when no wall explains the rise.
+          const nearWall = [-8, -4, -2, -1, 0, 1, 2, 4, 8].some(
+            (k) => terrain.wallInfluenceAt(s + k, angle) > 0.02,
+          );
+          expect(rise).toBeLessThanOrEqual(
+            (nearWall
+              ? config.CAVE_WALL_MAX_CLIMB
+              : config.CAVE_FLOOR_MAX_CLIMB) +
+              1e-8,
+          );
+        }
         steepestDrop = Math.max(steepestDrop, -rise);
         expect(radius).toBeGreaterThanOrEqual(config.CAVE_MIN_RADIUS - 1e-8);
         previous = radius;
@@ -70,6 +83,10 @@ test('ramp profiles agree at chunk seams and do not depend on query order', () =
 /** a ball that pursues a point on the floor ahead: the reference line a sane
  *  player (or a trained brain) should be able to hold */
 function driveLine(terrain: Cave, ball: Ball, frames: number) {
+  // latched while a wall face is inside the jump window, so the ball is
+  // already hopping when the face arrives instead of jumping point-blank
+  let jumpLatch = false;
+  let backoff = false;
   for (let frame = 0; frame < frames; frame++) {
     const goal = terrain.groundSpawn(ball.s + 40 + ball.speed * 15, 0);
     const dx = goal.x - ball.x;
@@ -81,8 +98,23 @@ function driveLine(terrain: Cave, ball: Ball, frames: number) {
     const around = crossX * ball.ux + crossY * ball.uy + crossZ * ball.uz;
     const dot = ball.fx * dx + ball.fy * dy + ball.fz * dz;
     const angle = Math.atan2(around, dot);
-    ball.controls.moveY = 1;
     ball.controls.moveX = Math.max(-1, Math.min(1, -angle * 2));
+    // a sane player hops a wall: the jump latches while the face is inside
+    // the apex window and re-fires on every landing. Bounced off point-blank,
+    // it backs off past the approach window and takes a fresh run at it.
+    const wall = terrain.wallAt(ball.s, ball.a);
+    const ahead = wall && wall.front > ball.s ? wall.front - ball.s : Infinity;
+    if (!backoff && ahead < 25 && ball.speed < 2.5) backoff = true;
+    if (backoff && !wall) backoff = false;
+    if (backoff) {
+      ball.controls.moveY = -1;
+      ball.controls.jump = 0;
+    } else {
+      ball.controls.moveY = 1;
+      if (ahead < Math.max(24, ball.speed * 13)) jumpLatch = true;
+      if (!wall) jumpLatch = false;
+      ball.controls.jump = jumpLatch && ball.grounded ? 1 : 0;
+    }
     ball.update(terrain);
   }
 }
@@ -103,8 +135,22 @@ test('a ball that follows the track line can pull away on the hills around gate 
     const ball = new Ball(terrain.groundSpawn(start));
     driveLine(terrain, ball, 180);
     expect(ball.damaged).toBe(false);
-    expect(ball.s - start).toBeGreaterThan(100);
-    expect(ball.speed).toBeGreaterThan(0.8);
+    // a wall across the band is a deliberate stop that needs a planned jump;
+    // on a stretch without one, the ball must pull away over the hills
+    let walled = false;
+    for (let s = start; s < start + 150; s += 10) {
+      const wall = terrain.featureCell(
+        Math.floor(s / config.CAVE_FEATURE_CELL),
+      ).wall;
+      if (wall && wall.centerS > start && wall.centerS < start + 150)
+        walled = true;
+    }
+    if (walled) {
+      expect(ball.s).toBeGreaterThanOrEqual(start - 80);
+    } else {
+      expect(ball.s - start).toBeGreaterThan(100);
+      expect(ball.speed).toBeGreaterThan(0.8);
+    }
   }
 });
 

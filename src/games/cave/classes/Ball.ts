@@ -120,6 +120,8 @@ export class Ball {
   public finished = false;
 
   private stallFrames = 0;
+  /** true until the jump input releases, so a held jump fires once */
+  private jumpConsumed = false;
   /** frames of boost remaining: collecting a boost item pushes the ball and
    *  lifts its speed cap while this runs; items refresh it */
   private boostFrames = 0;
@@ -271,6 +273,8 @@ export class Ball {
     this.deathPenalty = 0;
     this.speed = 0;
     this.boostFrames = 0;
+    this.jumpConsumed = false;
+    this.hit.dist = -config.BALL_RADIUS;
     this.hasPrevSensors = false;
     this.prevSensorInputs.fill(0);
   }
@@ -360,9 +364,10 @@ export class Ball {
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);
-        const [moveX, moveY] = outputs;
+        const [moveX, moveY, jump] = outputs;
         this.controls.moveX = clamp(-1, 1, moveX);
         this.controls.moveY = clamp(-1, 1, moveY);
+        this.controls.jump = clamp(0, 1, jump);
       }
     }
   }
@@ -514,8 +519,26 @@ export class Ball {
       sx /= stick;
       sy /= stick;
     }
+    const jump = clamp(0, 1, this.controls.jump);
     for (let step = 0; step < config.PHYSICS_SUBSTEPS; step++) {
       this.#refreshFrame(cave);
+      // jump: one impulse per press, along the contact normal, so a slope
+      // launch is angled with the ground under the ball
+      if (jump > 0.5) {
+        // one impulse per press, and holding re-fires on every landing, so a
+        // held jump hops the ball along the floor
+        if (this.grounded && !this.jumpConsumed) {
+          const n = this.contactNormal;
+          this.vx += n.x * config.BALL_JUMP_SPEED;
+          this.vy += n.y * config.BALL_JUMP_SPEED;
+          this.vz += n.z * config.BALL_JUMP_SPEED;
+          this.jumpConsumed = true;
+        } else if (!this.grounded) {
+          this.jumpConsumed = false;
+        }
+      } else {
+        this.jumpConsumed = false;
+      }
       // control basis: the horizontal part of the cave tangent and its right.
       // Near a vertical tangent, fall back to the current velocity direction.
       let cfx = this.cx;
@@ -551,13 +574,13 @@ export class Ball {
           this.vz += this.cz * config.BOOST_ACCEL * dt;
         }
       }
-      // speed cap (includes the boost bonus while the timer runs)
+      // speed cap: the stick drives horizontally, so cap the horizontal
+      // speed and let gravity and jumps own the vertical
       const cap = this.effectiveMaxSpeed();
-      const speed = Math.hypot(this.vx, this.vy, this.vz);
-      if (speed > cap) {
-        const scale = cap / speed;
+      const horizontal = Math.hypot(this.vx, this.vz);
+      if (horizontal > cap) {
+        const scale = cap / horizontal;
         this.vx *= scale;
-        this.vy *= scale;
         this.vz *= scale;
       }
       // integrate
@@ -569,6 +592,34 @@ export class Ball {
         this.s +
           dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
       );
+      // predictive wall barrier: a wall face is steep, and the radial query
+      // would pop the ball onto its top instead of stopping it, so a crossing
+      // is blocked before the ball can enter the face. A jump that is already
+      // above the top sails over.
+      const wall = cave.wallAt(this.s, this.a);
+      if (
+        wall &&
+        this.s < wall.front &&
+        this.s +
+          dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz) >=
+          wall.front &&
+        -this.hit.dist - this.radius < wall.top
+      ) {
+        const back = wall.front - (this.radius + 0.2);
+        const d = back - this.s;
+        this.x += this.cx * d;
+        this.y += this.cy * d;
+        this.z += this.cz * d;
+        this.s = Math.max(0, back);
+        const along =
+          this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
+        if (along > 0) {
+          const j = along * 1.3;
+          this.vx -= this.cx * j;
+          this.vy -= this.cy * j;
+          this.vz -= this.cz * j;
+        }
+      }
       // collision: the tube surface is everything the ball can touch
       cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
       this.a = this.hit.a;

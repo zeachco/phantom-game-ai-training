@@ -114,13 +114,18 @@ class Config {
   // ball, Monkey Ball style: a sphere that rolls through the tube. The stick
   // accelerates it in the camera/track plane, gravity and the walls do the
   // rest.
-  /** top speed in u/f */
-  public BALL_MAX_SPEED = 9;
+  /** top speed in u/f. Kept low so the ball feels heavy; a boost item is the
+   *  only way past it */
+  public BALL_MAX_SPEED = 6;
   /** sphere radius: collision, rendering and camera framing all read it */
   public BALL_RADIUS = 1.4;
-  /** world down acceleration per frame^2 */
-  public BALL_GRAVITY = 0.12;
+  /** world down acceleration per frame^2: a touch lighter than the car's, so
+   *  jumps hang longer and slopes feel less punishing */
+  public BALL_GRAVITY = 0.095;
   public PHYSICS_SUBSTEPS = 4;
+  /** upward impulse (u/f) of a jump, applied along the contact normal. With
+   *  BALL_GRAVITY 0.095 this hangs ~27 frames and clears a ~8u step */
+  public BALL_JUMP_SPEED = 1.3;
   /** stick-directed acceleration (u/f^2) at full deflection */
   public BALL_ACCEL = 0.17;
   /** velocity retained per frame while the ball rolls on a surface: very
@@ -142,8 +147,8 @@ class Config {
   /** acceleration (u/f^2) of a boost while its timer runs */
   public BOOST_ACCEL = 0.32;
   /** extra top speed while a boost is active, fading linearly to zero over
-   *  BOOST_DURATION */
-  public BOOST_SPEED_BONUS = 4;
+   *  BOOST_DURATION. Large: a boost item should double the pace */
+  public BOOST_SPEED_BONUS = 6;
   /** frames a boost lasts after (re)triggering; overlapping items refresh
    *  the timer, they never stack */
   public BOOST_DURATION = 90;
@@ -217,6 +222,23 @@ class Config {
   /** probability that a column grows inside the driving band but never on
    *  its center, forcing a weave; the rest grow on the banks as before */
   public CAVE_COLUMN_IN_BAND_CHANCE = 0.35;
+  /** probability that a feature cell carries a vertical wall across the band */
+  public CAVE_WALL_CHANCE = 0.55;
+  /** wall length along the cave, as a fraction of CAVE_SEGMENT_LENGTH: each
+   *  wall takes between 1/8 and 1/3 of the section it sits in */
+  public CAVE_WALL_MIN_FRACTION = 1 / 8;
+  public CAVE_WALL_MAX_FRACTION = 1 / 3;
+  /** wall height range (inward radius cut, generator units; world = x0.5).
+   *  Kept well under the jump's ~9u apex so a committed jump clears it */
+  public CAVE_WALL_MIN = 5;
+  public CAVE_WALL_MAX = 8;
+  /** angular half-width of a wall: wide enough to span the driving band */
+  public CAVE_WALL_ANGLE = 0.5;
+  /** uphill slope allowed over a wall face, world units per forward unit:
+   *  steep, unlike the gentle CAVE_FLOOR_MAX_CLIMB used elsewhere */
+  public CAVE_WALL_MAX_CLIMB = 0.6;
+  /** emissive tint of the wall faces */
+  public CAVE_WALL_COLOR: [number, number, number] = [0.85, 0.42, 0.3];
   /** the smallest drivable gap the path check keeps open around columns,
    *  in world units (one car width plus margin) */
   public CAVE_PATH_MIN_GAP = 9;

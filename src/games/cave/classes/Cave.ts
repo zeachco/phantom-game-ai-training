@@ -61,6 +61,17 @@ export interface FeatureCell {
     centerA: number;
     halfA: number;
   } | null;
+  /** a vertical wall across the driving band: a floor step the ball must
+   *  jump. It spans a fraction of its section along the cave */
+  wall: {
+    /** leading face, where the step begins (the ball's collision plane) */
+    centerS: number;
+    halfLen: number;
+    angle: number;
+    angleWidth: number;
+    /** inward radius cut (generator units); world height = height x0.5 */
+    height: number;
+  } | null;
 }
 
 const SAMPLES = config.CAVE_CHUNK_SAMPLES;
@@ -446,7 +457,28 @@ export class Cave {
       };
     }
 
-    const cell: FeatureCell = { volatility, road, columns, ramp, boost };
+    // A vertical wall spanning the band, placed last so it consumes fresh
+    // RNG draws and leaves every other feature on the cave untouched.
+    let wall: FeatureCell['wall'] = null;
+    if (rng() < config.CAVE_WALL_CHANCE) {
+      const fraction =
+        config.CAVE_WALL_MIN_FRACTION +
+        rng() * (config.CAVE_WALL_MAX_FRACTION - config.CAVE_WALL_MIN_FRACTION);
+      const halfLen = (config.CAVE_SEGMENT_LENGTH * fraction) / 2;
+      const front =
+        center + 30 + rng() * Math.max(1, config.CAVE_FEATURE_CELL - 60 - halfLen);
+      wall = {
+        centerS: front,
+        halfLen,
+        angle: Math.PI,
+        angleWidth: config.CAVE_WALL_ANGLE,
+        height:
+          config.CAVE_WALL_MIN +
+          rng() * (config.CAVE_WALL_MAX - config.CAVE_WALL_MIN),
+      };
+    }
+
+    const cell: FeatureCell = { volatility, road, columns, ramp, boost, wall };
     this.#featureCells.set(index, cell);
     return cell;
   }
@@ -467,6 +499,89 @@ export class Cave {
       influence = Math.max(influence, along * across);
     }
     return influence;
+  }
+
+  /** 0..1 across a wall: a steep front face, a flat top over the wall length,
+   *  then a short back drop. `lead` is sized so the face reaches full height
+   *  within the wall's own length. */
+  #wallLead(wall: NonNullable<FeatureCell['wall']>) {
+    return (
+      wall.height / (config.CAVE_WALL_MAX_CLIMB / config.CAVE_VERTICAL_SCALE) +
+      2
+    );
+  }
+
+  #wallAlong(s: number, wall: NonNullable<FeatureCell['wall']>) {
+    const lead = this.#wallLead(wall);
+    const back = wall.centerS + wall.halfLen * 2;
+    if (s <= wall.centerS || s >= back + lead) return 0;
+    const ease = (t: number) => t * t * (3 - 2 * t);
+    const rise = Math.min(1, (s - wall.centerS) / lead);
+    const drop = s <= back ? 1 : Math.max(0, 1 - (s - back) / lead);
+    return ease(rise) * ease(drop);
+  }
+
+  /** smooth 0..1 mask of a wall at (s, a), zero outside its band */
+  #wallInfluence(s: number, a: number) {
+    const progress = this.#terrainProgress(s);
+    if (progress <= 0) return 0;
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    let influence = 0;
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const wall = this.#featureCell(i).wall;
+      if (!wall) continue;
+      const along = this.#wallAlong(s, wall);
+      if (along <= 0) continue;
+      const angular = Math.exp(
+        -(this.#angleDistance(a, wall.angle) ** 2) /
+          (2 * wall.angleWidth * wall.angleWidth),
+      );
+      influence = Math.max(influence, along * angular);
+    }
+    return influence * progress;
+  }
+
+  /** the wall mask, public so the liveness/path checks can allow its slope */
+  public wallInfluenceAt(s: number, a: number) {
+    return this.#wallInfluence(s, a);
+  }
+
+  /** Nearest wall ahead of or at the arc s, within the ball's angular band,
+   *  for the ball's swept collision. `top` is the wall's world height at the
+   *  angle a, so the caller can tell a clear jump from a block. */
+  public wallAt(
+    s: number,
+    a: number,
+  ): { front: number; back: number; top: number } | null {
+    if (this.#terrainProgress(s) <= 0) return null;
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    let best: { front: number; back: number; top: number } | null = null;
+    let bestDistance = Infinity;
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const wall = this.#featureCell(i).wall;
+      if (!wall) continue;
+      if (this.#angleDistance(a, wall.angle) > wall.angleWidth * 1.5) continue;
+      // look ahead far enough that a fast ball can still jump the face
+      const distance = wall.centerS - s;
+      if (distance > 80 || distance < -24) continue;
+      const abs = Math.abs(distance);
+      if (abs >= bestDistance) continue;
+      bestDistance = abs;
+      best = {
+        front: wall.centerS,
+        back: wall.centerS + wall.halfLen * 2,
+        // the cut is Gaussian across the band, so the top at the caller's
+        // angle is the nominal height scaled by the same falloff
+        top:
+          wall.height *
+          Math.exp(
+            -(this.#angleDistance(a, wall.angle) ** 2) /
+              (2 * wall.angleWidth * wall.angleWidth),
+          ) *
+          config.CAVE_VERTICAL_SCALE,
+      };
+    }
+    return best;
   }
 
   /** Inward radial cuts make raised road lanes, rock columns and jump ramps.
@@ -496,8 +611,7 @@ export class Cave {
       }
 
       const ramp = cell.ramp;
-      if (!ramp) continue;
-      // A climb to a flat lip, then a smooth back slope: the launch comes
+      if (!ramp) continue;      // A climb to a flat lip, then a smooth back slope: the launch comes
       // from leaving the lip at speed, not from a sharp back edge, so a
       // slow car rolls over the lip instead of pivoting over it.
       const span = ramp.halfLen * 2;
@@ -520,6 +634,19 @@ export class Cave {
         config.CAVE_BAND_HALF_WIDTH + 0.25,
       );
       delta -= progress * along * angular * ramp.height;
+    }
+    // A vertical wall: a steep front face across the band. The ball's swept
+    // check (wallAt) blocks it; the radius makes it visible and landable.
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const wall = this.#featureCell(i).wall;
+      if (!wall) continue;
+      const along = this.#wallAlong(s, wall);
+      if (along <= 0) continue;
+      const angular = Math.exp(
+        -(this.#angleDistance(a, wall.angle) ** 2) /
+          (2 * wall.angleWidth * wall.angleWidth),
+      );
+      delta -= progress * along * angular * wall.height;
     }
     return delta;
   }
@@ -662,6 +789,10 @@ export class Cave {
     if (cached) return cached;
     const rise = config.CAVE_FLOOR_MAX_CLIMB / config.CAVE_VERTICAL_SCALE;
     const stepRise = rise * PER;
+    // A wall face is allowed a much steeper climb: the ball jumps it, the
+    // gentle cap elsewhere stays for everything else
+    const wallStepRise =
+      (config.CAVE_WALL_MAX_CLIMB / config.CAVE_VERTICAL_SCALE) * PER;
     const drop = config.CAVE_FLOOR_MAX_DROP / config.CAVE_VERTICAL_SCALE;
     const stepDrop = drop * PER;
     // Features only subtract radius. This upper bound guarantees that no
@@ -687,12 +818,14 @@ export class Cave {
         // of flipping over it. Fast cars still leave the ground: the capped
         // drop outruns gravity at driving speed.
         const raw = this.#rawRadius(arc, angle);
+        const stepRiseHere =
+          this.#wallInfluence(arc, angle) > 0.2 ? wallStepRise : stepRise;
         nextRadius =
           nextRadius === Infinity
             ? raw
             : Math.min(
                 Math.max(raw, nextRadius - stepDrop),
-                nextRadius + stepRise,
+                nextRadius + stepRiseHere,
               );
         if (j <= SAMPLES) profile[j * SIDES + k] = nextRadius;
       }
@@ -1202,6 +1335,14 @@ export class Cave {
         if (pad > 0.35) {
           const tint = config.CAVE_BOOST_COLOR;
           const t = (pad - 0.35) / 0.65;
+          cr = cr * (1 - t) + tint[0] * t;
+          cg = cg * (1 - t) + tint[1] * t;
+          cb = cb * (1 - t) + tint[2] * t;
+        }
+        const wallMask = this.#wallInfluence(s, a);
+        if (wallMask > 0.25) {
+          const tint = config.CAVE_WALL_COLOR;
+          const t = (wallMask - 0.25) / 0.75;
           cr = cr * (1 - t) + tint[0] * t;
           cg = cg * (1 - t) + tint[1] * t;
           cb = cb * (1 - t) + tint[2] * t;

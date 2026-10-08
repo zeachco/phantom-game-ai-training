@@ -23,6 +23,8 @@ export class Controls {
   public moveX: number = 0;
   /** signed forward axis: > 0 forward (into the cave), < 0 backward */
   public moveY: number = 0;
+  /** jump button: 1 while held/pressed, 0 otherwise */
+  public jump: number = 0;
   /** the bound handlers, kept so dispose() can remove them again — real
    *  privates so Object.keys(controls) counts only the stick axes */
   #keydown: ((e: KeyboardEvent) => void) | undefined;
@@ -31,8 +33,10 @@ export class Controls {
   #gamepadEnabled = false;
   #keyboardX = 0;
   #keyboardY = 0;
+  #keyboardJump = false;
   #gamepadX = 0;
   #gamepadY = 0;
+  #gamepadJump = false;
 
   constructor(type: ControlType) {
     this.#gamepadEnabled = type === ControlType.HUMAN;
@@ -50,6 +54,7 @@ export class Controls {
   #syncOutputs() {
     this.moveX = Math.max(-1, Math.min(1, this.#keyboardX + this.#gamepadX));
     this.moveY = Math.max(-1, Math.min(1, this.#keyboardY + this.#gamepadY));
+    this.jump = this.#keyboardJump || this.#gamepadJump ? 1 : 0;
   }
 
   /** Read the browser's standard gamepad mapping. DualShock controllers are
@@ -73,6 +78,12 @@ export class Controls {
     return selected;
   }
 
+  #buttonValue(pad: Gamepad, index: number) {
+    const button = pad.buttons[index];
+    if (!button) return 0;
+    return Math.max(0, Math.min(1, button.value || (button.pressed ? 1 : 0)));
+  }
+
   /** Polling is intentional: Gamepad API values are stateful and must be read
    *  during the simulation frame rather than inferred from browser events. */
   public update() {
@@ -87,17 +98,18 @@ export class Controls {
       return;
     }
 
-    // standard mapping: left stick is axes 0 (x) and 1 (y, positive down)
+    // standard mapping: left stick is axes 0 (x) and 1 (y, positive down);
+    // A (0) or B (1) jumps
     this.#gamepadX = applyDeadzone(pad.axes[0] || 0);
     this.#gamepadY = -applyDeadzone(pad.axes[1] || 0);
+    this.#gamepadJump =
+      this.#buttonValue(pad, 0) > 0.5 || this.#buttonValue(pad, 1) > 0.5;
     this.#syncOutputs();
   }
 
   /** what a key sets: a signed contribution to one stick axis, or undefined
    *  when unbound */
-  #keyToAxis(
-    key: string,
-  ): 'x+' | 'x-' | 'y+' | 'y-' | undefined {
+  #keyToAxis(key: string): 'x+' | 'x-' | 'y+' | 'y-' | undefined {
     switch (key) {
       case 'ArrowUp':
       case 'w':
@@ -140,6 +152,12 @@ export class Controls {
           t.isContentEditable)
       )
         return;
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        this.#keyboardJump = true;
+        this.#syncOutputs();
+        return;
+      }
       const axis = this.#keyToAxis(e.key);
       if (axis === undefined) return;
       e.preventDefault();
@@ -147,6 +165,11 @@ export class Controls {
       recompute();
     };
     const up = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        this.#keyboardJump = false;
+        this.#syncOutputs();
+        return;
+      }
       const axis = this.#keyToAxis(e.key);
       if (axis === undefined) return;
       this.#held.delete(axis);
@@ -168,8 +191,10 @@ export class Controls {
     this.#keyup = undefined;
     this.#gamepadIndex = undefined;
     this.#held.clear();
+    this.#keyboardJump = false;
     this.#gamepadX = 0;
     this.#gamepadY = 0;
+    this.#gamepadJump = false;
     this.#keyboardX = 0;
     this.#keyboardY = 0;
     this.#syncOutputs();
