@@ -28,13 +28,18 @@ export function ensureDrivablePath(cave: Cave, maxS: number): void {
 
     // 1. one column: keep the wider side open at the minimum gap by sliding
     // the column toward the opposite band edge.
+    const gapArc = config.CAVE_PATH_MIN_GAP / radius;
     for (const col of inBand) {
       const half = col.angleWidth * 1.5;
-      const gapLeft = (col.angle - half - (Math.PI - band)) * radius;
-      const gapRight = ((Math.PI + band) - (col.angle + half)) * radius;
-      if (Math.max(gapLeft, gapRight) < config.CAVE_PATH_MIN_GAP) {
+      const gapLeft = (col.angle - half) - (Math.PI - band);
+      const gapRight = Math.PI + band - (col.angle + half);
+      if (Math.max(gapLeft, gapRight) * radius < config.CAVE_PATH_MIN_GAP) {
+        // Slide the column out of the band far enough that the wider side
+        // keeps the minimum gap, whatever the column's own width is.
         col.angle =
-          gapLeft >= gapRight ? Math.PI + band - 0.28 : Math.PI - band + 0.28;
+          gapLeft >= gapRight
+            ? Math.PI - band + gapArc + half
+            : Math.PI + band - gapArc - half;
       }
     }
 

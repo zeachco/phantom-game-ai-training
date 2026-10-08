@@ -372,6 +372,19 @@ export class Cave {
    *  demand and trimmed with the meshed window like the floor profiles */
   #featureCells = new Map<number, FeatureCell>();
 
+  /** the depth factor, public for the HUD and the tests */
+  public depthAt(s: number) {
+    return this.#depth(s);
+  }
+
+  /** 0 at the mouth, growing to 1 over CAVE_DEPTH_RAMP: the feature
+   *  variation compounds with depth, so deep sections are wilder than the
+   *  first ones a ball ever sees */
+  #depth(s: number) {
+    const t = (s - config.SPAWN_OFFSET) / config.CAVE_DEPTH_RAMP;
+    return Math.max(0, Math.min(1, t));
+  }
+
   /** cached feature cell, exposed for the path check and debug tooling */
   featureCell(index: number): FeatureCell {
     return this.#featureCell(index);
@@ -386,33 +399,41 @@ export class Cave {
     const rng = mulberry32(this.#hash(index * 7 + 11) || 1);
     const center = index * config.CAVE_FEATURE_CELL;
     const featureS = center + 70 + rng() * 140;
+    // Depth scales the drawn features but never adds draws, so every seed
+    // keeps the same feature layout and only its intensity grows
+    const depth = this.#depth(center);
+    const grow = 1 + config.CAVE_DEPTH_HEIGHT * depth;
+    const widen = 1 + config.CAVE_DEPTH_CHANCE * depth;
 
     const columns: FeatureCell['columns'] = [];
-    if (rng() < config.CAVE_COLUMN_CHANCE) {
-      const count = rng() < 0.45 ? 1 : 2;
+    if (rng() < config.CAVE_COLUMN_CHANCE * widen) {
+      // deeper cells pair their columns more often, and grow them taller
+      const count = rng() < 0.45 - 0.3 * depth ? 1 : 2;
       for (let k = 0; k < count; k++) {
         const spread = count === 1 ? 0 : (k - 0.5) * (24 + rng() * 70);
         columns.push({
           centerS: featureS + spread,
-          halfLen: 20 + rng() * 18,
+          halfLen: (20 + rng() * 18) * grow,
           // In-band columns sit off the center line (never dead ahead) so a
           // car holding the line weaves past them; the rest grow on banks.
           angle:
-            rng() < config.CAVE_COLUMN_IN_BAND_CHANCE
+            rng() < config.CAVE_COLUMN_IN_BAND_CHANCE + 0.15 * depth
               ? Math.PI +
                 (rng() < 0.5 ? -1 : 1) * (0.12 + rng() * 0.13)
               : Math.PI + (rng() < 0.5 ? -1 : 1) * (0.5 + rng() * 0.55),
-          angleWidth: 0.13 + rng() * 0.12,
+          angleWidth: (0.13 + rng() * 0.12) * (1 + 0.3 * depth),
           height:
-            config.CAVE_COLUMN_MIN +
-            rng() * (config.CAVE_COLUMN_MAX - config.CAVE_COLUMN_MIN),
-          full: rng() < config.CAVE_COLUMN_FULL_HEIGHT_CHANCE,
+            (config.CAVE_COLUMN_MIN +
+              rng() * (config.CAVE_COLUMN_MAX - config.CAVE_COLUMN_MIN)) *
+            grow,
+          full: rng() < config.CAVE_COLUMN_FULL_HEIGHT_CHANCE + 0.15 * depth,
         });
       }
     }
 
     let road: FeatureCell['road'] = null;
-    if (rng() < config.CAVE_ROAD_CHANCE) {
+    // the easy lane fades out with depth: deeper stretches earn their ground
+    if (rng() < config.CAVE_ROAD_CHANCE * (1 - 0.35 * depth)) {
       road = {
         centerS: center + 40 + rng() * (config.CAVE_FEATURE_CELL - 80),
         halfLen: (config.CAVE_ROAD_LENGTH / 2) * (0.7 + 0.3 * rng()),
@@ -439,6 +460,8 @@ export class Cave {
     if (columns.length > 0)
       volatility = Math.max(volatility, 0.55 + 0.45 * rng());
     if (road) volatility *= 0.55;
+    // deeper stretches are rougher on top of whatever the draw said
+    volatility = Math.min(1.6, volatility * (1 + 0.4 * depth));
 
     // A single jump ramp, placed just before the volatile stretch and more
     // probable the rougher that stretch is.
@@ -452,15 +475,18 @@ export class Cave {
         ),
         halfLen: config.CAVE_RAMP_LENGTH / 2,
         angle: Math.PI + (rng() - 0.5) * 0.5,
-        angleWidth: 0.32 + rng() * 0.3,
-        height: config.CAVE_RAMP_HEIGHT * (0.6 + 0.4 * rng()),
+        angleWidth: (0.32 + rng() * 0.3) * (1 + 0.3 * depth),
+        height: config.CAVE_RAMP_HEIGHT * (0.6 + 0.4 * rng()) * grow,
       };
     }
 
     // A vertical wall spanning the band, placed last so it consumes fresh
     // RNG draws and leaves every other feature on the cave untouched.
     let wall: FeatureCell['wall'] = null;
-    if (rng() < config.CAVE_WALL_CHANCE) {
+    // Walls only exist once the cave has some depth: the opening stays an
+    // easy runway, and the obstacles compound with everything else. The gate
+    // is checked before the draw, so no other feature's RNG shifts.
+    if (depth >= 0.15 && rng() < config.CAVE_WALL_CHANCE * widen) {
       const fraction =
         config.CAVE_WALL_MIN_FRACTION +
         rng() * (config.CAVE_WALL_MAX_FRACTION - config.CAVE_WALL_MIN_FRACTION);
@@ -473,8 +499,9 @@ export class Cave {
         angle: Math.PI,
         angleWidth: config.CAVE_WALL_ANGLE,
         height:
-          config.CAVE_WALL_MIN +
-          rng() * (config.CAVE_WALL_MAX - config.CAVE_WALL_MIN),
+          (config.CAVE_WALL_MIN +
+            rng() * (config.CAVE_WALL_MAX - config.CAVE_WALL_MIN)) *
+          grow,
       };
     }
 

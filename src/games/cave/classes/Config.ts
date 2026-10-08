@@ -193,6 +193,13 @@ class Config {
   /** distance over which the initially smooth cave grows into its full
    *  bumpy/obstacle-filled terrain */
   public CAVE_TERRAIN_RAMP = 1400;
+  /** arc distance over which the feature variation then keeps compounding:
+   *  0 at the mouth, 1 here, so deeper sections are wilder than the mouth */
+  public CAVE_DEPTH_RAMP = 2600;
+  /** how much taller columns, walls and ramps grow at full depth */
+  public CAVE_DEPTH_HEIGHT = 0.5;
+  /** how much more likely (and wider) the hard features are at full depth */
+  public CAVE_DEPTH_CHANCE = 0.8;
   /** distance between deterministic terrain feature cells */
   public CAVE_FEATURE_CELL = 280;
   /** probability that a feature cell grows rock columns off the floor */

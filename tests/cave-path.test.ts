@@ -114,3 +114,33 @@ test('walls span a fraction of their section and stop a rolling ball', () => {
     expect(ball.s).toBeLessThanOrEqual(front + 1);
   }
 });
+
+test('variation compounds with depth: deeper cells are wilder', () => {
+  const shallow = { volatility: 0, cells: 0, features: 0 };
+  const deep = { volatility: 0, cells: 0, features: 0 };
+  for (const seed of [3, 11, 42, 77]) {
+    const terrain = cave(seed);
+    expect(terrain.depthAt(config.SPAWN_OFFSET)).toBe(0);
+    expect(
+      terrain.depthAt(config.SPAWN_OFFSET + config.CAVE_DEPTH_RAMP),
+    ).toBe(1);
+    for (let i = 1; i <= 5; i++) {
+      const cell = terrain.featureCell(i);
+      shallow.volatility += cell.volatility;
+      shallow.cells++;
+      shallow.features += cell.columns.length + (cell.wall ? 1 : 0);
+    }
+    for (let i = 30; i <= 70; i++) {
+      const cell = terrain.featureCell(i);
+      deep.volatility += cell.volatility;
+      deep.cells++;
+      deep.features += cell.columns.length + (cell.wall ? 1 : 0);
+    }
+  }
+  expect(deep.volatility / deep.cells).toBeGreaterThan(
+    shallow.volatility / shallow.cells,
+  );
+  expect(deep.features / deep.cells).toBeGreaterThanOrEqual(
+    (shallow.features / shallow.cells) * 0.8,
+  );
+});

@@ -60,6 +60,22 @@ Key knobs: `BALL_MAX_SPEED 6` (a boost item is the only way past it),
 `BALL_WALL_SCRUB 0.85`, `BALL_CRASH_SPEED 8` (below the unboosted cap, so
 only a near head-on full-speed hit kills).
 
+## Depth: variation compounds as you go deeper
+
+Feature cells are drawn once per seed, then scaled by a depth factor
+(`Cave.depthAt(s)`: 0 at the mouth, 1 over `CAVE_DEPTH_RAMP = 2600`). Depth
+never adds RNG draws, so every seed keeps the same feature layout and only
+its intensity grows:
+
+- columns and walls get taller (`CAVE_DEPTH_HEIGHT`), wider, and more likely
+  (`CAVE_DEPTH_CHANCE`); columns pair up more often and more of them land
+  inside the driving band;
+- the easy road lane fades out (`CAVE_ROAD_CHANCE * (1 - 0.35 * depth)`);
+- volatility is multiplied by `1 + 0.4 * depth` (capped 1.6), which in turn
+  raises the jump-ramp odds and the path check's forced ramps;
+- walls do not exist at all below `depth 0.15`, so the mouth stays an easy
+  runway and the obstacles arrive with the rest of the compounding.
+
 ## Walls: vertical band obstacles
 
 Each feature cell can carry a vertical wall across the driving band:
