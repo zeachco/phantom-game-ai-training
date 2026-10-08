@@ -58,7 +58,7 @@ class Config {
   public DEAD_LIFETIME = 3000;
   /** a car under this speed (u/f) is stalling; SECTION_BUDGET_FRAMES of that
    *  in a row kills it */
-  public CAR_STALL_SPEED = 0.8;
+  public BALL_STALL_SPEED = 0.8;
   /** score lost when a car dies of a stall; steeper than the worst wall hit
    *  so idling is never the cheaper way out */
   public STALL_PENALTY = 9;
@@ -111,118 +111,44 @@ class Config {
   /** march step of the analytic ray test, smaller = tighter hit distance */
   public RAY_STEP = 2.5;
 
-  // car, an emulated rigid body: one body with four raycast wheel contacts
+  // ball, Monkey Ball style: a sphere that rolls through the tube. The stick
+  // accelerates it in the camera/track plane, gravity and the walls do the
+  // rest.
   /** top speed in u/f */
-  public CAR_MAX_SPEED = 7;
-  /** Shared chassis dimensions for collision, inertia, rendering and camera framing. */
-  public CAR_WIDTH = 6.4;
-  public CAR_HEIGHT = 2.2;
-  public CAR_LENGTH = 8.5;
+  public BALL_MAX_SPEED = 9;
+  /** sphere radius: collision, rendering and camera framing all read it */
+  public BALL_RADIUS = 1.4;
   /** world down acceleration per frame^2 */
-  public CAR_GRAVITY = 0.12;
+  public BALL_GRAVITY = 0.12;
   public PHYSICS_SUBSTEPS = 4;
-  public CAR_WHEEL_RADIUS = 1.1;
-  /** Suspension mounts: local X right, Y up, negative Z forward. */
-  public WHEEL_OFFSETS: [number, number, number][] = [
-    [-(this.CAR_WIDTH / 2 + 0.2), -0.6, -3.1],
-    [this.CAR_WIDTH / 2 + 0.2, -0.6, -3.1],
-    [-(this.CAR_WIDTH / 2 + 0.2), -0.6, 3.1],
-    [this.CAR_WIDTH / 2 + 0.2, -0.6, 3.1],
-  ];
-  public SUSP_REST = 2.3;
-  public SUSP_TRAVEL = 2.2;
-  /** Per-wheel spring and damper, unit chassis mass, frame-based units. */
-  public SUSP_SPRING = 0.09;
-  public SUSP_DAMP = 0.45;
-  public TIRE_FRICTION = 2.8;
-  /** Effective tire force height below the center of mass, an arcade roll assist. */
-  public TIRE_ROLL_CENTER = 0.6;
-  /** Anti-roll bar coupling within an axle, as a fraction of the suspension
-   *  spring. Transfers load toward the compressed wheel to resist body roll;
-   *  the paired forces cancel, so only a restoring roll torque remains. */
-  public CAR_ANTI_ROLL = 0.25;
-  /** Anti-pitch coupling between the front and rear axle pairs, same units.
-   *  Settles the nose after a jump instead of letting it oscillate. */
-  public CAR_ANTI_PITCH = 0.2;
-  /** Airborne attitude assist: target pitch/roll rate (rad/frame) per unit of
-   *  forward/right vertical error, pulling the car level before it lands. */
-  public CAR_AIR_LEVEL_GAIN = 0.06;
-  /** Cap on the air assist's target rate, rad/frame. */
-  public CAR_AIR_LEVEL_RATE = 0.05;
-  /** Fraction of the gap to the target rate the air assist closes per frame. */
-  public CAR_AIR_LEVEL_RESPONSE = 0.15;
-  /** Airborne frames before the leveling assist engages, so short hops over
-   *  bumps still let the car follow the ground instead of fighting it. */
-  public CAR_AIR_LEVEL_DELAY = 6;
-  /** Target yaw rate (rad/frame) applied in the air at full steer:
-   *  Mario Kart style, steering keeps working mid-jump with reduced
-   *  authority. */
-  public CAR_AIR_STEER_TORQUE = 0.02;
-  /** Normal angular damping per frame, the mild arcade assist. */
-  public CAR_SPIN_DAMP = 0.94;
-  /** Pitch/roll damping per frame on the frame of touchdown, fading back to
-   *  CAR_SPIN_DAMP over CAR_LANDING_DAMP_FRAMES. Lower = more planted. */
-  public CAR_LANDING_SPIN_DAMP = 0.7;
-  /** Frames over which the landing damping fades out. */
-  public CAR_LANDING_DAMP_FRAMES = 10;
-  /** Fraction of the impact velocity absorbed along the first wheel normal
-   *  on a landing: hard landings squat the car instead of bouncing it. */
-  public CAR_LANDING_VEL_ABSORB = 0.85;
-  /** Forward acceleration builds over two seconds of held throttle. */
-  public CAR_ENGINE_START = 0.025;
-  public CAR_ENGINE = 0.1;
-  public CAR_ENGINE_BUILD_FRAMES = 120;
-  /** Rolling resistance per wheel, proportional to its suspension load. */
-  public WHEEL_ROLLING_RESISTANCE = 0.1;
-  /** braking before the reverse drive kicks in */
-  public CAR_BRAKE_DECEL = 0.2;
-  /** reverse driving acceleration, the cap stays maxSpeed/2 */
-  public CAR_REVERSE_ACCEL = 0.06;
-  /** Lateral slip response per frame at mid speed, divided between four
-   *  tires and limited by each wheel's available traction: grippy, not
-   *  drifty. */
-  public CAR_GRIP = 0.9;
-  /** Grip relaxes toward top speed so the car goes straight when it should
-   *  go straight. */
-  public CAR_GRIP_AT_TOP = 0.75;
-  /** max steering angle of the front wheels in rad at full steer */
-  public CAR_STEER_MAX = 0.45;
-  /** Lateral force cap per wheel, in load fractions: lower than the tire
-   *  friction circle, so a too-tight turn understeers (slides its nose
-   *  wide) instead of lifting the inner wheels and rolling the car over. */
-  public CAR_LATERAL_FRICTION = 1.2;
-  /** normal impact speed (u/f) at which a wall hit kills the car */
-  public CAR_CRASH_SPEED = 5.5;
-  /** fraction of the normal velocity kept after a wall bounce */
-  public CAR_RESTITUTION = 0.05;
-  /** acceleration (u/f^2) of a boost pad while its timer runs */
-  public BOOST_ACCEL = 0.3;
+  /** stick-directed acceleration (u/f^2) at full deflection */
+  public BALL_ACCEL = 0.17;
+  /** velocity retained per frame while the ball rolls on a surface: very
+   *  slippery, so a Monkey Ball keeps gliding instead of stopping dead */
+  public BALL_ROLL_DRAG = 0.995;
+  /** velocity retained per frame while the ball is off the ground */
+  public BALL_AIR_DRAG = 0.9995;
+  /** fraction of the normal velocity kept on a wall bounce */
+  public BALL_RESTITUTION = 0.42;
+  /** impacts slower than this do not bounce; resting contacts just settle */
+  public BALL_BOUNCE_SPEED = 1.5;
+  /** tangential velocity retained on a hard wall hit */
+  public BALL_WALL_SCRUB = 0.85;
+  /** spin retained per frame by the visual roll when the ball is airborne */
+  public BALL_SPIN_DAMP = 0.98;
+  /** normal impact speed (u/f) at which a wall hit kills the ball. Below the
+   *  unboosted top speed: only a near head-on full-speed hit is fatal */
+  public BALL_CRASH_SPEED = 8;
+  /** acceleration (u/f^2) of a boost while its timer runs */
+  public BOOST_ACCEL = 0.32;
   /** extra top speed while a boost is active, fading linearly to zero over
    *  BOOST_DURATION */
-  public BOOST_SPEED_BONUS = 3;
-  /** frames a boost lasts after (re)triggering; overlapping pads refresh
+  public BOOST_SPEED_BONUS = 4;
+  /** frames a boost lasts after (re)triggering; overlapping items refresh
    *  the timer, they never stack */
   public BOOST_DURATION = 90;
-  /** score bonus for triggering a boost pad, small next to GATE_SCORE */
+  /** score bonus for collecting a boost item, small next to GATE_SCORE */
   public BOOST_SCORE = 2;
-  /** Body-up (uy) below this means the car is past the flip point,
-   *  roof-down. Above it the car is still in control: no auto-righting
-   *  interference, the driver/AI can tilt and recover on its own. */
-  public CAR_INVERT_THRESHOLD = -0.5;
-  /** Speed (u/f) above which an inverted car starts flipping back; below it
-   *  the car rests on its roof and is left to drag, stall or be pushed off. */
-  public CAR_SELF_RIGHT_SPEED = 3.5;
-  /** Substeps of the scripted flip-back (180 substeps = 45 frames = 0.75s):
-   *  a car that flipped while moving fast rotates back onto its wheels over
-   *  this many substeps, imposed as an arcade moment. */
-  public CAR_SELF_RIGHT_SUBSTEPS = 180;
-  /** Drag on a roof-down chassis: body velocity fraction removed per
-   *  substep while the roof touches. Grippier than the wheels: the car
-   *  slides to a stop, it does not skid. */
-  public ROOF_FRICTION = 0.2;
-  /** Pitch/roll angular damping per substep while the roof touches: an
-   *  upside-down car settles onto its roof instead of spinning. */
-  public ROOF_SPIN_DAMP = 0.9;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */
@@ -298,8 +224,12 @@ class Config {
    *  the jump platform deck and the boost pads */
   public CAVE_PLATFORM_COLOR: [number, number, number] = [0.25, 0.9, 1.0];
   public CAVE_BOOST_COLOR: [number, number, number] = [1.0, 0.85, 0.25];
+  /** glowing boost items float this far above their floor pad; the ball
+   *  collects the boost by rolling through the pad underneath */
+  public CAVE_BOOST_ITEM_RADIUS = 2.2;
+  public CAVE_BOOST_ITEM_COLOR = '#ffe27a';
   /** clearance from the cave floor to a car's body center at spawn */
-  public CAVE_GROUND_CLEARANCE = 3.5;
+  public CAVE_GROUND_CLEARANCE = 2.2;
   /** max turn (rad) of the centerline per segment at difficulty 1 */
   public CAVE_TURN_BASE = 0.1;
   public CAVE_TURN_GROWTH = 0.22;

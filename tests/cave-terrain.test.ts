@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Scene } from 'three';
-import { Car } from '../src/games/cave/classes/Car';
+import { Ball } from '../src/games/cave/classes/Ball';
 import { Cave } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 
@@ -67,54 +67,53 @@ test('ramp profiles agree at chunk seams and do not depend on query order', () =
   );
 });
 
-/** a car that pursues a point ahead on the centerline: the reference line
- *  a sane driver (or a trained brain) should be able to hold */
-function driveLine(terrain: Cave, car: Car, frames: number) {
-  const aim = { x: 0, y: 0, z: 0 };
+/** a ball that pursues a point on the floor ahead: the reference line a sane
+ *  player (or a trained brain) should be able to hold */
+function driveLine(terrain: Cave, ball: Ball, frames: number) {
   for (let frame = 0; frame < frames; frame++) {
-    terrain.centerAt(car.s + 40 + car.speed * 15, aim);
-    const dx = aim.x - car.x;
-    const dy = aim.y - car.y;
-    const dz = aim.z - car.z;
-    const crossX = car.fy * dz - car.fz * dy;
-    const crossY = car.fz * dx - car.fx * dz;
-    const crossZ = car.fx * dy - car.fy * dx;
-    const around = crossX * car.ux + crossY * car.uy + crossZ * car.uz;
-    const dot = car.fx * dx + car.fy * dy + car.fz * dz;
+    const goal = terrain.groundSpawn(ball.s + 40 + ball.speed * 15, 0);
+    const dx = goal.x - ball.x;
+    const dy = goal.y - ball.y;
+    const dz = goal.z - ball.z;
+    const crossX = ball.fy * dz - ball.fz * dy;
+    const crossY = ball.fz * dx - ball.fx * dz;
+    const crossZ = ball.fx * dy - ball.fy * dx;
+    const around = crossX * ball.ux + crossY * ball.uy + crossZ * ball.uz;
+    const dot = ball.fx * dx + ball.fy * dy + ball.fz * dz;
     const angle = Math.atan2(around, dot);
-    car.controls.left = Math.max(0, Math.min(1, angle * 2));
-    car.controls.right = Math.max(0, Math.min(1, -angle * 2));
-    car.update(terrain);
+    ball.controls.moveY = 1;
+    ball.controls.moveX = Math.max(-1, Math.min(1, -angle * 2));
+    ball.update(terrain);
   }
 }
 
-test('a car that follows the track line drives the opening without getting stuck', () => {
+test('a ball that follows the track line rolls the opening without getting stuck', () => {
   const terrain = cave(2);
-  const car = new Car(terrain.getSpawn());
-  driveLine(terrain, car, 300);
-  expect(car.damaged).toBe(false);
-  expect(car.s).toBeGreaterThan(900);
-  expect(car.nextGate).toBeGreaterThanOrEqual(1);
-  expect(car.speed).toBeGreaterThan(1);
+  const ball = new Ball(terrain.getSpawn());
+  driveLine(terrain, ball, 300);
+  expect(ball.damaged).toBe(false);
+  expect(ball.s).toBeGreaterThan(900);
+  expect(ball.nextGate).toBeGreaterThanOrEqual(1);
+  expect(ball.speed).toBeGreaterThan(1);
 });
 
-test('a car that follows the track line can pull away on the hills around gate 6', () => {
+test('a ball that follows the track line can pull away on the hills around gate 6', () => {
   const terrain = cave(25);
   for (const start of [3000, 3200, 3400, 3600]) {
-    const car = new Car(terrain.groundSpawn(start));
-    driveLine(terrain, car, 180);
-    expect(car.damaged).toBe(false);
-    expect(car.s - start).toBeGreaterThan(100);
-    expect(car.speed).toBeGreaterThan(0.8);
+    const ball = new Ball(terrain.groundSpawn(start));
+    driveLine(terrain, ball, 180);
+    expect(ball.damaged).toBe(false);
+    expect(ball.s - start).toBeGreaterThan(100);
+    expect(ball.speed).toBeGreaterThan(0.8);
   }
 });
 
-test('a straight-driving car still survives the opening (bank flips recover)', () => {
+test('a straight-driving ball still survives the opening', () => {
   const terrain = cave(2);
-  const car = new Car(terrain.getSpawn());
-  for (let frame = 0; frame < 300; frame++) car.update(terrain);
-  expect(car.damaged).toBe(false);
-  expect(car.s).toBeGreaterThan(400);
+  const ball = new Ball(terrain.getSpawn());
+  for (let frame = 0; frame < 300; frame++) ball.update(terrain);
+  expect(ball.damaged).toBe(false);
+  expect(ball.s).toBeGreaterThan(400);
 });
 
 test('the driving band is flat while the sides stay rough', () => {
@@ -151,4 +150,10 @@ test('the driving band is flat while the sides stay rough', () => {
     wall /= 210;
     expect(wall).toBeGreaterThan(4);
   }
+});
+
+test('streams glowing boost items over the boost pads', () => {
+  const terrain = cave(2);
+  terrain.update(0, 240 * 4);
+  expect(terrain.boostItemCount()).toBeGreaterThan(0);
 });

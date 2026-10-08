@@ -1,83 +1,113 @@
-# Cave arcade driving (Mario Kart / Track Mania feel)
+# Cave arcade driving (Monkey Ball style)
 
-Status: implemented through phases 1-4 (commits 639d987, e84fff2, 9ba98d4,
-b4cdd3f). 28/28 tests green (`bun test`). Phase 5 is the human playtest
-tuning pass - every number below is a `Config.ts` knob, listed with its role
-so tuning is a lookup, not an archaeology dig.
+Status: ball physics implemented. 19/19 tests green (`bun test`). Every number
+below is a `Config.ts` knob, listed with its role so tuning is a lookup, not an
+archaeology dig.
 
-## The three ideas
+## The shape of the game
 
-1. **The map is a track, not a terrain.** The cave floor is a flat driving
-   band (`CAVE_BAND_HALF_WIDTH = 0.36` rad, ~64 u wide) with the bumpy rock
-   skin removed and the long wave breathing damped to a sliver
-   (`CAVE_BAND_WAVE_DAMP = 0.85` keeps 15%). Outside the band the floor
-   rises quadratically into steep banks (`CAVE_BANK_RISE = 30`), and the
-   wave breathing ramps back over the bank span, so the shoulder between
-   plateau and wall is rideable, not a step.
-2. **The car absorbs the terrain.** Soft long suspension
-   (`SUSP_SPRING 0.09 / SUSP_DAMP 0.45 / SUSP_TRAVEL 2.2 / SUSP_REST 2.3`)
-   whose pre-contact zone glues the wheels to the band; landings are
-   absorbed (`CAR_LANDING_VEL_ABSORB = 0.85` squats, never bounces); floor
-   descents are capped (`CAVE_FLOOR_MAX_DROP = 0.3`) like climbs, so lips
-   launch fast cars and never nosedive slow ones.
-3. **Mistakes are recoverable.** A too-tight turn understeers instead of
-   rolling over (`CAR_LATERAL_FRICTION = 1.2` caps the lateral force below
-   the friction circle). A car that flips while fast performs a scripted
-   flip back; a slow one rests on its roof, dragged and unpowered, and the
-   liveness timer decides.
+The `2026-10-08` pass replaced the four-wheel raycast chassis (and the whole
+car class) with a single rolling sphere, the Monkey Ball model:
 
-## Inverted car (the spec, implemented)
+- The cave is a tube. The ball is a point of radius `BALL_RADIUS` that is
+  resolved against the same analytic surface the mesh renders
+  (`Cave.nearestRadial`), so what the ball hits is exactly what is drawn.
+- Gravity (`BALL_GRAVITY`) pulls it down the slopes; it settles on the floor
+  band and rolls. There is no suspension, no engine and no tire model.
+- Motion is slippery on purpose: `BALL_ROLL_DRAG = 0.995` per frame keeps the
+  ball gliding instead of stopping dead.
+- Orientation is purely visual. `Ball.quat` spins by `omega = (n x v) / r`
+  (`n` the inward contact normal), so the sphere reads as rolling. Physics
+  never reads the quaternion.
 
-- `CAR_INVERT_THRESHOLD = -0.5`: past 120° of tilt the car is out of
-  control. Before that it is in control and nothing interferes - the
-  driver/AI can tilt and recover on their own.
-- Inverted: the roof drags (`ROOF_FRICTION = 0.2`, stronger than the
-  wheels' slide) and spin is killed (`ROOF_SPIN_DAMP = 0.9`). No
-  propulsion (the existing `uprightTraction` gate).
-- `CAR_SELF_RIGHT_SPEED = 3.5`: a car that crossed the threshold while
-  moving faster than this performs a scripted flip back over
-  `CAR_SELF_RIGHT_SUBSTEPS = 180` substeps (0.75 s) about the shortest-arc
-  axis - a roll flip rights about the forward axis, a pitch flip about the
-  lateral one. A slower car rests on its roof.
+## Controls: two analog axes
 
-## Features on the band
+`Controls` has exactly two outputs, `moveX` (right) and `moveY` (forward),
+both in `[-1, 1]` - a GameCube stick.
 
-- **Jump platforms** = the volatility-driven ramp, now a band-wide
-  plateaued deck (`#plateauAcross`: flat over the whole band, falls away
-  into the banks) with a flat lip and a smooth back slope
-  (`height / 0.35` u, ~10°). Tinted cyan (`CAVE_PLATFORM_COLOR`).
-  The launch comes from leaving the lip at speed, not from a sharp edge.
-- **Boost pads** (`CAVE_BOOST_CHANCE = 0.5` per cell): amber patches
-  (`CAVE_BOOST_COLOR`). Triggering sets `BOOST_DURATION = 90` frames of
-  `BOOST_ACCEL = 0.3` push along the cave tangent, capped at the lifted
-  top speed `CAR_MAX_SPEED + BOOST_SPEED_BONUS = 3` (fading linearly) -
-  a burst to ~10 u/f, never a rocket. Pads refresh the timer, never stack.
-- **Columns** (`CAVE_COLUMN_CHANCE = 0.6`): half are full-height
-  (`CAVE_COLUMN_FULL_HEIGHT_CHANCE`, floor-to-wall, unjumpable), some grow
-  inside the band but never on its center
-  (`CAVE_COLUMN_IN_BAND_CHANCE`, offset 0.12-0.25 rad) to force weaving.
-- **PathCheck** (`src/games/cave/classes/PathCheck.ts`, runs at
-  construction): in-band columns must leave `CAVE_PATH_MIN_GAP = 9` u of
-  passage on one side; volatile stretches with columns always get a launch
-  ramp; every ramp keeps a clear landing zone. An impossible map cannot be
-  generated.
+- Human: WASD / arrows contribute +/-1 per axis; opposite keys cancel; the
+  left stick (axes 0 and 1) drives with a deadzone. The two sources sum and
+  clamp.
+- AI: the brain writes `moveX`/`moveY` directly, so the network has two output
+  channels (`Object.keys(controls)` derives the count).
+- The stick vector is normalized in `Ball.#move`, so diagonals are not faster
+  than the axes.
+- `moveY` is forward along the track, `moveX` is the camera-right direction:
+  `right = forward x worldUp`, where forward is the horizontal part of the cave
+  tangent (falling back to the velocity when the tangent is near vertical).
+
+## Ball physics (`Ball.ts`)
+
+Per frame, `PHYSICS_SUBSTEPS` substeps of:
+
+1. `#refreshFrame`: tangent (forward), tube normal (up) and binormal (right)
+   from `Cave.frame`. The sensor fan lives in this plane.
+2. Gravity plus `BALL_ACCEL` along the stick direction.
+3. A running boost pushes along the cave tangent up to the lifted cap.
+4. Speed cap, integration, and `s` advance along the tangent.
+5. `Cave.nearestRadial` contact: push out by `radius + hit.dist`, then split
+   the normal velocity. Slow contacts settle (`BALL_BOUNCE_SPEED`), hard ones
+   bounce (`BALL_RESTITUTION`) and scrub tangential speed
+   (`BALL_WALL_SCRUB`). A near head-on hit above `BALL_CRASH_SPEED` is fatal.
+6. Rolling drag, then the visual roll.
+
+Key knobs: `BALL_MAX_SPEED 9`, `BALL_RADIUS 1.4`, `BALL_ACCEL 0.17`,
+`BALL_GRAVITY 0.12`, `BALL_RESTITUTION 0.42`, `BALL_WALL_SCRUB 0.85`,
+`BALL_CRASH_SPEED 8` (below the unboosted cap, so only a near head-on
+full-speed hit kills).
+
+## Boost items
+
+Boost pads are the trigger and the glowing items are their face:
+
+- `Cave.boostAt(s, a)` still defines the pad influence. Rolling over it starts
+  `BOOST_DURATION = 90` frames of `BOOST_ACCEL = 0.32` along the tangent, which
+  lifts the top speed by `BOOST_SPEED_BONUS = 4` fading linearly over the
+  timer. Overlapping items refresh, never stack. The first AI collection pays
+  `BOOST_SCORE = 2`.
+- `Cave.#buildChunk` floats a spinning `IcosahedronGeometry` orb
+  (`CAVE_BOOST_ITEM_RADIUS`, `CAVE_BOOST_ITEM_COLOR`) above each pad, streamed
+  and disposed with its chunk. `Cave.update` spins the orbs. `boostItemCount()`
+  reports how many are meshed.
+
+## Gates, score and liveness
+
+Unchanged from the car version and ported into `Ball`:
+
+- Gates are rings across the tube at `GATE_SPACING`; crossing them in order
+  pays `GATE_SCORE`, a speed bonus, and `FINISH_BONUS` on the last one.
+  Out-of-order entries pay `WRONG_GATE_PENALTY`.
+- Forward section progress resets `SECTION_BUDGET_FRAMES`; no progress, or
+  staying under `BALL_STALL_SPEED` for the same budget, retires the ball.
 
 ## Brain inputs
 
-The 19-ray fan is unchanged; the brain reads 11 scalars after it (rays ×2
-history, 4 wheel compressions, speed, velocity delta, gate delta, then):
-airborne, inverted, on-platform, on-boost, platform-ahead, boost-ahead,
-column-proximity, column-side. Boost pads pay `BOOST_SCORE = 2` on a fresh
-trigger. `CAVE_DIFFICULTY` (0..1, default 1) multiplies the seed-derived
-difficulty so training can anneal from easy caves.
+The 19-ray fan runs in the track plane (forward/right from the cave frame)
+plus one ray up and one down the tube normal. After the rays x2 history:
 
-## Playtest checklist (phase 5 - tune these, in this order)
+1. normalized speed
+2. forward velocity component
+3. lateral velocity component
+4. grounded (1/0)
 
-1. Band cruise: body height steady, no slide, steering rotates on command.
-2. Ramp launch at full speed: a long clean arc, steerable mid-air, soft
-   landing with squat. Same ramp at walking speed: rolls over the lip.
-3. Bank excursion at speed: jumps the edge or slides back; never traps.
-4. Full-speed flip: dramatic roof slide, scripted flip back, resume.
-5. Boost pad: a visible punch to ~10 u/f that fades in ~1.5 s.
-6. Weave section (in-band columns): one clear gap, always passable.
-7. If anything feels off: `Config.ts` is the only file to touch.
+then the feature block: airborne, on-platform, on-boost, platform-ahead,
+boost-ahead, column-proximity, column-side, gate-delta. Outputs: `moveX`,
+`moveY`.
+
+## Files
+
+- `classes/Ball.ts` - sphere physics, gates, score, brain wiring.
+- `classes/Controls.ts` - two-axis stick (keyboard + gamepad + AI).
+- `classes/Cave.ts` - tube geometry, gates, boost pads and boost-item orbs.
+- `classes/ChaseCamera.ts` - follows the ball, frames `BALL_RADIUS`.
+- `classes/Sensor.ts` - the analytic ray fan.
+- `main.ts` - rendering, HUD, stick display.
+
+## Playtest checklist
+
+1. Roll from spawn: the ball settles on the band and accelerates smoothly.
+2. Stick right: moves camera-right; stick back: brakes then reverses.
+3. Boost item: a visible punch past `BALL_MAX_SPEED`, fading in ~1.5 s.
+4. Bounce off a bank at speed: springs back, not a dead stop.
+5. Weave section: one clear gap, always passable.
+6. If anything feels off: `Config.ts` is the only file to touch.

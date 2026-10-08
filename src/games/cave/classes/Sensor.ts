@@ -1,17 +1,17 @@
 import { lerp } from '../../../utilities/math';
-import type { Car } from './Car';
+import type { Ball } from './Ball';
 import type { Cave } from './Cave';
 import { config } from './Config';
 
 /**
- * The car's eyes: a fan of SENSORS rays in the car's forward plane (longest
- * straight ahead, tapering to the edges, exactly like the circuit) plus one
- * ray straight up and one straight down for the ceiling and the floor. The
- * rays are marched against the analytic cave tube, not the mesh, so a
- * reading costs a handful of trig calls instead of thousands of triangles.
+ * The ball's eyes: a fan of SENSORS rays in the track plane (longest straight
+ * ahead, tapering to the edges) plus one ray straight up and one straight down
+ * for the ceiling and the floor. The rays are marched against the analytic
+ * cave tube, not the mesh, so a reading costs a handful of trig calls instead
+ * of thousands of triangles.
  */
 export class Sensor {
-  car: Car;
+  ball: Ball;
   /** SENSORS fan rays + up + down */
   rayCount: number;
   /** one 0..1 reading per ray, 0 when nothing is hit within reach */
@@ -22,8 +22,8 @@ export class Sensor {
   /** each fan ray's reach, a smooth profile over the fan angle */
   #lengths: number[] = [];
 
-  constructor(car: Car) {
-    this.car = car;
+  constructor(ball: Ball) {
+    this.ball = ball;
     this.rayCount = config.SENSORS + 2;
     this.readings = new Array(this.rayCount);
     const halfAngle = config.SENSOR_ANGLE / 2;
@@ -47,7 +47,7 @@ export class Sensor {
   }
 
   update(cave: Cave) {
-    const car = this.car;
+    const car = this.ball;
     // fan ray direction: forward cos(off) + right sin(off), in the car's plane
     for (let i = 0; i < config.SENSORS; i++) {
       const dx = car.fx * this.#cosOff[i] + car.rx * this.#sinOff[i];
@@ -97,7 +97,7 @@ export class Sensor {
     dz: number,
     length: number,
   ) {
-    const car = this.car;
+    const car = this.ball;
     const t = cave.castRay(
       ox,
       oy,

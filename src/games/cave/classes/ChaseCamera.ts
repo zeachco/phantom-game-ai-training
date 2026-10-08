@@ -1,14 +1,13 @@
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
-import type { Car } from './Car';
-import { config } from './Config';
+import type { Ball } from './Ball';
 import type { Cave, RadialHit } from './Cave';
 
-/** Follow the chassis itself. Smooth the orbit, never lag behind its position. */
+/** Follow the ball itself. Smooth the orbit, never lag behind its position. */
 export class ChaseCamera {
   private heading = new Vector3(0, 0, -1);
   private target = new Vector3();
   private offset = new Vector3();
-  private previousCar?: Car;
+  private previousBall?: Ball;
   private previousPosition = new Vector3();
   private hit: RadialHit = {
     s: 0,
@@ -22,16 +21,16 @@ export class ChaseCamera {
     hz: 0,
   };
 
-  update(camera: PerspectiveCamera, car: Car, cave: Cave, dt: number) {
-    this.target.set(car.x, car.y + 0.5, car.z);
+  update(camera: PerspectiveCamera, ball: Ball, cave: Cave, dt: number) {
+    this.target.set(ball.x, ball.y + 0.5, ball.z);
     const reset =
-      car !== this.previousCar ||
+      ball !== this.previousBall ||
       this.previousPosition.distanceToSquared(this.target) > 80 ** 2;
-    const length = Math.hypot(car.fx, car.fz);
+    const length = Math.hypot(ball.fx, ball.fz);
     if (length > 0.01) {
       // Interpolate angles so a 180-degree turn cannot collapse the offset
-      // through the car. World up keeps the view level over bumps and rolls.
-      const wanted = Math.atan2(car.fx, car.fz);
+      // through the ball. World up keeps the view level over bumps.
+      const wanted = Math.atan2(ball.fx, ball.fz);
       const current = Math.atan2(this.heading.x, this.heading.z);
       const difference = Math.atan2(
         Math.sin(wanted - current),
@@ -42,21 +41,17 @@ export class ChaseCamera {
         : current + difference * (1 - Math.exp(-8 * dt));
       this.heading.set(Math.sin(angle), 0, Math.cos(angle));
     }
-    this.previousCar = car;
+    this.previousBall = ball;
     this.previousPosition.copy(this.target);
 
-    // Fit the entire vehicle even in a narrow viewport. Aim directly at it,
+    // Fit the whole ball even in a narrow viewport. Aim directly at it,
     // rather than at a distant tunnel point that can leave it off screen.
     const verticalFov = MathUtils.degToRad(72);
     const limitingFov = Math.min(
       verticalFov,
       2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect),
     );
-    const vehicleRadius = Math.hypot(
-      car.width / 2 + 0.7,
-      config.SUSP_REST + config.CAR_WHEEL_RADIUS + 1.1,
-      car.length / 2 + 0.95,
-    );
+    const vehicleRadius = ball.radius + 1.2;
     const minimumDistance = vehicleRadius + 2.5;
     const distance = Math.max(25, vehicleRadius / Math.sin(limitingFov / 2));
     this.offset.set(-this.heading.x, 0.28, -this.heading.z).normalize();
@@ -68,7 +63,7 @@ export class ChaseCamera {
       this.offset.y,
       this.offset.z,
       distance,
-      car.s,
+      ball.s,
       this.hit,
     );
     const actualDistance =
@@ -77,9 +72,8 @@ export class ChaseCamera {
       .copy(this.target)
       .addScaledVector(this.offset, actualDistance);
     // A nearby wall pulls the camera in; widen the lens enough to retain the
-    // whole chassis instead of letting the car fill or clip the viewport.
-    const requiredFov =
-      2 * Math.asin(Math.min(0.95, vehicleRadius / actualDistance));
+    // whole ball instead of letting it fill or clip the viewport.
+    const requiredFov = 2 * Math.asin(Math.min(0.95, vehicleRadius / actualDistance));
     const fittedFov =
       camera.aspect < 1
         ? 2 * Math.atan(Math.tan(requiredFov / 2) / camera.aspect)
@@ -91,7 +85,7 @@ export class ChaseCamera {
     }
     camera.up.set(0, 1, 0);
     camera.lookAt(this.target);
-    // If a rock leaves less than a car length of room, the focused car can
+    // If a rock leaves less than a ball length of room, the focused ball can
     // be drawn through that obstruction while retaining a usable camera view.
     return obstruction >= 0 && obstruction < minimumDistance + 1;
   }

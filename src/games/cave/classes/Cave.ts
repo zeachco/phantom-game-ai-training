@@ -18,6 +18,8 @@ interface ChunkData {
   samples: Float32Array;
   mesh: THREE.Mesh | null;
   gates: THREE.Mesh[];
+  /** glowing boost items floating over this chunk's boost pads */
+  items: THREE.Mesh[];
 }
 
 /** one deterministic terrain feature cell: how rough the stretch is and which
@@ -52,7 +54,7 @@ export interface FeatureCell {
     angleWidth: number;
     height: number;
   } | null;
-  /** boost pad on the driving band: a glowing patch that pushes the car */
+  /** boost pad on the driving band: a glowing patch that pushes the ball */
   boost: {
     centerS: number;
     halfLen: number;
@@ -118,6 +120,10 @@ export class Cave {
   #rockTexture: THREE.CanvasTexture;
   #gateMaterial: THREE.MeshBasicMaterial;
   #gateNextMaterial: THREE.MeshBasicMaterial;
+  #boostItemGeometry: THREE.IcosahedronGeometry;
+  #boostItemMaterial: THREE.MeshBasicMaterial;
+  /** animation clock for the spinning boost items, advanced by update() */
+  #time = 0;
 
   constructor(seed: number, scene: THREE.Scene) {
     this.seed = seed;
@@ -163,6 +169,15 @@ export class Cave {
       color: new THREE.Color(config.GATE_NEXT_COLOR),
       transparent: true,
       opacity: 0.85,
+    });
+    this.#boostItemGeometry = new THREE.IcosahedronGeometry(
+      config.CAVE_BOOST_ITEM_RADIUS,
+      1,
+    );
+    this.#boostItemMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(config.CAVE_BOOST_ITEM_COLOR),
+      transparent: true,
+      opacity: 0.9,
     });
 
     this.#generateControl(0);
@@ -1059,7 +1074,8 @@ export class Cave {
   }
 
   /** build or drop the chunk meshes so the window [minS, maxS] stays meshed */
-  update(minS: number, maxS: number) {
+  update(minS: number, maxS: number, dt = 1 / 60) {
+    this.#time += dt;
     const minChunk = Math.max(0, Math.floor(minS / LEN));
     const maxChunk = Math.floor(maxS / LEN);
     for (let i = minChunk; i <= maxChunk; i++) {
@@ -1082,6 +1098,13 @@ export class Cave {
       this.#control.shift();
       this.#controlOffset++;
     }
+    // spin the boost items so they read as collectible pickups
+    for (const chunk of this.#chunks.values()) {
+      for (const item of chunk.items) {
+        item.rotation.y += dt * 2.2;
+        item.rotation.x += dt * 1.1;
+      }
+    }
   }
 
   #removeChunk(chunk: ChunkData) {
@@ -1093,7 +1116,15 @@ export class Cave {
       this.#scene.remove(gate);
       gate.geometry.dispose();
     }
+    for (const item of chunk.items) this.#scene.remove(item);
     this.#chunks.delete(chunk.index);
+  }
+
+  /** number of boost items currently meshed, used by the HUD/tests */
+  public boostItemCount() {
+    let count = 0;
+    for (const chunk of this.#chunks.values()) count += chunk.items.length;
+    return count;
   }
 
   /** precompute the sample table and build the tube mesh of one chunk */
@@ -1233,7 +1264,41 @@ export class Cave {
       gates.push(ring);
     }
 
-    const chunk: ChunkData = { index, samples, mesh, gates };
+    // glowing boost items floating over this chunk's boost pads: collected by
+    // rolling through the pad underneath (boostAt drives the push)
+    const items: THREE.Mesh[] = [];
+    const firstCell = Math.floor((index * LEN) / config.CAVE_FEATURE_CELL) - 1;
+    const lastCell =
+      Math.floor(((index + 1) * LEN) / config.CAVE_FEATURE_CELL) + 1;
+    for (let c = firstCell; c <= lastCell; c++) {
+      const pad = this.#featureCell(c).boost;
+      if (!pad) continue;
+      if (Math.floor(pad.centerS / LEN) !== index) continue;
+      const at = this.surface(pad.centerS, pad.centerA, {
+        x: 0,
+        y: 0,
+        z: 0,
+      });
+      const center = this.centerAt(pad.centerS, { x: 0, y: 0, z: 0 });
+      let dx = center.x - at.x;
+      let dy = center.y - at.y;
+      let dz = center.z - at.z;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      dx /= len;
+      dy /= len;
+      dz /= len;
+      const lift = config.CAVE_BOOST_ITEM_RADIUS + 2.2;
+      const orb = new THREE.Mesh(
+        this.#boostItemGeometry,
+        this.#boostItemMaterial,
+      );
+      orb.position.set(at.x + dx * lift, at.y + dy * lift, at.z + dz * lift);
+      orb.frustumCulled = false;
+      this.#scene.add(orb);
+      items.push(orb);
+    }
+
+    const chunk: ChunkData = { index, samples, mesh, gates, items };
     this.#chunks.set(index, chunk);
     return chunk;
   }
@@ -1297,6 +1362,8 @@ export class Cave {
     this.#rockTexture.dispose();
     this.#gateMaterial.dispose();
     this.#gateNextMaterial.dispose();
+    this.#boostItemGeometry.dispose();
+    this.#boostItemMaterial.dispose();
     this.#generateControl(0);
   }
 }

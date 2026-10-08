@@ -1,7 +1,7 @@
 import { MIXED_KIND, MIXED_LEVELS } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
-import type { Car } from './classes/Car';
+import type { Ball } from './classes/Ball';
 import type { Cave } from './classes/Cave';
 
 /** summarized score per group: the seed entry is the live high score on the
@@ -27,7 +27,7 @@ export interface Group {
   key: string; // '1'..'9' or 'mixed'
   layer: number;
   isMixed: boolean;
-  pool: Car[];
+  pool: Ball[];
   /** a finisher demotes the group to a small mutation-only swarm on slots 1..N;
    *  the state is remembered per seed so returning to that cave stays reduced */
   mutationOnly: boolean;
@@ -45,8 +45,8 @@ export interface Group {
 /** the human driven car, exists while the game runs */
 export const defaultState = {
   /** alive cars and the corpses still on the cave, both draw and score */
-  cars: [] as Car[],
-  sortedCars: [] as Car[],
+  cars: [] as Ball[],
+  sortedCars: [] as Ball[],
   /** live car count: dips while a group's corpses linger, climbs back when
    *  that whole group respawns */
   living: 0,
@@ -57,7 +57,7 @@ export const defaultState = {
   camY: 0,
   camZ: 0,
   cave: undefined as Cave | undefined,
-  human: undefined as Car | undefined,
+  human: undefined as Ball | undefined,
   sortedModels: [] as ModelsByLayerCount[],
   sortedMixed: [] as ModelsByLayerCount[],
   playing: false,

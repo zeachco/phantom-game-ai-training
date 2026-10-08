@@ -10,22 +10,29 @@ function applyDeadzone(value: number) {
   );
 }
 
+/**
+ * Monkey Ball controls: two analog axes, exactly like a GameCube stick.
+ * `moveY` is forward/back along the track, `moveX` is left/right across it,
+ * both in [-1, 1]. WASD / arrows drive the keyboard, the left stick drives
+ * the gamepad, and an AI brain writes the two fields directly. The class has
+ * only those two enumerable fields on purpose: a brain's output count is
+ * derived from `Object.keys(controls)`.
+ */
 export class Controls {
-  /** signed throttle: > 0 gas, < 0 brake / reverse, 0 neutral — floats welcome */
-  public throttle: number = 0;
-  public left: number = 0;
-  public right: number = 0;
+  /** signed lateral axis: > 0 right, < 0 left, 0 centered */
+  public moveX: number = 0;
+  /** signed forward axis: > 0 forward (into the cave), < 0 backward */
+  public moveY: number = 0;
   /** the bound handlers, kept so dispose() can remove them again — real
-   *  privates so Object.keys(controls) counts only the drive outputs */
+   *  privates so Object.keys(controls) counts only the stick axes */
   #keydown: ((e: KeyboardEvent) => void) | undefined;
   #keyup: ((e: KeyboardEvent) => void) | undefined;
   #gamepadIndex: number | undefined;
   #gamepadEnabled = false;
-  #keyboardLeft = 0;
-  #keyboardRight = 0;
-  #gamepadThrottle = 0;
-  #gamepadLeft = 0;
-  #gamepadRight = 0;
+  #keyboardX = 0;
+  #keyboardY = 0;
+  #gamepadX = 0;
+  #gamepadY = 0;
 
   constructor(type: ControlType) {
     this.#gamepadEnabled = type === ControlType.HUMAN;
@@ -35,27 +42,14 @@ export class Controls {
         this.#addKeyboardListeners();
         break;
       case ControlType.DUMMY:
-        this.throttle = 1;
+        this.moveY = 1;
         break;
     }
   }
 
-  /** held throttle directions: releasing one key must not clear the other */
-  #gasHeld = false;
-  #reverseHeld = false;
-
   #syncOutputs() {
-    const gas = Math.max(
-      this.#gasHeld ? 1 : 0,
-      this.#gamepadThrottle > 0 ? this.#gamepadThrottle : 0,
-    );
-    const reverse = Math.max(
-      this.#reverseHeld ? 1 : 0,
-      this.#gamepadThrottle < 0 ? -this.#gamepadThrottle : 0,
-    );
-    this.throttle = gas > 0 ? gas : reverse > 0 ? -reverse : 0;
-    this.left = Math.max(this.#keyboardLeft, this.#gamepadLeft);
-    this.right = Math.max(this.#keyboardRight, this.#gamepadRight);
+    this.moveX = Math.max(-1, Math.min(1, this.#keyboardX + this.#gamepadX));
+    this.moveY = Math.max(-1, Math.min(1, this.#keyboardY + this.#gamepadY));
   }
 
   /** Read the browser's standard gamepad mapping. DualShock controllers are
@@ -79,12 +73,6 @@ export class Controls {
     return selected;
   }
 
-  #buttonValue(pad: Gamepad, index: number) {
-    const button = pad.buttons[index];
-    if (!button) return 0;
-    return Math.max(0, Math.min(1, button.value || (button.pressed ? 1 : 0)));
-  }
-
   /** Polling is intentional: Gamepad API values are stateful and must be read
    *  during the simulation frame rather than inferred from browser events. */
   public update() {
@@ -93,55 +81,56 @@ export class Controls {
     const pad = this.#findGamepad();
     if (!pad) {
       this.#gamepadIndex = undefined;
-      this.#gamepadThrottle = 0;
-      this.#gamepadLeft = 0;
-      this.#gamepadRight = 0;
+      this.#gamepadX = 0;
+      this.#gamepadY = 0;
       this.#syncOutputs();
       return;
     }
 
-    const axis = applyDeadzone(pad.axes[0] || 0);
-    const dpadLeft = this.#buttonValue(pad, 14);
-    const dpadRight = this.#buttonValue(pad, 15);
-    this.#gamepadLeft = Math.max(axis < 0 ? -axis : 0, dpadLeft);
-    this.#gamepadRight = Math.max(axis > 0 ? axis : 0, dpadRight);
-
-    // Standard mapping: button 6 is L2 and button 7 is R2. R2 accelerates;
-    // L2 brakes and then reverses, matching the keyboard's down/S behavior.
-    const reverse = this.#buttonValue(pad, 6);
-    const gas = this.#buttonValue(pad, 7);
-    this.#gamepadThrottle = gas > 0 ? gas : reverse > 0 ? -reverse : 0;
+    // standard mapping: left stick is axes 0 (x) and 1 (y, positive down)
+    this.#gamepadX = applyDeadzone(pad.axes[0] || 0);
+    this.#gamepadY = -applyDeadzone(pad.axes[1] || 0);
     this.#syncOutputs();
   }
 
-  /** what a key sets: throttle keys carry their sign, undefined when unbound */
-  #keyToOutput(
+  /** what a key sets: a signed contribution to one stick axis, or undefined
+   *  when unbound */
+  #keyToAxis(
     key: string,
-  ): 'throttle+' | 'throttle-' | 'left' | 'right' | undefined {
+  ): 'x+' | 'x-' | 'y+' | 'y-' | undefined {
     switch (key) {
       case 'ArrowUp':
       case 'w':
       case 'W':
-        return 'throttle+';
+        return 'y+';
       case 'ArrowDown':
       case 's':
       case 'S':
-        return 'throttle-';
+        return 'y-';
       case 'ArrowLeft':
       case 'a':
       case 'A':
-        return 'left';
+        return 'x-';
       case 'ArrowRight':
       case 'd':
       case 'D':
-        return 'right';
+        return 'x+';
     }
   }
 
-  /** arrows or WASD drive the car, exactly those keys are captured */
+  /** arrows or WASD drive the ball, exactly those keys are captured */
   #addKeyboardListeners() {
+    const recompute = () => {
+      const up =
+        (this.#held.has('y+') ? 1 : 0) - (this.#held.has('y-') ? 1 : 0);
+      const right =
+        (this.#held.has('x+') ? 1 : 0) - (this.#held.has('x-') ? 1 : 0);
+      this.#keyboardX = right;
+      this.#keyboardY = up;
+      this.#syncOutputs();
+    };
     const down = (e: KeyboardEvent) => {
-      // typing in a form field never drives the car
+      // typing in a form field never drives the ball
       const t = e.target as HTMLElement | null;
       if (
         t &&
@@ -151,23 +140,17 @@ export class Controls {
           t.isContentEditable)
       )
         return;
-      const map = this.#keyToOutput(e.key);
-      if (map === undefined) return;
+      const axis = this.#keyToAxis(e.key);
+      if (axis === undefined) return;
       e.preventDefault();
-      if (map === 'throttle+') this.#gasHeld = true;
-      else if (map === 'throttle-') this.#reverseHeld = true;
-      else if (map === 'left') this.#keyboardLeft = 1;
-      else if (map === 'right') this.#keyboardRight = 1;
-      this.#syncOutputs();
+      this.#held.add(axis);
+      recompute();
     };
     const up = (e: KeyboardEvent) => {
-      const map = this.#keyToOutput(e.key);
-      if (map === undefined) return;
-      if (map === 'throttle+') this.#gasHeld = false;
-      else if (map === 'throttle-') this.#reverseHeld = false;
-      else if (map === 'left') this.#keyboardLeft = 0;
-      else if (map === 'right') this.#keyboardRight = 0;
-      this.#syncOutputs();
+      const axis = this.#keyToAxis(e.key);
+      if (axis === undefined) return;
+      this.#held.delete(axis);
+      recompute();
     };
     this.#keydown = down;
     this.#keyup = up;
@@ -175,15 +158,20 @@ export class Controls {
     document.addEventListener('keyup', up);
   }
 
+  /** held axis directions, keyed by sign, so opposite keys cancel */
+  #held = new Set<'x+' | 'x-' | 'y+' | 'y-'>();
+
   public dispose() {
     if (this.#keydown) document.removeEventListener('keydown', this.#keydown);
     if (this.#keyup) document.removeEventListener('keyup', this.#keyup);
     this.#keydown = undefined;
     this.#keyup = undefined;
     this.#gamepadIndex = undefined;
-    this.#gamepadThrottle = 0;
-    this.#gamepadLeft = 0;
-    this.#gamepadRight = 0;
+    this.#held.clear();
+    this.#gamepadX = 0;
+    this.#gamepadY = 0;
+    this.#keyboardX = 0;
+    this.#keyboardY = 0;
     this.#syncOutputs();
   }
 }

@@ -1,15 +1,12 @@
 import { expect, test } from 'bun:test';
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
-import { config } from '../src/games/cave/classes/Config';
-import type { Car } from '../src/games/cave/classes/Car';
+import type { Ball } from '../src/games/cave/classes/Ball';
 import type { Cave } from '../src/games/cave/classes/Cave';
 import { ChaseCamera } from '../src/games/cave/classes/ChaseCamera';
 
-function car() {
+function ball() {
   return {
-    width: config.CAR_WIDTH,
-    height: config.CAR_HEIGHT,
-    length: config.CAR_LENGTH,
+    radius: 1.4,
     x: 0,
     y: 0,
     z: 0,
@@ -17,33 +14,40 @@ function car() {
     fz: -1,
     s: 100,
     quat: new Quaternion(),
-  } as Car;
+  } as Ball;
 }
 function cave(obstruction = -1) {
   return { castWheelRay: () => obstruction } as unknown as Cave;
 }
-function expectVisible(camera: PerspectiveCamera, target: Car) {
+function expectVisible(camera: PerspectiveCamera, target: Ball) {
   camera.updateMatrixWorld(true);
-  // Includes the full body, extended suspension, wheels and front marker.
-  for (const x of [-(target.width / 2 + 0.7), target.width / 2 + 0.7])
-    for (const y of [-3.7, 3.2])
-      for (const z of [-5.2, 5.2]) {
-        const point = new Vector3(x, y, z)
-          .applyQuaternion(target.quat)
-          .add(new Vector3(target.x, target.y, target.z))
-          .project(camera);
-        expect(Math.abs(point.x)).toBeLessThan(1);
-        expect(Math.abs(point.y)).toBeLessThan(1);
-        expect(point.z).toBeGreaterThan(-1);
-        expect(point.z).toBeLessThan(1);
-      }
+  // The visible silhouette of the ball: the six radius points.
+  const r = target.radius + 1.2;
+  const offsets = [
+    [-r, 0, 0],
+    [r, 0, 0],
+    [0, -r, 0],
+    [0, r, 0],
+    [0, 0, -r],
+    [0, 0, r],
+  ];
+  for (const [x, y, z] of offsets) {
+    const point = new Vector3(x, y, z)
+      .applyQuaternion(target.quat)
+      .add(new Vector3(target.x, target.y, target.z))
+      .project(camera);
+    expect(Math.abs(point.x)).toBeLessThan(1);
+    expect(Math.abs(point.y)).toBeLessThan(1);
+    expect(point.z).toBeGreaterThan(-1);
+    expect(point.z).toBeLessThan(1);
+  }
 }
 
-test('keeps the whole car framed through sharp turns, jumps and respawns', () => {
+test('keeps the whole ball framed through sharp turns, jumps and respawns', () => {
   for (const aspect of [1.6, 390 / 844]) {
     const camera = new PerspectiveCamera(72, aspect, 0.1, 1600);
     const follow = new ChaseCamera();
-    const target = car();
+    const target = ball();
     for (let frame = 0; frame < 120; frame++) {
       target.x += 6;
       target.y = Math.sin(frame / 8) * 20;
@@ -58,17 +62,17 @@ test('keeps the whole car framed through sharp turns, jumps and respawns', () =>
     target.z = 500;
     follow.update(camera, target, cave(), 1 / 60);
     expectVisible(camera, target);
-    const otherCar = car();
-    follow.update(camera, otherCar, cave(), 1 / 60);
-    expectVisible(camera, otherCar);
+    const otherBall = ball();
+    follow.update(camera, otherBall, cave(), 1 / 60);
+    expectVisible(camera, otherBall);
   }
 });
 
-test('pulls in before walls and widens the lens to retain the car', () => {
+test('pulls in before walls and widens the lens to retain the ball', () => {
   for (const aspect of [1.6, 390 / 844]) {
     const camera = new PerspectiveCamera(72, aspect, 0.1, 1600);
     const follow = new ChaseCamera();
-    const target = car();
+    const target = ball();
     expect(follow.update(camera, target, cave(13), 1 / 60)).toBe(false);
     expect(camera.position.distanceTo(new Vector3(0, 0.5, 0))).toBeCloseTo(12);
     expectVisible(camera, target);
