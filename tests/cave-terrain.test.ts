@@ -29,9 +29,7 @@ test('floor climbs gradually along the road but retains sharp drops and lateral 
       for (let s = 101; s < 3600; s++) {
         const radius = terrain.radius(s, angle);
         const rise = (previous - radius) * config.CAVE_VERTICAL_SCALE;
-        expect(rise).toBeLessThanOrEqual(
-          config.CAVE_FLOOR_MAX_CLIMB + 1e-8,
-        );
+        expect(rise).toBeLessThanOrEqual(config.CAVE_FLOOR_MAX_CLIMB + 1e-8);
         steepestDrop = Math.max(steepestDrop, -rise);
         expect(radius).toBeGreaterThanOrEqual(config.CAVE_MIN_RADIUS - 1e-8);
         previous = radius;
@@ -181,11 +179,12 @@ test('valley terrain launches the ball naturally without sacrificing speed', () 
   const ball = new Ball(terrain.getSpawn());
   ball.controls.moveY = 1;
   let sawNaturalFlight = false;
-  for (let frame = 0; frame < 150; frame++) {
+  for (let frame = 0; frame < 400; frame++) {
     ball.update(terrain);
-    if (!ball.grounded && ball.speed > 5) sawNaturalFlight = true;
+    if (!ball.grounded && ball.speed > config.BALL_MAX_SPEED * 0.9)
+      sawNaturalFlight = true;
   }
   expect(ball.damaged).toBe(false);
   expect(sawNaturalFlight).toBe(true);
-  expect(ball.speed).toBeGreaterThan(5);
+  expect(ball.speed).toBeGreaterThan(config.BALL_MAX_SPEED * 0.9);
 });

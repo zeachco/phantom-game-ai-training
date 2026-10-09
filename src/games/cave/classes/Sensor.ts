@@ -7,8 +7,8 @@ import { config } from './Config';
  * The ball's eyes: a fan of SENSORS rays in the track plane (longest straight
  * ahead, tapering to the edges) plus one ray straight up and one straight down
  * for the ceiling and the floor. The rays are marched against the analytic
- * cave tube, not the mesh, so a reading costs a handful of trig calls instead
- * of thousands of triangles.
+ * cave tube. Bronze slabs use their shared triangles, with bounding boxes
+ * skipping distant patches before any triangle tests.
  */
 export class Sensor {
   ball: Ball;
@@ -98,7 +98,7 @@ export class Sensor {
     length: number,
   ) {
     const car = this.ball;
-    const t = cave.castRay(
+    let t = cave.castRay(
       ox,
       oy,
       oz,
@@ -111,6 +111,18 @@ export class Sensor {
       car.cy,
       car.cz,
     );
+    const wall =
+      cave.wallRayDistance?.(
+        ox,
+        oy,
+        oz,
+        dx,
+        dy,
+        dz,
+        t < 0 ? length : t,
+        car.s,
+      ) ?? -1;
+    if (wall >= 0) t = t < 0 ? wall : Math.min(t, wall);
     return t < 0 ? 0 : Math.max(0, 1 - t / length);
   }
 }

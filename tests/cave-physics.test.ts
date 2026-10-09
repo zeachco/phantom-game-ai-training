@@ -3,6 +3,8 @@ import { Ball, getCaveBrainDimensions } from '../src/games/cave/classes/Ball';
 import type { Cave, RadialHit } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 import { ControlType } from '../src/games/cave/types';
+import { Vector3 } from 'three';
+import { WallSolid } from '../src/games/cave/classes/WallSolid';
 
 // An infinite plane isolates ball dynamics from procedural cave geometry.
 function floor(height = (_x: number, _z: number) => 0, grade = 0) {
@@ -34,12 +36,21 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
       return 0;
     },
     featureCell(_index: number) {
-      return { volatility: 0, road: null, columns: [], ramp: null, boost: null };
+      return {
+        volatility: 0,
+        road: null,
+        columns: [],
+        ramp: null,
+        boost: null,
+      };
     },
     castRay() {
       return -1;
     },
     wallAt() {
+      return null;
+    },
+    wallContact() {
       return null;
     },
     wallSurfaceAt() {
@@ -169,35 +180,82 @@ describe('cave ball physics', () => {
   });
 });
 
-test('airborne movement retains horizontal momentum without jump or airtime timers', () => {
+test('airborne movement retains horizontal momentum under the speed cap', () => {
   const ball = new Ball({ ...spawn, y: 40 });
-  ball.vz = -5;
+  ball.vz = -config.BALL_MAX_SPEED;
   const cave = floor();
   tick(ball, cave, 20);
   expect(ball.grounded).toBe(false);
-  expect(ball.vz).toBeLessThan(-4.95);
+  expect(ball.vz).toBeLessThan(-config.BALL_MAX_SPEED * 0.99);
   expect(Math.hypot(ball.vx, ball.vz)).toBeLessThanOrEqual(
     config.BALL_MAX_SPEED,
   );
 });
 
+test('jump leaves the ground, rejects an air jump, and becomes available after landing', () => {
+  const { ball, cave } = settled();
+  ball.controls.requestJump();
+  ball.update(cave);
+  expect(ball.grounded).toBe(false);
+  expect(ball.vy).toBeGreaterThan(
+    config.BALL_JUMP_SPEED - config.BALL_GRAVITY * 1.1,
+  );
+  tick(ball, cave, 8);
+  const before = ball.vy;
+  ball.controls.requestJump();
+  ball.update(cave);
+  expect(ball.vy).toBeLessThan(before);
+  tick(ball, cave, 65);
+  expect(ball.grounded).toBe(true);
+  ball.controls.requestJump();
+  ball.update(cave);
+  expect(ball.vy).toBeGreaterThan(1);
+});
+
+function box() {
+  // Two angular columns, with each pair ordered baseline then deck.
+  return new WallSolid(
+    [
+      new Float32Array([
+        -43.2, 0, -100, -43.2, 8, -100, 43.2, 0, -100, 43.2, 8, -100,
+      ]),
+      new Float32Array([
+        -43.2, 0, -150, -43.2, 8, -150, 43.2, 0, -150, 43.2, 8, -150,
+      ]),
+    ],
+    new Vector3(0, 0, -1),
+  );
+}
+
+test('a grounded jump clears a solid slab that otherwise stops a rolling ball', () => {
+  const terrain = floor();
+  const slab = box();
+  terrain.wallContact = (x, y, z, r) => {
+    const hit = slab.contact(x, y, z, r);
+    return hit && hit.dist < r ? hit : null;
+  };
+  const rolling = new Ball({ ...spawn, s: 80, z: -80 });
+  rolling.vz = -config.BALL_MAX_SPEED;
+  tick(rolling, terrain, 60);
+  expect(rolling.s).toBeLessThan(100);
+  const jumping = new Ball({ ...spawn, s: 80, z: -80 });
+  jumping.controls.moveY = 0;
+  tick(jumping, terrain, 1);
+  jumping.controls.moveY = 1;
+  jumping.vz = -config.BALL_MAX_SPEED;
+  jumping.controls.requestJump();
+  tick(jumping, terrain, 70);
+  expect(jumping.s).toBeGreaterThan(150 + jumping.radius);
+});
+
 test('both slab sides push a touching sphere outward and stop inward motion', () => {
   const terrain = floor();
-  const planeHit = terrain.nearestRadial.bind(terrain);
-  terrain.nearestRadial = (x, y, z, s, out) => {
-    planeHit(x, y, z, s, out);
-    out.a = Math.PI - x / config.CAVE_RADIUS;
-    return out;
-  };
   const halfAcross = 43.2;
-  terrain.wallAt = (_s, a) => ({
-    front: 100,
-    back: 150,
-    topY: 6,
-    top: 6,
-    across: (a - Math.PI) * config.CAVE_RADIUS,
-    halfAcross,
-  });
+  const slab = box();
+  terrain.wallContact = (x, y, z, r) => {
+    const hit = slab.contact(x, y, z, r);
+    return hit && hit.dist < r ? hit : null;
+  };
   for (const side of [-1, 1]) {
     const ball = new Ball({ ...spawn, x: side * 43, z: -125, s: 125 });
     ball.a = Math.PI - ball.x / config.CAVE_RADIUS;
@@ -214,7 +272,11 @@ test('both slab sides push a touching sphere outward and stop inward motion', ()
 
 test('a wall bounce reverses and halves angular velocity instead of resetting ground roll', () => {
   const terrain = floor();
-  terrain.wallAt = () => ({ front: 100, back: 150, topY: 8, top: 8, across: 0, halfAcross: 43.2 });
+  const slab = box();
+  terrain.wallContact = (x, y, z, r) => {
+    const hit = slab.contact(x, y, z, r);
+    return hit && hit.dist < r ? hit : null;
+  };
   const ball = new Ball({ ...spawn, s: 98.4, z: -98.4, y: 4 });
   const spin = ball as unknown as { avx: number; avy: number; avz: number };
   spin.avx = 2;

@@ -116,7 +116,7 @@ class Config {
   // rest.
   /** top speed in u/f. Kept low so the ball feels heavy; a boost item is the
    *  only way past it */
-  public BALL_MAX_SPEED = 6;
+  public BALL_MAX_SPEED = 6 / 3;
   /** sphere radius: collision, rendering and camera framing all read it */
   public BALL_RADIUS = 1.4;
   /** world down acceleration per frame^2. Light gravity lets a fast ball
@@ -124,7 +124,9 @@ class Config {
   public BALL_GRAVITY = 0.085;
   public PHYSICS_SUBSTEPS = 4;
   /** stick-directed acceleration (u/f^2) at full deflection */
-  public BALL_ACCEL = 0.17;
+  public BALL_ACCEL = 0.17 / 3;
+  /** Grounded jump impulse in world units per frame. */
+  public BALL_JUMP_SPEED = 1.8;
   /** velocity retained per frame while the ball rolls on a surface. Near-unit
    *  drag preserves its valley speed so it can climb out and launch naturally. */
   public BALL_ROLL_DRAG = 0.999;
@@ -143,10 +145,10 @@ class Config {
    *  unboosted top speed: only a near head-on full-speed hit is fatal */
   public BALL_CRASH_SPEED = 8;
   /** acceleration (u/f^2) of a boost while its timer runs */
-  public BOOST_ACCEL = 0.32;
+  public BOOST_ACCEL = 0.32 / 3;
   /** extra top speed while a boost is active, fading linearly to zero over
    *  BOOST_DURATION. Large: a boost item should double the pace */
-  public BOOST_SPEED_BONUS = 6;
+  public BOOST_SPEED_BONUS = 6 / 3;
   /** frames a boost lasts after (re)triggering; overlapping items refresh
    *  the timer, they never stack */
   public BOOST_DURATION = 90;
@@ -227,17 +229,16 @@ class Config {
   /** probability that a column grows inside the driving band but never on
    *  its center, forcing a weave; the rest grow on the banks as before */
   public CAVE_COLUMN_IN_BAND_CHANCE = 0.35;
-  /** probability that a feature cell carries a vertical wall across the band */
+  /** Probability that a cell carries a bronze slab around the circumference. */
   public CAVE_WALL_CHANCE = 0.55;
   /** wall length along the cave, as a fraction of CAVE_SEGMENT_LENGTH: each
    *  wall takes between 1/8 and 1/3 of the section it sits in */
   public CAVE_WALL_MIN_FRACTION = 1 / 8;
   public CAVE_WALL_MAX_FRACTION = 1 / 3;
-  /** wall height range in generator units (world Y = x0.5). Tall enough to
-   *  read clearly from the chase camera; valley momentum can clear it. */
-  public CAVE_WALL_MIN = 10;
-  public CAVE_WALL_MAX = 14;
-  /** angular half-width of a wall: wide enough to span the driving band */
+  /** Inward slab thickness in generator units; its world Y is compressed. */
+  public CAVE_WALL_MIN = 16;
+  public CAVE_WALL_MAX = 24;
+  /** Base angular width; seeded slabs vary their span around the tunnel. */
   public CAVE_WALL_ANGLE = 0.5;
   /** emissive tint of the wall faces */
   public CAVE_WALL_COLOR: [number, number, number] = [0.85, 0.42, 0.3];

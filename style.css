@@ -441,6 +441,34 @@ ul:hover {
 
 /* the human play toggle in the panel */
 /* control outputs + velocity vector: a fixed cockpit overlay */
+.cave-position {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 2;
+  color: #ddffbb;
+  font-family: monospace;
+  text-align: right;
+  text-shadow: 0 2px 6px #000;
+  pointer-events: none;
+}
+
+.cave-position-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+.cave-position-value {
+  font-size: clamp(52px, 6vw, 88px);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.cave-position-total {
+  font-size: 20px;
+  opacity: 0.7;
+}
+
 .steer-overlay {
   --hud-color: #c4c4c4;
   position: fixed;

@@ -33,8 +33,8 @@ const WALL_CONTACT_SKIN = 0.02;
 /**
  * Monkey Ball physics: one sphere that rolls through the analytic cave tube.
  * The stick accelerates it in the horizontal track plane, gravity pulls it
- * down the slopes, and every wall contact is resolved against the same
- * analytic surface the mesh renders. Orientation is purely visual: the ball
+ * down the slopes. Rock uses the analytic tube; bronze obstacles use the
+ * same triangles as their meshes. Orientation is purely visual: the ball
  * spins so it reads as rolling, but the simulation is a point with radius.
  */
 export class Ball {
@@ -258,6 +258,7 @@ export class Ball {
     this.avy = 0;
     this.avz = 0;
     this.spinBounceFrames = 0;
+    this.controls.consumeJump();
     this.contactNormal.set(0, 1, 0);
     this.grounded = false;
     this.a = Math.PI;
@@ -283,6 +284,10 @@ export class Ball {
   update(cave: Cave) {
     if (this.damaged) return;
     this.controls.update();
+    if (this.controls.consumeJump() && this.grounded) {
+      this.vy = Math.max(0, this.vy) + config.BALL_JUMP_SPEED;
+      this.grounded = false;
+    }
     this.prevS = this.s;
     this.#move(cave);
     if (this.spinBounceFrames > 0) this.spinBounceFrames--;
@@ -313,8 +318,22 @@ export class Ball {
         for (let i = 0; i < prev.length; i++) inputs.push(prev[i]);
         const invMax = 1 / this.maxSpeed;
         inputs.push(Math.min(1, this.speed * invMax));
-        inputs.push(clamp(-1, 1, (this.vx * this.fx + this.vy * this.fy + this.vz * this.fz) * invMax));
-        inputs.push(clamp(-1, 1, (this.vx * this.rx + this.vy * this.ry + this.vz * this.rz) * invMax));
+        inputs.push(
+          clamp(
+            -1,
+            1,
+            (this.vx * this.fx + this.vy * this.fy + this.vz * this.fz) *
+              invMax,
+          ),
+        );
+        inputs.push(
+          clamp(
+            -1,
+            1,
+            (this.vx * this.rx + this.vy * this.ry + this.vz * this.rz) *
+              invMax,
+          ),
+        );
         inputs.push(this.grounded ? 1 : 0);
         // Feature block: what the rays cannot say - the surface under the
         // ball, what sits ahead on the line, and the ball's own motion.
@@ -333,9 +352,9 @@ export class Ball {
               platformAhead = Math.max(platformAhead, 1 - Math.min(1, d));
           }
           if (cell.boost) {
-            const d = (cell.boost.centerS - cell.boost.halfLen - this.s) / reach;
-            if (d >= 0)
-              boostAhead = Math.max(boostAhead, 1 - Math.min(1, d));
+            const d =
+              (cell.boost.centerS - cell.boost.halfLen - this.s) / reach;
+            if (d >= 0) boostAhead = Math.max(boostAhead, 1 - Math.min(1, d));
           }
           for (const col of cell.columns) {
             const d = (col.centerS - col.halfLen - this.s) / reach;
@@ -568,56 +587,17 @@ export class Ball {
         this.vx *= scale;
         this.vz *= scale;
       }
-      // predictive wall barrier: a wall face is steep, and the radial query
-      // would pop the ball onto its top instead of stopping it. Resolve it
-      // BEFORE integration; compare the ball's bottom to the wall's absolute
-      // top so a natural valley launch can clear it.
-      const wall = cave.wallAt(this.s, this.a, this);
-      const frontDistance =
-        wall?.frontFace?.dist ?? (wall ? wall.front - this.s : Infinity);
-      const frontNX = wall?.frontFace?.nx ?? -this.cx;
-      const frontNY = wall?.frontFace ? 0 : -this.cy;
-      const frontNZ = wall?.frontFace?.nz ?? -this.cz;
-      const incoming =
-        this.vx * frontNX + this.vy * frontNY + this.vz * frontNZ;
-      let moveDt = dt;
-      if (
-        wall &&
-        Math.abs(wall.across) - this.radius < wall.halfAcross &&
-        frontDistance >= this.radius &&
-        frontDistance + dt * incoming < this.radius + WALL_CONTACT_SKIN &&
-        this.y - this.radius < wall.topY &&
-        incoming < 0
-      ) {
-        // Travel to first contact, then integrate the remaining time with
-        // reflected velocity. The distance is measured from the drawn face.
-        const contactDt = Math.max(0, Math.min(dt,
-          (this.radius + WALL_CONTACT_SKIN - frontDistance) / incoming,
-        ));
-        this.x += this.vx * contactDt;
-        this.y += this.vy * contactDt;
-        this.z += this.vz * contactDt;
-        this.s += contactDt *
-          (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz);
-        moveDt -= contactDt;
-        const bounce = -incoming > config.BALL_BOUNCE_SPEED
-          ? config.BALL_RESTITUTION : 0;
-        const impulse = incoming * (1 + bounce);
-        this.vx -= frontNX * impulse;
-        this.vy -= frontNY * impulse;
-        this.vz -= frontNZ * impulse;
-        if (bounce > 0) this.#bounceSpin();
-      }
-      // integrate
-      this.x += this.vx * moveDt;
-      this.y += this.vy * moveDt;
-      this.z += this.vz * moveDt;
+      // Integrate in substeps shorter than a sphere diameter, then resolve
+      // contact against the same triangles that draw each bronze obstacle.
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.z += this.vz * dt;
       this.s = Math.max(
         0,
         this.s +
-          moveDt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
+          dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
       );
-      // collision: the tube surface is everything the ball can touch
+      // Resolve rock contact before the separate bronze solids.
       cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
       this.s = this.hit.s;
       this.a = this.hit.a;
@@ -664,85 +644,28 @@ export class Ball {
           }
         }
       }
-      // Raised wall slabs are solid volumes. The tube query cannot see them
-      // (they are no longer cut into the floor), so resolve the ball against
-      // the same box the mesh draws. The test is a surface overlap, not a
-      // center overlap: a radius-wide dead zone otherwise let the ball's skin
-      // slip into the slab before any push fired. Exit through the nearest
-      // face among front, back, side and top, like a real box.
-      const solid = cave.wallAt(this.s, this.a, this);
-      if (solid) {
-        const bottomY = this.y - this.radius;
-        const frontDistance = solid.frontFace?.dist ?? solid.front - this.s;
-        const backDistance = solid.backFace?.dist ?? this.s - solid.back;
-        const overlapS =
-          frontDistance < this.radius + WALL_CONTACT_SKIN &&
-          backDistance < this.radius + WALL_CONTACT_SKIN;
-        const overlapA =
-          Math.abs(solid.across) - this.radius < solid.halfAcross;
-        const overlapV = bottomY < solid.topY;
-        if (overlapS && overlapA && overlapV) {
-          let exit = this.radius + WALL_CONTACT_SKIN - frontDistance;
-          let axis: 'front' | 'back' | 'side' | 'top' = 'front';
-          const exitBack = this.radius + WALL_CONTACT_SKIN - backDistance;
-          if (exitBack < exit) {
-            exit = exitBack;
-            axis = 'back';
-          }
-          const exitSide =
-            solid.halfAcross - Math.abs(solid.across) + this.radius;
-          if (exitSide < exit) {
-            exit = exitSide;
-            axis = 'side';
-          }
-          const exitTop = solid.topY - bottomY;
-          if (exitTop < exit) {
-            exit = exitTop;
-            axis = 'top';
-          }
-          let nx = 0;
-          let ny = 0;
-          let nz = 0;
-          if (axis === 'front') {
-            nx = solid.frontFace?.nx ?? -this.cx;
-            ny = solid.frontFace ? 0 : -this.cy;
-            nz = solid.frontFace?.nz ?? -this.cz;
-            this.s = Math.max(0, this.s - exit);
-          } else if (axis === 'back') {
-            nx = solid.backFace?.nx ?? this.cx;
-            ny = solid.backFace ? 0 : this.cy;
-            nz = solid.backFace?.nz ?? this.cz;
-            this.s = Math.max(0, this.s + exit);
-          } else if (axis === 'side') {
-            // Around the floor, increasing angle moves opposite the frame's
-            // right vector: sin(PI + offset) = -sin(offset).
-            const dir = solid.across >= 0 ? -1 : 1;
-            nx = this.rx * dir;
-            ny = this.ry * dir;
-            nz = this.rz * dir;
-          } else {
-            ny = 1;
-          }
-          this.x += nx * exit;
-          this.y += ny * exit;
-          this.z += nz * exit;
-          const vn = this.vx * nx + this.vy * ny + this.vz * nz;
-          if (vn < 0) {
-            const bounce =
-              -vn > config.BALL_BOUNCE_SPEED
-                ? config.BALL_RESTITUTION
-                : 0;
-            this.vx -= nx * vn * (1 + bounce);
-            this.vy -= ny * vn * (1 + bounce);
-            this.vz -= nz * vn * (1 + bounce);
-            if (bounce > 0 && axis !== 'top') this.#bounceSpin();
-          }
-          if (axis === 'top') {
-            this.grounded = true;
-            this.contactNormal.set(0, 1, 0);
-          }
-          cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
-          this.a = this.hit.a;
+      const reach = this.radius + WALL_CONTACT_SKIN;
+      for (let pass = 0; pass < 6; pass++) {
+        const contact = cave.wallContact(this.x, this.y, this.z, reach, this.s);
+        if (!contact || reach - contact.dist < 1e-6) break;
+        const { nx, ny, nz } = contact;
+        const penetration = reach - contact.dist;
+        this.x += nx * penetration;
+        this.y += ny * penetration;
+        this.z += nz * penetration;
+        const vn = this.vx * nx + this.vy * ny + this.vz * nz;
+        if (vn < 0) {
+          const bounce =
+            -vn > config.BALL_BOUNCE_SPEED ? config.BALL_RESTITUTION : 0;
+          this.vx -= nx * vn * (1 + bounce);
+          this.vy -= ny * vn * (1 + bounce);
+          this.vz -= nz * vn * (1 + bounce);
+          if (bounce > 0 && ny < 0.5) this.#bounceSpin();
+          if (-vn > config.BALL_CRASH_SPEED) this.damaged = true;
+        }
+        if (ny > 0.35) {
+          this.grounded = true;
+          this.contactNormal.set(nx, ny, nz);
         }
       }
       // Progress is a query hint, never an independent collision position.

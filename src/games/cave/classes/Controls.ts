@@ -14,7 +14,8 @@ function applyDeadzone(value: number) {
  * Monkey Ball controls: two analog axes, exactly like a GameCube stick.
  * `moveY` is forward/back along the track, `moveX` is left/right across it,
  * both in [-1, 1]. WASD / arrows drive the keyboard, the left stick drives
- * the gamepad, and an AI brain writes the two fields directly. The class has
+ * the gamepad. Space / the primary button jumps; an AI brain writes the
+ * two axes directly. The class has
  * only those two enumerable fields on purpose: a brain's output count is
  * derived from `Object.keys(controls)`.
  */
@@ -33,6 +34,20 @@ export class Controls {
   #keyboardY = 0;
   #gamepadX = 0;
   #gamepadY = 0;
+  #jumpRequested = false;
+  #spaceHeld = false;
+  #primaryHeld = false;
+
+  public requestJump() {
+    this.#jumpRequested = true;
+  }
+
+  /** Consume an edge once, including presses rejected while airborne. */
+  public consumeJump() {
+    const requested = this.#jumpRequested;
+    this.#jumpRequested = false;
+    return requested;
+  }
 
   constructor(type: ControlType) {
     this.#gamepadEnabled = type === ControlType.HUMAN;
@@ -83,6 +98,7 @@ export class Controls {
       this.#gamepadIndex = undefined;
       this.#gamepadX = 0;
       this.#gamepadY = 0;
+      this.#primaryHeld = false;
       this.#syncOutputs();
       return;
     }
@@ -90,6 +106,9 @@ export class Controls {
     // standard mapping: left stick is axes 0 (x) and 1 (y, positive down)
     this.#gamepadX = applyDeadzone(pad.axes[0] || 0);
     this.#gamepadY = -applyDeadzone(pad.axes[1] || 0);
+    const primary = pad.buttons[0]?.pressed ?? false;
+    if (primary && !this.#primaryHeld) this.requestJump();
+    this.#primaryHeld = primary;
     this.#syncOutputs();
   }
 
@@ -116,7 +135,7 @@ export class Controls {
     }
   }
 
-  /** arrows or WASD drive the ball, exactly those keys are captured */
+  /** Arrows/WASD roll; Space jumps without repeating while held. */
   #addKeyboardListeners() {
     const recompute = () => {
       const up =
@@ -138,6 +157,12 @@ export class Controls {
           t.isContentEditable)
       )
         return;
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        if (!this.#spaceHeld && !e.repeat) this.requestJump();
+        this.#spaceHeld = true;
+        return;
+      }
       const axis = this.#keyToAxis(e.key);
       if (axis === undefined) return;
       e.preventDefault();
@@ -145,6 +170,10 @@ export class Controls {
       recompute();
     };
     const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.key === ' ') {
+        this.#spaceHeld = false;
+        return;
+      }
       const axis = this.#keyToAxis(e.key);
       if (axis === undefined) return;
       this.#held.delete(axis);
@@ -166,6 +195,9 @@ export class Controls {
     this.#keyup = undefined;
     this.#gamepadIndex = undefined;
     this.#held.clear();
+    this.#jumpRequested = false;
+    this.#spaceHeld = false;
+    this.#primaryHeld = false;
     this.#gamepadX = 0;
     this.#gamepadY = 0;
     this.#keyboardX = 0;

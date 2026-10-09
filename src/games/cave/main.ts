@@ -167,7 +167,8 @@ export default async (state: CaveState) => {
   document.body.appendChild(title);
 
   const hint = document.createElement('div');
-  hint.textContent = 'WASD / left stick to roll · R to regenerate';
+  hint.textContent =
+    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate';
   hint.style.position = 'fixed';
   hint.style.top = '38px';
   hint.style.left = '14px';
@@ -175,7 +176,21 @@ export default async (state: CaveState) => {
   hint.style.color = '#e8edf4';
   hint.style.font = '600 12px monospace';
   hint.style.textShadow = '0 1px 3px #000';
+  hint.style.whiteSpace = 'pre-line';
+  hint.style.maxWidth = 'calc(100vw - 130px)';
   document.body.appendChild(hint);
+
+  const position = document.createElement('div');
+  position.className = 'cave-position';
+  const positionLabel = document.createElement('div');
+  positionLabel.className = 'cave-position-label';
+  positionLabel.textContent = 'POSITION';
+  const positionValue = document.createElement('span');
+  positionValue.className = 'cave-position-value';
+  const positionTotal = document.createElement('span');
+  positionTotal.className = 'cave-position-total';
+  position.append(positionLabel, positionValue, positionTotal);
+  document.body.appendChild(position);
 
   const steerOverlay = document.createElement('div');
   steerOverlay.className = 'steer-overlay';
@@ -378,6 +393,20 @@ export default async (state: CaveState) => {
     renderer.render(scene, camera);
     if (now - lastHud > 50) {
       lastHud = now;
+      const followedIndex = state.balls.indexOf(followed);
+      const rank =
+        1 +
+        state.balls.filter(
+          (ball, index) =>
+            ball.s > followed.s ||
+            (ball.s === followed.s && index < followedIndex),
+        ).length;
+      positionValue.textContent = String(rank);
+      positionTotal.textContent = `/${state.balls.length}`;
+      position.setAttribute(
+        'aria-label',
+        `Position ${rank} of ${state.balls.length}`,
+      );
       if (!isFollowedAlive) return;
       const gateNumber = Math.min(followed.nextGate + 1, config.GATES_PER_SEED);
       gateCountEl.textContent = `gate ${gateNumber}/${config.GATES_PER_SEED}`;
