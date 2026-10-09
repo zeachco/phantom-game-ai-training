@@ -168,7 +168,7 @@ export default async (state: CaveState) => {
 
   const hint = document.createElement('div');
   hint.textContent =
-    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate';
+    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe';
   hint.style.position = 'fixed';
   hint.style.top = '38px';
   hint.style.left = '14px';
@@ -292,6 +292,7 @@ export default async (state: CaveState) => {
   let followed = human;
   let lastHud = 0;
   const chaseCamera = new ChaseCamera();
+  let wireframe = false;
 
   const respawn = (ball: Ball) => {
     // Balls intentionally share one starting transform; there is no
@@ -355,7 +356,7 @@ export default async (state: CaveState) => {
       mesh.quaternion.copy(ball.quat);
     }
 
-    const cameraObstructed = chaseCamera.update(camera, followed, cave, dt);
+    const cameraObstructed = chaseCamera.update(camera, followed, cave);
     if (cameraObstructed) {
       ballMeshes.get(followed)?.traverse((object) => {
         if (!(object instanceof THREE.Mesh)) return;
@@ -481,6 +482,34 @@ export default async (state: CaveState) => {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
   window.addEventListener('keydown', (event) => {
+    if (event.code === 'Backquote' || event.key === '`') {
+      if (event.repeat || event.isComposing) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.closest('input, textarea, select'))
+      )
+        return;
+      event.preventDefault();
+      wireframe = !wireframe;
+      cave.setWireframe(wireframe);
+      for (const mesh of ballMeshes.values()) {
+        mesh.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) return;
+          const materials = Array.isArray(object.material)
+            ? object.material
+            : [object.material];
+          for (const material of materials) {
+            if (
+              material instanceof THREE.MeshBasicMaterial ||
+              material instanceof THREE.MeshStandardMaterial
+            )
+              material.wireframe = wireframe;
+          }
+        });
+      }
+      return;
+    }
     if (event.key.toLowerCase() !== 'r') return;
     location.hash = `cave=${Math.max(0, seed + 1)}`;
     location.reload();

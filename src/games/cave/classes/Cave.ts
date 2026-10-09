@@ -1443,6 +1443,19 @@ export class Cave {
     return this.groundSpawn(config.SPAWN_OFFSET);
   }
 
+  /** Shared materials also keep newly streamed meshes in the selected mode. */
+  setWireframe(enabled: boolean) {
+    for (const material of [
+      this.#material,
+      this.#gateMaterial,
+      this.#gateNextMaterial,
+      this.#boostItemMaterial,
+      this.#wallMaterial,
+    ]) {
+      material.wireframe = enabled;
+    }
+  }
+
   /** build or drop the chunk meshes so the window [minS, maxS] stays meshed */
   update(minS: number, maxS: number, dt = 1 / 60) {
     this.#time += dt;
