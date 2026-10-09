@@ -94,3 +94,22 @@ test('pulls the camera in front of a wall slab', () => {
     expectVisible(camera, target);
   }
 });
+
+test('never forces its minimum follow distance through a nearby wall', () => {
+  const camera = new PerspectiveCamera(72, 1.6, 0.1, 1600);
+  const follow = new ChaseCamera();
+  const target = ball();
+  follow.update(camera, target, cave(-1, 2), 1 / 60);
+  expect(camera.position.distanceTo(new Vector3(0, 0.5, 0))).toBeLessThan(2);
+});
+
+test('uses a clear side view when a wall blocks the rear camera orbit', () => {
+  const camera = new PerspectiveCamera(72, 1.6, 0.1, 1600);
+  const follow = new ChaseCamera();
+  const target = ball();
+  const terrain = cave();
+  terrain.wallRayDistance = (_x, _y, _z, _dx, _dy, dz) => dz > 0.5 ? 2 : -1;
+  follow.update(camera, target, terrain, 1 / 60);
+  expect(Math.abs(camera.position.x)).toBeGreaterThan(20);
+  expectVisible(camera, target);
+});

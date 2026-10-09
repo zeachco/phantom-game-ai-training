@@ -28,6 +28,7 @@ export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
 
 /** squared stall threshold, the per-frame stall check needs no sqrt */
 const STALL_SPEED_SQ = config.BALL_STALL_SPEED * config.BALL_STALL_SPEED;
+const WALL_CONTACT_SKIN = 0.02;
 
 /**
  * Monkey Ball physics: one sphere that rolls through the analytic cave tube.
@@ -135,6 +136,8 @@ export class Ball {
   private avx = 0;
   private avy = 0;
   private avz = 0;
+  /** Briefly retain impact spin instead of overwriting it with ground roll. */
+  private spinBounceFrames = 0;
   /** scratch collision query, reused so no frame allocates */
   private hit: RadialHit = {
     s: 0,
@@ -254,6 +257,7 @@ export class Ball {
     this.avx = 0;
     this.avy = 0;
     this.avz = 0;
+    this.spinBounceFrames = 0;
     this.contactNormal.set(0, 1, 0);
     this.grounded = false;
     this.a = Math.PI;
@@ -281,6 +285,7 @@ export class Ball {
     this.controls.update();
     this.prevS = this.s;
     this.#move(cave);
+    if (this.spinBounceFrames > 0) this.spinBounceFrames--;
     if (this.boostFrames > 0) this.boostFrames--;
     if (cave.boostAt(this.s, this.a) > 0.2) {
       if (this.boostFrames <= 0 && this.useAI)
@@ -567,33 +572,54 @@ export class Ball {
       // would pop the ball onto its top instead of stopping it. Resolve it
       // BEFORE integration; compare the ball's bottom to the wall's absolute
       // top so a natural valley launch can clear it.
-      const wall = cave.wallAt(this.s, this.a);
-      const along =
-        this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
+      const wall = cave.wallAt(this.s, this.a, this);
+      const frontDistance =
+        wall?.frontFace?.dist ?? (wall ? wall.front - this.s : Infinity);
+      const frontNX = wall?.frontFace?.nx ?? -this.cx;
+      const frontNY = wall?.frontFace ? 0 : -this.cy;
+      const frontNZ = wall?.frontFace?.nz ?? -this.cz;
+      const incoming =
+        this.vx * frontNX + this.vy * frontNY + this.vz * frontNZ;
+      let moveDt = dt;
       if (
         wall &&
         Math.abs(wall.across) - this.radius < wall.halfAcross &&
-        this.s < wall.front - this.radius &&
-        this.s + dt * along >= wall.front - this.radius &&
+        frontDistance >= this.radius &&
+        frontDistance + dt * incoming < this.radius + WALL_CONTACT_SKIN &&
         this.y - this.radius < wall.topY &&
-        along > 0
+        incoming < 0
       ) {
-        const impulse = along * 1.3;
-        this.vx -= this.cx * impulse;
-        this.vy -= this.cy * impulse;
-        this.vz -= this.cz * impulse;
+        // Travel to first contact, then integrate the remaining time with
+        // reflected velocity. The distance is measured from the drawn face.
+        const contactDt = Math.max(0, Math.min(dt,
+          (this.radius + WALL_CONTACT_SKIN - frontDistance) / incoming,
+        ));
+        this.x += this.vx * contactDt;
+        this.y += this.vy * contactDt;
+        this.z += this.vz * contactDt;
+        this.s += contactDt *
+          (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz);
+        moveDt -= contactDt;
+        const bounce = -incoming > config.BALL_BOUNCE_SPEED
+          ? config.BALL_RESTITUTION : 0;
+        const impulse = incoming * (1 + bounce);
+        this.vx -= frontNX * impulse;
+        this.vy -= frontNY * impulse;
+        this.vz -= frontNZ * impulse;
+        if (bounce > 0) this.#bounceSpin();
       }
       // integrate
-      this.x += this.vx * dt;
-      this.y += this.vy * dt;
-      this.z += this.vz * dt;
+      this.x += this.vx * moveDt;
+      this.y += this.vy * moveDt;
+      this.z += this.vz * moveDt;
       this.s = Math.max(
         0,
         this.s +
-          dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
+          moveDt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
       );
       // collision: the tube surface is everything the ball can touch
       cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
+      this.s = this.hit.s;
       this.a = this.hit.a;
       const penetration = this.radius + this.hit.dist;
       this.grounded = false;
@@ -617,6 +643,7 @@ export class Ball {
           this.vy -= ny * impulse;
           this.vz -= nz * impulse;
           if (bounce > 0) {
+            if (ny < 0.5) this.#bounceSpin();
             // a real hit scrubs some tangential speed
             const vn2 = this.vx * nx + this.vy * ny + this.vz * nz;
             const tx = this.vx - nx * vn2;
@@ -643,19 +670,21 @@ export class Ball {
       // center overlap: a radius-wide dead zone otherwise let the ball's skin
       // slip into the slab before any push fired. Exit through the nearest
       // face among front, back, side and top, like a real box.
-      const solid = cave.wallAt(this.s, this.a);
+      const solid = cave.wallAt(this.s, this.a, this);
       if (solid) {
         const bottomY = this.y - this.radius;
+        const frontDistance = solid.frontFace?.dist ?? solid.front - this.s;
+        const backDistance = solid.backFace?.dist ?? this.s - solid.back;
         const overlapS =
-          this.s + this.radius > solid.front &&
-          this.s - this.radius < solid.back;
+          frontDistance < this.radius + WALL_CONTACT_SKIN &&
+          backDistance < this.radius + WALL_CONTACT_SKIN;
         const overlapA =
           Math.abs(solid.across) - this.radius < solid.halfAcross;
         const overlapV = bottomY < solid.topY;
         if (overlapS && overlapA && overlapV) {
-          let exit = this.s - solid.front + this.radius;
+          let exit = this.radius + WALL_CONTACT_SKIN - frontDistance;
           let axis: 'front' | 'back' | 'side' | 'top' = 'front';
-          const exitBack = solid.back + this.radius - this.s;
+          const exitBack = this.radius + WALL_CONTACT_SKIN - backDistance;
           if (exitBack < exit) {
             exit = exitBack;
             axis = 'back';
@@ -675,14 +704,14 @@ export class Ball {
           let ny = 0;
           let nz = 0;
           if (axis === 'front') {
-            nx = -this.cx;
-            ny = -this.cy;
-            nz = -this.cz;
+            nx = solid.frontFace?.nx ?? -this.cx;
+            ny = solid.frontFace ? 0 : -this.cy;
+            nz = solid.frontFace?.nz ?? -this.cz;
             this.s = Math.max(0, this.s - exit);
           } else if (axis === 'back') {
-            nx = this.cx;
-            ny = this.cy;
-            nz = this.cz;
+            nx = solid.backFace?.nx ?? this.cx;
+            ny = solid.backFace ? 0 : this.cy;
+            nz = solid.backFace?.nz ?? this.cz;
             this.s = Math.max(0, this.s + exit);
           } else if (axis === 'side') {
             // Around the floor, increasing angle moves opposite the frame's
@@ -706,6 +735,7 @@ export class Ball {
             this.vx -= nx * vn * (1 + bounce);
             this.vy -= ny * vn * (1 + bounce);
             this.vz -= nz * vn * (1 + bounce);
+            if (bounce > 0 && axis !== 'top') this.#bounceSpin();
           }
           if (axis === 'top') {
             this.grounded = true;
@@ -715,6 +745,10 @@ export class Ball {
           this.a = this.hit.a;
         }
       }
+      // Progress is a query hint, never an independent collision position.
+      cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
+      this.s = this.hit.s;
+      this.a = this.hit.a;
       // slippery ground, mild air drag
       const drag = Math.pow(
         this.grounded ? config.BALL_ROLL_DRAG : config.BALL_AIR_DRAG,
@@ -724,12 +758,12 @@ export class Ball {
       this.vy *= drag;
       this.vz *= drag;
       // visual roll: for a sphere rolling on a surface, omega = (n x v) / r
-      if (this.grounded) {
+      if (this.grounded && this.spinBounceFrames === 0) {
         const n = this.contactNormal;
         this.avx = (n.y * this.vz - n.z * this.vy) / this.radius;
         this.avy = (n.z * this.vx - n.x * this.vz) / this.radius;
         this.avz = (n.x * this.vy - n.y * this.vx) / this.radius;
-      } else {
+      } else if (!this.grounded) {
         const spin = Math.pow(config.BALL_SPIN_DAMP, dt);
         this.avx *= spin;
         this.avy *= spin;
@@ -740,6 +774,14 @@ export class Ball {
     }
     this.#refreshFrame(cave);
     this.speed = Math.hypot(this.vx, this.vy, this.vz);
+  }
+
+  /** A wall impact reverses the spin and retains half its angular speed. */
+  #bounceSpin() {
+    this.avx *= -0.5;
+    this.avy *= -0.5;
+    this.avz *= -0.5;
+    this.spinBounceFrames = 8;
   }
 
   /** integrate the visual quaternion by the current angular velocity */

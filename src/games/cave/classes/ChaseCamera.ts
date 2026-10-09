@@ -7,6 +7,7 @@ export class ChaseCamera {
   private heading = new Vector3(0, 0, -1);
   private target = new Vector3();
   private offset = new Vector3();
+  private candidate = new Vector3();
   private previousBall?: Ball;
   private previousPosition = new Vector3();
   private hit: RadialHit = {
@@ -55,41 +56,30 @@ export class ChaseCamera {
     const minimumDistance = vehicleRadius + 2.5;
     const distance = Math.max(25, vehicleRadius / Math.sin(limitingFov / 2));
     this.offset.set(-this.heading.x, 0.28, -this.heading.z).normalize();
-    const obstruction = cave.castWheelRay(
-      this.target.x,
-      this.target.y,
-      this.target.z,
-      this.offset.x,
-      this.offset.y,
-      this.offset.z,
-      distance,
-      ball.s,
-      this.hit,
-    );
-    const wallObstruction = cave.wallRayDistance(
-      this.target.x,
-      this.target.y,
-      this.target.z,
-      this.offset.x,
-      this.offset.y,
-      this.offset.z,
-      distance,
-      ball.s,
-    );
-    const nearest =
-      obstruction < 0
-        ? wallObstruction
-        : wallObstruction < 0
-          ? obstruction
-          : Math.min(obstruction, wallObstruction);
+    let nearest = this.#clearance(cave, ball, this.offset, distance);
+    if (nearest >= 0 && nearest < minimumDistance + 1) {
+      // If the rear orbit is blocked, use a clear side or front view rather
+      // than forcing the minimum follow distance through an obstacle.
+      for (const angle of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
+        const x = -this.heading.x;
+        const z = -this.heading.z;
+        this.candidate.set(x * Math.cos(angle) - z * Math.sin(angle), 0.28, x * Math.sin(angle) + z * Math.cos(angle)).normalize();
+        const clearance = this.#clearance(cave, ball, this.candidate, distance);
+        if (clearance < 0 || clearance > nearest) {
+          nearest = clearance;
+          this.offset.copy(this.candidate);
+          if (clearance < 0 || clearance >= minimumDistance + 1) break;
+        }
+      }
+    }
     const actualDistance =
-      nearest < 0 ? distance : Math.max(minimumDistance, nearest - 1);
+      nearest < 0 ? distance : Math.max(camera.near + 0.1, nearest - 1);
     camera.position
       .copy(this.target)
       .addScaledVector(this.offset, actualDistance);
     // A nearby wall pulls the camera in; widen the lens enough to retain the
     // whole ball instead of letting it fill or clip the viewport.
-    const requiredFov = 2 * Math.asin(Math.min(0.95, vehicleRadius / actualDistance));
+    const requiredFov = 2 * Math.asin(Math.min(0.95, (vehicleRadius + 0.5) / actualDistance));
     const fittedFov =
       camera.aspect < 1
         ? 2 * Math.atan(Math.tan(requiredFov / 2) / camera.aspect)
@@ -104,5 +94,11 @@ export class ChaseCamera {
     // If a rock or a wall leaves less than a ball length of room, the focused
     // ball can be drawn through that obstruction while retaining a view.
     return nearest >= 0 && nearest < minimumDistance + 1;
+  }
+
+  #clearance(cave: Cave, ball: Ball, offset: Vector3, distance: number) {
+    const rock = cave.castWheelRay(this.target.x, this.target.y, this.target.z, offset.x, offset.y, offset.z, distance, ball.s, this.hit);
+    const wall = cave.wallRayDistance(this.target.x, this.target.y, this.target.z, offset.x, offset.y, offset.z, distance, ball.s);
+    return rock < 0 ? wall : wall < 0 ? rock : Math.min(rock, wall);
   }
 }

@@ -82,6 +82,7 @@ const LEN = config.CAVE_SEGMENT_LENGTH;
 const PER = LEN / SAMPLES;
 const TWO_PI = Math.PI * 2;
 const NOISE_CELLS = Math.round(TWO_PI / config.CAVE_BUMP_ANGLE);
+const WALL_SEGMENTS = 32;
 
 /** result of the body/wheel collision query: the nearest point of the
  *  analytic surface to a point, with its radial normal */
@@ -99,6 +100,24 @@ export interface RadialHit {
   hx: number;
   hy: number;
   hz: number;
+}
+
+interface WallFace {
+  /** signed world distance, positive on the outside of the slab */
+  dist: number;
+  nx: number;
+  nz: number;
+}
+
+interface WallBounds {
+  front: number;
+  back: number;
+  topY: number;
+  top: number;
+  across: number;
+  halfAcross: number;
+  frontFace?: WallFace;
+  backFace?: WallFace;
 }
 
 /**
@@ -172,7 +191,7 @@ export class Cave {
       color: new THREE.Color(config.CAVE_COLOR),
       map: this.#rockTexture,
       vertexColors: true,
-      side: THREE.BackSide,
+      side: THREE.DoubleSide,
     });
     this.#gateMaterial = new THREE.MeshBasicMaterial({
       color: new THREE.Color(config.GATE_COLORS[0]),
@@ -566,6 +585,62 @@ export class Cave {
     ) * config.CAVE_VERTICAL_SCALE;
   }
 
+  /** Use the exact end-face vertices for rendering and world-space contact. */
+  #wallFaces = new Map<number, Float32Array>();
+
+  #wallFacePositions(wall: NonNullable<FeatureCell['wall']>, s: number) {
+    const cached = this.#wallFaces.get(s);
+    if (cached) return cached;
+    const positions = new Float32Array((WALL_SEGMENTS + 1) * 2 * 3);
+    const halfAngle = this.#wallHalfAngle(wall);
+    for (let j = 0; j <= WALL_SEGMENTS; j++) {
+      const a = wall.angle - halfAngle + (2 * halfAngle * j) / WALL_SEGMENTS;
+      const base = this.surface(s, a, { x: 0, y: 0, z: 0 });
+      const vertex = j * 6;
+      positions[vertex] = positions[vertex + 3] = base.x;
+      positions[vertex + 1] = base.y * config.CAVE_VERTICAL_SCALE;
+      positions[vertex + 4] = this.#wallTopY(wall, s, a);
+      positions[vertex + 2] = positions[vertex + 5] = base.z;
+    }
+    this.#wallFaces.set(s, positions);
+    return positions;
+  }
+
+  #wallFaceDistance(
+    wall: NonNullable<FeatureCell['wall']>, s: number, point: Pt, direction: number,
+  ): WallFace {
+    const positions = this.#wallFacePositions(wall, s);
+    const tangent = this.tangent(s, { x: 0, y: 0, z: 0 });
+    let bestDistance = Infinity;
+    const result = { dist: 0, nx: 0, nz: 0 };
+    for (let j = 0; j < WALL_SEGMENTS; j++) {
+      const i = j * 6;
+      const dx = positions[i + 6] - positions[i];
+      const dz = positions[i + 8] - positions[i + 2];
+      const lengthSquared = dx * dx + dz * dz;
+      if (lengthSquared < 1e-10) continue;
+      const fraction = Math.max(0, Math.min(1,
+        ((point.x - positions[i]) * dx + (point.z - positions[i + 2]) * dz) / lengthSquared,
+      ));
+      const wx = point.x - positions[i] - dx * fraction;
+      const wz = point.z - positions[i + 2] - dz * fraction;
+      const distanceSquared = wx * wx + wz * wz;
+      if (distanceSquared >= bestDistance) continue;
+      bestDistance = distanceSquared;
+      const length = Math.sqrt(lengthSquared);
+      let nx = -dz / length;
+      let nz = dx / length;
+      if ((nx * tangent.x + nz * tangent.z) * direction < 0) {
+        nx = -nx;
+        nz = -nz;
+      }
+      result.dist = wx * nx + wz * nz;
+      result.nx = nx;
+      result.nz = nz;
+    }
+    return result;
+  }
+
   /** Nearest wall to arc s, with everything the ball's swept barrier and its
    *  solid push-out need: the front/back faces, the absolute top Y, the top
    *  height above the floor, and the ball's signed lateral arc offset plus the
@@ -574,24 +649,11 @@ export class Cave {
   public wallAt(
     s: number,
     a: number,
-  ): {
-    front: number;
-    back: number;
-    topY: number;
-    top: number;
-    across: number;
-    halfAcross: number;
-  } | null {
+    point?: Pt,
+  ): WallBounds | null {
     if (this.#terrainProgress(s) <= 0) return null;
     const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
-    let best: {
-      front: number;
-      back: number;
-      topY: number;
-      top: number;
-      across: number;
-      halfAcross: number;
-    } | null = null;
+    let best: WallBounds | null = null;
     let bestDistance = Infinity;
     for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
       const wall = this.#featureCell(i).wall;
@@ -616,6 +678,12 @@ export class Cave {
           config.CAVE_VERTICAL_SCALE,
         across: da * radius,
         halfAcross: this.#wallHalfAngle(wall) * radius,
+        ...(point
+          ? {
+              frontFace: this.#wallFaceDistance(wall, wall.centerS, point, -1),
+              backFace: this.#wallFaceDistance(wall, back, point, 1),
+            }
+          : {}),
       };
     }
     return best;
@@ -650,21 +718,35 @@ export class Cave {
     sHint: number,
   ): number {
     let s = sHint;
-    for (let t = 1; t < maxLen; t += config.RAY_STEP) {
+    const inside = (t: number) => {
       const px = ox + dx * t;
       const py = oy + dy * t;
       const pz = oz + dz * t;
       this.nearestRadial(px, py, pz, s, this.#wallRayHit);
       s = this.#wallRayHit.s;
-      const solid = this.wallAt(this.#wallRayHit.s, this.#wallRayHit.a);
-      if (!solid) continue;
-      if (
-        this.#wallRayHit.s >= solid.front &&
-        this.#wallRayHit.s <= solid.back &&
+      const solid = this.wallAt(this.#wallRayHit.s, this.#wallRayHit.a, {
+        x: px, y: py, z: pz,
+      });
+      return solid !== null && (
+        solid.frontFace!.dist <= 0 &&
+        solid.backFace!.dist <= 0 &&
         Math.abs(solid.across) < solid.halfAcross &&
         py < solid.topY
-      )
-        return Math.max(0.01, t - config.RAY_STEP / 2);
+      );
+    };
+    if (inside(0)) return 0;
+    let low = 0;
+    for (let high = Math.min(config.RAY_STEP, maxLen); ; high = Math.min(maxLen, high + config.RAY_STEP)) {
+      if (inside(high)) {
+        for (let i = 0; i < 10; i++) {
+          const middle = (low + high) / 2;
+          if (inside(middle)) high = middle;
+          else low = middle;
+        }
+        return low;
+      }
+      if (high === maxLen) break;
+      low = high;
     }
     return -1;
   }
@@ -1299,9 +1381,16 @@ export class Cave {
       if (index < minChunk - 1 || index > maxChunk + 1)
         this.#floorProfiles.delete(index);
     }
+    // Feature cells and mesh chunks have different lengths. Preserve the
+    // path-adjusted future cells and every cell that can affect visible rock;
+    // regenerating them would change collision terrain under existing meshes.
+    const minCell = Math.floor((minChunk * LEN) / config.CAVE_FEATURE_CELL) - 1;
     for (const index of this.#featureCells.keys()) {
-      if (index < minChunk - 1 || index > maxChunk + 1)
-        this.#featureCells.delete(index);
+      if (index < minCell) this.#featureCells.delete(index);
+    }
+    for (const s of this.#wallFaces.keys()) {
+      if (s < (minChunk - 1) * LEN || s > (maxChunk + 2) * LEN)
+        this.#wallFaces.delete(s);
     }
     // the control line only needs to reach one chunk past the meshed range,
     // trim what fell behind, the remaining control points are absolute
@@ -1490,24 +1579,15 @@ export class Cave {
       const feature = this.#featureCell(c);
       const wall = feature.wall;
       if (wall && Math.floor(wall.centerS / LEN) === index) {
-        const angularSegments = 32;
+        const angularSegments = WALL_SEGMENTS;
         const halfAngle = this.#wallHalfAngle(wall);
         const front = wall.centerS;
         const back = front + wall.halfLen * 2;
         const addFace = (s: number) => {
-          const positions = new Float32Array((angularSegments + 1) * 2 * 3);
+          const positions = this.#wallFacePositions(wall, s);
           const indices: number[] = [];
           for (let j = 0; j <= angularSegments; j++) {
-            const a =
-              wall.angle - halfAngle + (2 * halfAngle * j) / angularSegments;
-            const base = this.surface(s, a, { x: 0, y: 0, z: 0 });
             const vertex = j * 2;
-            positions[vertex * 3] = base.x;
-            positions[vertex * 3 + 1] = base.y * config.CAVE_VERTICAL_SCALE;
-            positions[vertex * 3 + 2] = base.z;
-            positions[(vertex + 1) * 3] = base.x;
-            positions[(vertex + 1) * 3 + 1] = this.#wallTopY(wall, s, a);
-            positions[(vertex + 1) * 3 + 2] = base.z;
             if (j < angularSegments) {
               const next = vertex + 2;
               indices.push(vertex, next, vertex + 1, next, next + 1, vertex + 1);
@@ -1697,6 +1777,7 @@ export class Cave {
     this.#control.length = 0;
     this.#controlOffset = 0;
     this.#featureCells.clear();
+    this.#wallFaces.clear();
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
     this.#material.dispose();
     this.#rockTexture.dispose();

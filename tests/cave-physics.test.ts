@@ -211,3 +211,21 @@ test('both slab sides push a touching sphere outward and stop inward motion', ()
     expect(ball.y - ball.radius).toBeLessThan(6);
   }
 });
+
+test('a wall bounce reverses and halves angular velocity instead of resetting ground roll', () => {
+  const terrain = floor();
+  terrain.wallAt = () => ({ front: 100, back: 150, topY: 8, top: 8, across: 0, halfAcross: 43.2 });
+  const ball = new Ball({ ...spawn, s: 98.4, z: -98.4, y: 4 });
+  const spin = ball as unknown as { avx: number; avy: number; avz: number };
+  spin.avx = 2;
+  spin.avy = 0.4;
+  spin.avz = -0.3;
+  ball.controls.moveY = 0;
+  ball.vz = -6;
+  ball.update(terrain);
+  expect(ball.vz).toBeGreaterThan(0);
+  expect(spin.avx).toBeCloseTo(-1 * config.BALL_SPIN_DAMP, 6);
+  expect(spin.avy).toBeCloseTo(-0.2 * config.BALL_SPIN_DAMP, 6);
+  expect(spin.avz).toBeCloseTo(0.15 * config.BALL_SPIN_DAMP, 6);
+  expect(ball.quat.x).toBeLessThan(0);
+});

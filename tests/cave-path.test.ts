@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Color, Mesh, MeshStandardMaterial, Scene } from 'three';
+import { Color, Mesh, MeshStandardMaterial, Raycaster, Scene, Triangle, Vector3 } from 'three';
 import { Cave } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 import { Ball } from '../src/games/cave/classes/Ball';
@@ -240,8 +240,45 @@ test('a ball whose skin overlaps a wall face is pushed back out', () => {
   const ball = new Ball(terrain.groundSpawn(wall!.centerS - 0.5));
   ball.controls.moveY = 1;
   ball.update(terrain);
-  expect(ball.s).toBeLessThanOrEqual(wall!.centerS - config.BALL_RADIUS + 0.05);
+  expect(terrain.wallAt(ball.s, ball.a, ball)!.frontFace!.dist).toBeGreaterThanOrEqual(ball.radius);
   expect(terrain.wallSurfaceAt(ball.s, ball.a)).toBeNull();
+});
+
+test('seed 1 balls keep their full radius outside the drawn front face', () => {
+  const scene = new Scene();
+  const terrain = cave(1, scene);
+  terrain.update(0, 9500);
+  for (const cell of [25, 27, 28, 31, 32]) {
+    const wall = terrain.featureCell(cell).wall!;
+    const middle = terrain.surface(wall.centerS, wall.angle, { x: 0, y: 0, z: 0 });
+    const face = scene.children.find((object): object is Mesh => {
+      if (!(object instanceof Mesh)) return false;
+      const positions = object.geometry.getAttribute('position');
+      return positions.count === 66 && Math.hypot(positions.getX(32) - middle.x, positions.getZ(32) - middle.z) < 0.01;
+    })!;
+    expect(face).toBeDefined();
+    const ball = new Ball(terrain.groundSpawn(wall.centerS - 18));
+    const t = terrain.tangent(ball.s, { x: 0, y: 0, z: 0 });
+    ball.vx = t.x * 6;
+    ball.vy = t.y * 6;
+    ball.vz = t.z * 6;
+    const triangle = new Triangle();
+    const point = new Vector3();
+    const nearest = new Vector3();
+    const positions = face.geometry.getAttribute('position');
+    const indices = face.geometry.index!;
+    for (let frame = 0; frame < 80; frame++) {
+      ball.update(terrain);
+      point.set(ball.x, ball.y, ball.z);
+      for (let i = 0; i < indices.count; i += 3) {
+        triangle.a.fromBufferAttribute(positions, indices.getX(i));
+        triangle.b.fromBufferAttribute(positions, indices.getX(i + 1));
+        triangle.c.fromBufferAttribute(positions, indices.getX(i + 2));
+        triangle.closestPointToPoint(point, nearest);
+        expect(point.distanceTo(nearest)).toBeGreaterThanOrEqual(ball.radius - 0.001);
+      }
+    }
+  }
 });
 
 test('seed 3 allows a grounded ball to cross the wall front on either side', () => {
@@ -295,5 +332,40 @@ test('seed 3 allows a grounded ball to cross the wall front on either side', () 
     expect(ball.s).toBeGreaterThan(wall.centerS + ball.radius);
     expect(ball.vx * t.x + ball.vy * t.y + ball.vz * t.z).toBeGreaterThan(5);
     expect(ball.damaged).toBe(false);
+  }
+});
+
+test('streaming preserves the guaranteed features ahead and under visible cave meshes', () => {
+  const terrain = cave(2);
+  const ahead = terrain.featureCell(35);
+  const aheadLayout = structuredClone(ahead);
+  terrain.update(0, 500);
+  expect(terrain.featureCell(35)).toEqual(aheadLayout);
+  const visible = terrain.featureCell(31);
+  const visibleLayout = structuredClone(visible);
+  terrain.update(8400, 9800);
+  expect(terrain.featureCell(31)).toEqual(visibleLayout);
+  expect(terrain.featureCell(35)).toEqual(aheadLayout);
+});
+
+test('camera wall rays stop at the rendered bronze face', () => {
+  const scene = new Scene();
+  const terrain = cave(1, scene);
+  terrain.update(0, 9300);
+  for (const cell of [25, 31, 32]) {
+    const wall = terrain.featureCell(cell).wall!;
+    const surface = terrain.surface(wall.centerS, wall.angle, { x: 0, y: 0, z: 0 });
+    const face = scene.children.find((object): object is Mesh => {
+      if (!(object instanceof Mesh)) return false;
+      const positions = object.geometry.getAttribute('position');
+      return positions.count === 66 && Math.hypot(positions.getX(32) - surface.x, positions.getZ(32) - surface.z) < 0.01;
+    })!;
+    const t = terrain.tangent(wall.centerS, { x: 0, y: 0, z: 0 });
+    const direction = new Vector3(t.x, 0, t.z).normalize();
+    const origin = new Vector3(surface.x, surface.y * config.CAVE_VERTICAL_SCALE + 4, surface.z).addScaledVector(direction, -4);
+    const renderedHit = new Raycaster(origin, direction, 0, 20).intersectObject(face)[0];
+    expect(renderedHit).toBeDefined();
+    const hit = terrain.wallRayDistance(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, 20, wall.centerS - 4);
+    expect(Math.abs(hit - renderedHit.distance)).toBeLessThan(0.005);
   }
 });
