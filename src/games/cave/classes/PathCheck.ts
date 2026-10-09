@@ -60,7 +60,7 @@ export function ensureDrivablePath(cave: Cave, maxS: number): void {
     }
 
     // 3. a volatile stretch with columns but no launch ramp gets one, so
-    // the car can jump the rough ground instead of grinding through it.
+    // the ball can launch over rough ground on momentum instead of grinding.
     if (cell.volatility >= 0.7 && cell.columns.length > 0 && !cell.ramp) {
       const rng = mulberry32((cave.seed ^ (i * 0x9e3779b9)) >>> 0 || 1);
       const target = cell.columns[0].centerS;

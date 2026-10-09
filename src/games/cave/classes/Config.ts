@@ -119,20 +119,18 @@ class Config {
   public BALL_MAX_SPEED = 6;
   /** sphere radius: collision, rendering and camera framing all read it */
   public BALL_RADIUS = 1.4;
-  /** world down acceleration per frame^2: a touch lighter than the car's, so
-   *  jumps hang longer and slopes feel less punishing */
-  public BALL_GRAVITY = 0.095;
+  /** world down acceleration per frame^2. Light gravity lets a fast ball
+   *  carry valley momentum into a higher, longer natural launch. */
+  public BALL_GRAVITY = 0.085;
   public PHYSICS_SUBSTEPS = 4;
-  /** upward impulse (u/f) of a jump, applied along the contact normal. With
-   *  BALL_GRAVITY 0.095 this hangs ~27 frames and clears a ~8u step */
-  public BALL_JUMP_SPEED = 1.3;
   /** stick-directed acceleration (u/f^2) at full deflection */
   public BALL_ACCEL = 0.17;
-  /** velocity retained per frame while the ball rolls on a surface: very
-   *  slippery, so a Monkey Ball keeps gliding instead of stopping dead */
-  public BALL_ROLL_DRAG = 0.995;
-  /** velocity retained per frame while the ball is off the ground */
-  public BALL_AIR_DRAG = 0.9995;
+  /** velocity retained per frame while the ball rolls on a surface. Near-unit
+   *  drag preserves its valley speed so it can climb out and launch naturally. */
+  public BALL_ROLL_DRAG = 0.999;
+  /** velocity retained per frame while the ball is off the ground; airborne
+   *  momentum is almost conserved until terrain catches it again. */
+  public BALL_AIR_DRAG = 0.9999;
   /** fraction of the normal velocity kept on a wall bounce */
   public BALL_RESTITUTION = 0.42;
   /** impacts slower than this do not bounce; resting contacts just settle */
@@ -235,16 +233,12 @@ class Config {
    *  wall takes between 1/8 and 1/3 of the section it sits in */
   public CAVE_WALL_MIN_FRACTION = 1 / 8;
   public CAVE_WALL_MAX_FRACTION = 1 / 3;
-  /** wall height range (inward radius cut, generator units; world = x0.5).
-   *  High enough to read as a wall from the chase camera, but under the
-   *  jump's ~9u apex so a committed jump clears it */
+  /** wall height range in generator units (world Y = x0.5). Tall enough to
+   *  read clearly from the chase camera; valley momentum can clear it. */
   public CAVE_WALL_MIN = 10;
   public CAVE_WALL_MAX = 14;
   /** angular half-width of a wall: wide enough to span the driving band */
   public CAVE_WALL_ANGLE = 0.5;
-  /** uphill slope allowed over a wall face, world units per forward unit:
-   *  steep, unlike the gentle CAVE_FLOOR_MAX_CLIMB used elsewhere */
-  public CAVE_WALL_MAX_CLIMB = 0.6;
   /** emissive tint of the wall faces */
   public CAVE_WALL_COLOR: [number, number, number] = [0.85, 0.42, 0.3];
   /** the smallest drivable gap the path check keeps open around columns,

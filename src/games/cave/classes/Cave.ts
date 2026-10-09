@@ -63,8 +63,8 @@ export interface FeatureCell {
     centerA: number;
     halfA: number;
   } | null;
-  /** a vertical wall across the driving band: a floor step the ball must
-   *  jump. It spans a fraction of its section along the cave */
+  /** a vertical wall slab across the driving band. The ball must build
+   *  enough terrain momentum to launch over it. */
   wall: {
     /** leading face, where the step begins (the ball's collision plane) */
     centerS: number;
@@ -194,7 +194,7 @@ export class Cave {
       opacity: 0.9,
     });
     this.#wallMaterial = new THREE.MeshStandardMaterial({
-      color: 0x9b4b2e,
+      color: new THREE.Color(...config.CAVE_WALL_COLOR),
       emissive: 0x281006,
       roughness: 0.95,
       metalness: 0,
@@ -538,54 +538,36 @@ export class Cave {
     return influence;
   }
 
-  /** 0..1 across a wall: a steep front face, a flat top over the wall length,
-   *  then a short back drop. `lead` is sized so the face reaches full height
-   *  within the wall's own length. */
-  #wallLead(wall: NonNullable<FeatureCell['wall']>) {
-    return (
-      wall.height / (config.CAVE_WALL_MAX_CLIMB / config.CAVE_VERTICAL_SCALE) +
-      2
+  #wallHalfAngle(wall: NonNullable<FeatureCell['wall']>) {
+    return Math.min(
+      wall.angleWidth * 1.5,
+      config.CAVE_BAND_HALF_WIDTH + 0.12,
     );
   }
 
-  #wallAlong(s: number, wall: NonNullable<FeatureCell['wall']>) {
-    const lead = this.#wallLead(wall);
-    const back = wall.centerS + wall.halfLen * 2;
-    if (s <= wall.centerS || s >= back + lead) return 0;
-    const ease = (t: number) => t * t * (3 - 2 * t);
-    const rise = Math.min(1, (s - wall.centerS) / lead);
-    const drop = s <= back ? 1 : Math.max(0, 1 - (s - back) / lead);
-    return ease(rise) * ease(drop);
+  #wallAngularHeight(wall: NonNullable<FeatureCell['wall']>, a: number) {
+    if (this.#angleDistance(a, wall.angle) > this.#wallHalfAngle(wall))
+      return 0;
+    return Math.exp(
+      -(this.#angleDistance(a, wall.angle) ** 2) /
+        (2 * wall.angleWidth * wall.angleWidth),
+    );
   }
 
-  /** smooth 0..1 mask of a wall at (s, a), zero outside its band */
-  #wallInfluence(s: number, a: number) {
-    const progress = this.#terrainProgress(s);
-    if (progress <= 0) return 0;
-    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
-    let influence = 0;
-    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
-      const wall = this.#featureCell(i).wall;
-      if (!wall) continue;
-      const along = this.#wallAlong(s, wall);
-      if (along <= 0) continue;
-      const angular = Math.exp(
-        -(this.#angleDistance(a, wall.angle) ** 2) /
-          (2 * wall.angleWidth * wall.angleWidth),
-      );
-      influence = Math.max(influence, along * angular);
-    }
-    return influence * progress;
+  /** Wall top follows the baseline cave surface. It is shared by the visible
+   *  slab mesh and the ball's landing collision. */
+  #wallTopY(wall: NonNullable<FeatureCell['wall']>, s: number, a: number) {
+    const base = this.surface(s, a, { x: 0, y: 0, z: 0 });
+    return (
+      base.y +
+      wall.height *
+        this.#terrainProgress(s) *
+        this.#wallAngularHeight(wall, a)
+    ) * config.CAVE_VERTICAL_SCALE;
   }
 
-  /** the wall mask, public so the liveness/path checks can allow its slope */
-  public wallInfluenceAt(s: number, a: number) {
-    return this.#wallInfluence(s, a);
-  }
-
-  /** Nearest wall ahead of or at the arc s, within the ball's angular band,
-   *  for the ball's swept collision. `topY` is the wall top's absolute world
-   *  Y at the angle a, so the caller can tell a clear jump from a block. */
+  /** Nearest wall ahead of or at arc s, within its visible angular extent,
+   *  for the ball's swept front-face collision. */
   public wallAt(
     s: number,
     a: number,
@@ -597,28 +579,35 @@ export class Cave {
     for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
       const wall = this.#featureCell(i).wall;
       if (!wall) continue;
-      if (this.#angleDistance(a, wall.angle) > wall.angleWidth * 1.5) continue;
-      // look ahead far enough that a fast ball can still jump the face
+      if (this.#wallAngularHeight(wall, a) === 0) continue;
+      // look ahead far enough that a fast ball can launch over the face
       const distance = wall.centerS - s;
       if (distance > 80 || distance < -24) continue;
       const abs = Math.abs(distance);
       if (abs >= bestDistance) continue;
       bestDistance = abs;
-      const base = this.surface(wall.centerS, a, { x: 0, y: 0, z: 0 });
-      const progress = this.#terrainProgress(wall.centerS);
-      const angular = Math.exp(
-        -(this.#angleDistance(a, wall.angle) ** 2) /
-          (2 * wall.angleWidth * wall.angleWidth),
-      );
       best = {
         front: wall.centerS,
         back: wall.centerS + wall.halfLen * 2,
-        topY:
-          (base.y + wall.height * progress * angular) *
-          config.CAVE_VERTICAL_SCALE,
+        topY: this.#wallTopY(wall, wall.centerS, a),
       };
     }
     return best;
+  }
+
+  /** Top of the visible raised wall strip at the current arc/angle, or null
+   *  outside its footprint. Ball collision uses this same surface as mesh. */
+  public wallSurfaceAt(s: number, a: number): number | null {
+    if (this.#terrainProgress(s) <= 0) return null;
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      const wall = this.#featureCell(i).wall;
+      if (!wall) continue;
+      if (s < wall.centerS || s > wall.centerS + wall.halfLen * 2) continue;
+      if (this.#wallAngularHeight(wall, a) === 0) continue;
+      return this.#wallTopY(wall, s, a);
+    }
+    return null;
   }
 
   /** Inward radial cuts make raised road lanes, rock columns and jump ramps.
@@ -671,19 +660,6 @@ export class Cave {
         config.CAVE_BAND_HALF_WIDTH + 0.25,
       );
       delta -= progress * along * angular * ramp.height;
-    }
-    // A vertical wall: a steep front face across the band. The ball's swept
-    // check (wallAt) blocks it; the radius makes it visible and landable.
-    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
-      const wall = this.#featureCell(i).wall;
-      if (!wall) continue;
-      const along = this.#wallAlong(s, wall);
-      if (along <= 0) continue;
-      const angular = Math.exp(
-        -(this.#angleDistance(a, wall.angle) ** 2) /
-          (2 * wall.angleWidth * wall.angleWidth),
-      );
-      delta -= progress * along * angular * wall.height;
     }
     return delta;
   }
@@ -826,10 +802,6 @@ export class Cave {
     if (cached) return cached;
     const rise = config.CAVE_FLOOR_MAX_CLIMB / config.CAVE_VERTICAL_SCALE;
     const stepRise = rise * PER;
-    // A wall face is allowed a much steeper climb: the ball jumps it, the
-    // gentle cap elsewhere stays for everything else
-    const wallStepRise =
-      (config.CAVE_WALL_MAX_CLIMB / config.CAVE_VERTICAL_SCALE) * PER;
     const drop = config.CAVE_FLOOR_MAX_DROP / config.CAVE_VERTICAL_SCALE;
     const stepDrop = drop * PER;
     // Features only subtract radius. This upper bound guarantees that no
@@ -855,14 +827,12 @@ export class Cave {
         // of flipping over it. Fast cars still leave the ground: the capped
         // drop outruns gravity at driving speed.
         const raw = this.#rawRadius(arc, angle);
-        const stepRiseHere =
-          this.#wallInfluence(arc, angle) > 0.2 ? wallStepRise : stepRise;
         nextRadius =
           nextRadius === Infinity
             ? raw
             : Math.min(
                 Math.max(raw, nextRadius - stepDrop),
-                nextRadius + stepRiseHere,
+                nextRadius + stepRise,
               );
         if (j <= SAMPLES) profile[j * SIDES + k] = nextRadius;
       }
@@ -1301,13 +1271,6 @@ export class Cave {
     return count;
   }
 
-  /** number of explicit vertical obstacle faces currently meshed */
-  public wallFaceCount() {
-    let count = 0;
-    for (const chunk of this.#chunks.values()) count += chunk.walls.length;
-    return count;
-  }
-
   /** precompute the sample table and build the tube mesh of one chunk */
   #buildChunk(index: number) {
     this.#ensureControl(index + 1);
@@ -1387,14 +1350,6 @@ export class Cave {
           cg = cg * (1 - t) + tint[1] * t;
           cb = cb * (1 - t) + tint[2] * t;
         }
-        const wallMask = this.#wallInfluence(s, a);
-        if (wallMask > 0.25) {
-          const tint = config.CAVE_WALL_COLOR;
-          const t = (wallMask - 0.25) / 0.75;
-          cr = cr * (1 - t) + tint[0] * t;
-          cg = cg * (1 - t) + tint[1] * t;
-          cb = cb * (1 - t) + tint[2] * t;
-        }
         colors[vi * 3] = cr;
         colors[vi * 3 + 1] = cg;
         colors[vi * 3 + 2] = cb;
@@ -1464,48 +1419,87 @@ export class Cave {
       const feature = this.#featureCell(c);
       const wall = feature.wall;
       if (wall && Math.floor(wall.centerS / LEN) === index) {
-        const segments = 32;
-        const positions = new Float32Array((segments + 1) * 2 * 3);
-        const indices: number[] = [];
+        const angularSegments = 32;
+        const halfAngle = this.#wallHalfAngle(wall);
         const front = wall.centerS;
-        const halfAngle = Math.min(
-          wall.angleWidth * 1.5,
-          config.CAVE_BAND_HALF_WIDTH + 0.12,
-        );
-        const progress = this.#terrainProgress(front);
-        for (let j = 0; j <= segments; j++) {
-          const a = wall.angle - halfAngle + (2 * halfAngle * j) / segments;
-          const base = this.surface(front, a, { x: 0, y: 0, z: 0 });
-          const angular = Math.exp(
-            -(this.#angleDistance(a, wall.angle) ** 2) /
-              (2 * wall.angleWidth * wall.angleWidth),
+        const back = front + wall.halfLen * 2;
+        const addFace = (s: number) => {
+          const positions = new Float32Array((angularSegments + 1) * 2 * 3);
+          const indices: number[] = [];
+          for (let j = 0; j <= angularSegments; j++) {
+            const a =
+              wall.angle - halfAngle + (2 * halfAngle * j) / angularSegments;
+            const base = this.surface(s, a, { x: 0, y: 0, z: 0 });
+            const vertex = j * 2;
+            positions[vertex * 3] = base.x;
+            positions[vertex * 3 + 1] = base.y * config.CAVE_VERTICAL_SCALE;
+            positions[vertex * 3 + 2] = base.z;
+            positions[(vertex + 1) * 3] = base.x;
+            positions[(vertex + 1) * 3 + 1] = this.#wallTopY(wall, s, a);
+            positions[(vertex + 1) * 3 + 2] = base.z;
+            if (j < angularSegments) {
+              const next = vertex + 2;
+              indices.push(vertex, next, vertex + 1, next, next + 1, vertex + 1);
+            }
+          }
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(positions, 3),
           );
-          const bottom = j * 2;
-          positions[bottom * 3] = base.x;
-          positions[bottom * 3 + 1] = base.y * config.CAVE_VERTICAL_SCALE;
-          positions[bottom * 3 + 2] = base.z;
-          positions[(bottom + 1) * 3] = base.x;
-          positions[(bottom + 1) * 3 + 1] =
-            (base.y + wall.height * progress * angular) *
-            config.CAVE_VERTICAL_SCALE;
-          positions[(bottom + 1) * 3 + 2] = base.z;
-          if (j < segments) {
-            const next = bottom + 2;
-            indices.push(bottom, next, bottom + 1, next, next + 1, bottom + 1);
+          geometry.setIndex(indices);
+          geometry.computeVertexNormals();
+          geometry.computeBoundingSphere();
+          const face = new THREE.Mesh(geometry, this.#wallMaterial);
+          face.frustumCulled = false;
+          this.#scene.add(face);
+          walls.push(face);
+        };
+        // Both vertical end faces and the raised top are rendered because
+        // all three are real collision surfaces.
+        addFace(front);
+        addFace(back);
+
+        const sSegments = Math.max(4, Math.ceil((back - front) / 8));
+        const topPositions = new Float32Array(
+          (sSegments + 1) * (angularSegments + 1) * 3,
+        );
+        const topIndices: number[] = [];
+        for (let si = 0; si <= sSegments; si++) {
+          const s = front + ((back - front) * si) / sSegments;
+          for (let ai = 0; ai <= angularSegments; ai++) {
+            const a =
+              wall.angle - halfAngle + (2 * halfAngle * ai) / angularSegments;
+            const base = this.surface(s, a, { x: 0, y: 0, z: 0 });
+            const vertex = si * (angularSegments + 1) + ai;
+            topPositions[vertex * 3] = base.x;
+            topPositions[vertex * 3 + 1] = this.#wallTopY(wall, s, a);
+            topPositions[vertex * 3 + 2] = base.z;
+            if (si < sSegments && ai < angularSegments) {
+              const nextRow = vertex + angularSegments + 1;
+              topIndices.push(
+                vertex,
+                vertex + 1,
+                nextRow,
+                vertex + 1,
+                nextRow + 1,
+                nextRow,
+              );
+            }
           }
         }
-        const wallGeometry = new THREE.BufferGeometry();
-        wallGeometry.setAttribute(
+        const topGeometry = new THREE.BufferGeometry();
+        topGeometry.setAttribute(
           'position',
-          new THREE.BufferAttribute(positions, 3),
+          new THREE.BufferAttribute(topPositions, 3),
         );
-        wallGeometry.setIndex(indices);
-        wallGeometry.computeVertexNormals();
-        wallGeometry.computeBoundingSphere();
-        const wallMesh = new THREE.Mesh(wallGeometry, this.#wallMaterial);
-        wallMesh.frustumCulled = false;
-        this.#scene.add(wallMesh);
-        walls.push(wallMesh);
+        topGeometry.setIndex(topIndices);
+        topGeometry.computeVertexNormals();
+        topGeometry.computeBoundingSphere();
+        const top = new THREE.Mesh(topGeometry, this.#wallMaterial);
+        top.frustumCulled = false;
+        this.#scene.add(top);
+        walls.push(top);
       }
 
       const pad = feature.boost;

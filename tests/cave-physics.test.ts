@@ -42,6 +42,9 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
     wallAt() {
       return null;
     },
+    wallSurfaceAt() {
+      return null;
+    },
     nearestRadial(
       x: number,
       y: number,
@@ -157,33 +160,23 @@ describe('cave ball physics', () => {
   test('an AI ball builds the full brain input vector and drives a frame', () => {
     const cave = floor();
     const ball = new Ball(spawn, ControlType.AI, config.BALL_MAX_SPEED, 't', 1);
-    const { inputCount } = getCaveBrainDimensions(ball.sensor!.rayCount);
+    const { inputCount, outputCount } = getCaveBrainDimensions(
+      ball.sensor!.rayCount,
+    );
     expect(inputCount).toBe(ball.sensor!.rayCount * 2 + 4 + 8);
+    expect(outputCount).toBe(2);
     expect(() => ball.update(cave)).not.toThrow();
   });
 });
 
-describe('cave ball jumping', () => {
-  test('space jumps once per press and lets gravity own the landing', () => {
-    const { ball, cave } = settled();
-    ball.controls.jump = 1;
-    ball.update(cave);
-    expect(ball.vy).toBeGreaterThan(0.3);
-    ball.update(cave);
-    expect(ball.vy).toBeGreaterThan(0); // still rising, no second impulse
-    ball.controls.jump = 0;
-    for (let f = 0; f < 60 && ball.vy > 0; f++) ball.update(cave);
-    expect(ball.vy).toBeLessThan(0);
-    for (let f = 0; f < 120 && !ball.grounded; f++) ball.update(cave);
-    expect(ball.grounded).toBe(true);
-    expect(ball.y).toBeLessThan(config.BALL_RADIUS + 0.3);
-  });
-
-  test('the stick accelerates horizontally, jumps are never capped away', () => {
-    const { ball, cave } = settled();
-    ball.controls.moveY = 1;
-    ball.controls.jump = 1;
-    ball.update(cave);
-    expect(ball.vy).toBeGreaterThan(config.BALL_GRAVITY * 2);
-  });
+test('airborne movement retains horizontal momentum without jump or airtime timers', () => {
+  const ball = new Ball({ ...spawn, y: 40 });
+  ball.vz = -5;
+  const cave = floor();
+  tick(ball, cave, 20);
+  expect(ball.grounded).toBe(false);
+  expect(ball.vz).toBeLessThan(-4.95);
+  expect(Math.hypot(ball.vx, ball.vz)).toBeLessThanOrEqual(
+    config.BALL_MAX_SPEED,
+  );
 });

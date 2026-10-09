@@ -1,8 +1,9 @@
 # Cave arcade driving (Monkey Ball style)
 
-Status: ball physics implemented. 19/19 tests green (`bun test`). Every number
-below is a `Config.ts` knob, listed with its role so tuning is a lookup, not an
-archaeology dig.
+Status: ball physics implemented. 24/24 tests green (`bun test`). The ball has
+no button-triggered jump or airtime timer: valleys, gravity and carried velocity
+launch it naturally. Every number below is a `Config.ts` knob, listed with its
+role so tuning is a lookup, not an archaeology dig.
 
 ## The shape of the game
 
@@ -14,25 +15,25 @@ car class) with a single rolling sphere, the Monkey Ball model:
   (`Cave.nearestRadial`), so what the ball hits is exactly what is drawn.
 - Gravity (`BALL_GRAVITY`) pulls it down the slopes; it settles on the floor
   band and rolls. There is no suspension, no engine and no tire model.
-- Motion is slippery on purpose: `BALL_ROLL_DRAG = 0.995` per frame keeps the
-  ball gliding instead of stopping dead.
+- Motion preserves momentum: `BALL_ROLL_DRAG = 0.999` on the ground and
+  `BALL_AIR_DRAG = 0.9999` in flight let the ball carry valley speed into its
+  climb and launch naturally.
 - Orientation is purely visual. `Ball.quat` spins by `omega = (n x v) / r`
   (`n` the inward contact normal), so the sphere reads as rolling. Physics
   never reads the quaternion.
 
-## Controls: two axes and a jump button
+## Controls: two analog axes
 
-`Controls` has two analog outputs, `moveX` (right) and `moveY` (forward),
-both in `[-1, 1]` - a GameCube stick - plus one digital `jump`.
+`Controls` has exactly two outputs, `moveX` (right) and `moveY` (forward),
+both in `[-1, 1]` - a GameCube stick. There is no jump button or airtime
+state.
 
 - Human: WASD / arrows contribute +/-1 per axis; opposite keys cancel; the
-  left stick (axes 0 and 1) drives with a deadzone. Space (or pad A/B) jumps.
-  The two sources sum and clamp.
-- AI: the brain writes `moveX`/`moveY`/`jump` directly, so the network has
-  three output channels (`Object.keys(controls)` derives the count).
-- A jump applies `BALL_JUMP_SPEED` along the contact normal, once per press;
-  holding re-fires on every landing, so a held jump hops along the floor.
-- The speed cap is horizontal only, so a jump is never capped away.
+  left stick (axes 0 and 1) drives with a deadzone. The two sources sum and
+  clamp.
+- AI: the brain writes `moveX`/`moveY` directly, so the network has two output
+  channels (`Object.keys(controls)` derives the count).
+- The speed cap is horizontal only, preserving vertical launch velocity.
 - The stick vector is normalized in `Ball.#move`, so diagonals are not faster
   than the axes.
 - `moveY` is forward along the track, `moveX` is the camera-right direction:
@@ -55,10 +56,9 @@ Per frame, `PHYSICS_SUBSTEPS` substeps of:
 6. Rolling drag, then the visual roll.
 
 Key knobs: `BALL_MAX_SPEED 6` (a boost item is the only way past it),
-`BALL_RADIUS 1.4`, `BALL_ACCEL 0.17`, `BALL_GRAVITY 0.095`,
-`BALL_JUMP_SPEED 1.3` (~9u apex over ~27 frames), `BALL_RESTITUTION 0.42`,
-`BALL_WALL_SCRUB 0.85`, `BALL_CRASH_SPEED 8` (below the unboosted cap, so
-only a near head-on full-speed hit kills).
+`BALL_RADIUS 1.4`, `BALL_ACCEL 0.17`, `BALL_GRAVITY 0.085`,
+`BALL_ROLL_DRAG 0.999`, `BALL_AIR_DRAG 0.9999`,
+`BALL_RESTITUTION 0.42`, `BALL_WALL_SCRUB 0.85`, `BALL_CRASH_SPEED 8`.
 
 ## Depth: variation compounds as you go deeper
 
@@ -85,13 +85,14 @@ Each feature cell can carry a vertical wall across the driving band:
   `CAVE_WALL_MAX_FRACTION` (1/3), so it takes 30-80 of the section's 240 units.
 - Height `CAVE_WALL_MIN..CAVE_WALL_MAX` (generator units, world Y = x0.5),
   with a Gaussian falloff over `CAVE_WALL_ANGLE` so it spans the band. The
-  analytic ground profile rises at `CAVE_WALL_MAX_CLIMB`; an explicit
-  double-sided vertical face mesh is also built across the band at the leading
-  edge. The ground cut alone only rendered as a brown patch, not a wall.
-- The ball resolves the face with a *predictive swept barrier*
-  (`Cave.wallAt` + the pre-integration crossing test in `Ball.#move`): a
-  crossing from below is bounced back instead of being popped onto the wall
-  top by the radial query. A jump already above the top sails over.
+  raised top is an explicit mesh over the same 1/8..1/3-section interval as
+  its collision surface; both end faces are vertical. Walls no longer alter
+  the analytic cave floor, which previously caused stray collisions behind
+  the visible doorway.
+- `Cave.wallAt` and the pre-integration swept check block the visible front
+  face; `Cave.wallSurfaceAt` is shared by the top mesh and the ball's landing
+  collision. The angular extents also share one width calculation. Valley
+  momentum, not a jump button, launches the ball over obstacles.
 
 ## Boost items
 

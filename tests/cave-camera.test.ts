@@ -43,7 +43,7 @@ function expectVisible(camera: PerspectiveCamera, target: Ball) {
   }
 }
 
-test('keeps the whole ball framed through sharp turns, jumps and respawns', () => {
+test('keeps the whole ball framed through sharp turns, hills and respawns', () => {
   for (const aspect of [1.6, 390 / 844]) {
     const camera = new PerspectiveCamera(72, aspect, 0.1, 1600);
     const follow = new ChaseCamera();

@@ -167,8 +167,7 @@ export default async (state: CaveState) => {
   document.body.appendChild(title);
 
   const hint = document.createElement('div');
-  hint.textContent =
-    'WASD / left stick to roll · Space / A to jump · R to regenerate';
+  hint.textContent = 'WASD / left stick to roll · R to regenerate';
   hint.style.position = 'fixed';
   hint.style.top = '38px';
   hint.style.left = '14px';

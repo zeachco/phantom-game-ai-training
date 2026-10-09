@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Mesh, Scene } from 'three';
+import { Color, Mesh, MeshStandardMaterial, Scene } from 'three';
 import { Cave } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 import { Ball } from '../src/games/cave/classes/Ball';
@@ -165,4 +165,51 @@ test('wall obstacles include explicit vertical face geometry', () => {
     tallest = Math.max(tallest, face.getY(vertex + 1) - face.getY(vertex));
   }
   expect(tallest).toBeGreaterThan(1.5);
+});
+
+test('the wall top mesh has matching landing collision across its section span', () => {
+  const scene = new Scene();
+  const terrain = cave(7, scene);
+  terrain.update(0, config.CAVE_SEGMENT_LENGTH * 12);
+
+  let wall: NonNullable<ReturnType<Cave['featureCell']>['wall']> | null = null;
+  for (let i = 0; i < 12 && !wall; i++) wall = terrain.featureCell(i).wall;
+  expect(wall).not.toBeNull();
+
+  const middleS = wall!.centerS + wall!.halfLen;
+  const expectedTop = terrain.wallSurfaceAt(middleS, wall!.angle);
+  expect(expectedTop).not.toBeNull();
+  const spawn = terrain.groundSpawn(middleS);
+  const ball = new Ball({
+    ...spawn,
+    y: expectedTop! + config.BALL_RADIUS + 0.05,
+  });
+  ball.vy = -1;
+  ball.update(terrain);
+  const collisionTop = terrain.wallSurfaceAt(ball.s, ball.a);
+  expect(collisionTop).not.toBeNull();
+  expect(ball.y - config.BALL_RADIUS).toBeCloseTo(collisionTop!, 1);
+
+  const wallTopSegments = Math.max(4, Math.ceil((wall!.halfLen * 2) / 8));
+  const expectedVertices = (wallTopSegments + 1) * 33;
+  const expectedMeshY = terrain.wallSurfaceAt(middleS, wall!.angle)!;
+  const matchingTopMeshes = scene.children.filter((object): object is Mesh => {
+    if (!(object instanceof Mesh)) return false;
+    const material = object.material;
+    return (
+      material instanceof MeshStandardMaterial &&
+      material.color.equals(new Color(...config.CAVE_WALL_COLOR)) &&
+      object.geometry.getAttribute('position')?.count === expectedVertices
+    );
+  });
+  expect(matchingTopMeshes.length).toBeGreaterThan(0);
+  const middleVertex =
+    Math.floor(wallTopSegments / 2) * 33 + 16;
+  expect(
+    matchingTopMeshes.some((mesh) =>
+      Math.abs(
+        mesh.geometry.getAttribute('position').getY(middleVertex) - expectedMeshY,
+      ) < 1e-4,
+    ),
+  ).toBe(true);
 });

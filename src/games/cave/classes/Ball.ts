@@ -120,8 +120,6 @@ export class Ball {
   public finished = false;
 
   private stallFrames = 0;
-  /** true until the jump input releases, so a held jump fires once */
-  private jumpConsumed = false;
   /** frames of boost remaining: collecting a boost item pushes the ball and
    *  lifts its speed cap while this runs; items refresh it */
   private boostFrames = 0;
@@ -273,7 +271,6 @@ export class Ball {
     this.deathPenalty = 0;
     this.speed = 0;
     this.boostFrames = 0;
-    this.jumpConsumed = false;
     this.hit.dist = -config.BALL_RADIUS;
     this.hasPrevSensors = false;
     this.prevSensorInputs.fill(0);
@@ -364,10 +361,9 @@ export class Ball {
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);
-        const [moveX, moveY, jump] = outputs;
+        const [moveX, moveY] = outputs;
         this.controls.moveX = clamp(-1, 1, moveX);
         this.controls.moveY = clamp(-1, 1, moveY);
-        this.controls.jump = clamp(0, 1, jump);
       }
     }
   }
@@ -519,26 +515,10 @@ export class Ball {
       sx /= stick;
       sy /= stick;
     }
-    const jump = clamp(0, 1, this.controls.jump);
     for (let step = 0; step < config.PHYSICS_SUBSTEPS; step++) {
       this.#refreshFrame(cave);
-      // jump: one impulse per press, along the contact normal, so a slope
-      // launch is angled with the ground under the ball
-      if (jump > 0.5) {
-        // one impulse per press, and holding re-fires on every landing, so a
-        // held jump hops the ball along the floor
-        if (this.grounded && !this.jumpConsumed) {
-          const n = this.contactNormal;
-          this.vx += n.x * config.BALL_JUMP_SPEED;
-          this.vy += n.y * config.BALL_JUMP_SPEED;
-          this.vz += n.z * config.BALL_JUMP_SPEED;
-          this.jumpConsumed = true;
-        } else if (!this.grounded) {
-          this.jumpConsumed = false;
-        }
-      } else {
-        this.jumpConsumed = false;
-      }
+      // Only terrain, gravity and momentum can launch the ball. There is no
+      // airtime timer or scripted jump impulse.
       // control basis: the horizontal part of the cave tangent and its right.
       // Near a vertical tangent, fall back to the current velocity direction.
       let cfx = this.cx;
@@ -574,8 +554,8 @@ export class Ball {
           this.vz += this.cz * config.BOOST_ACCEL * dt;
         }
       }
-      // speed cap: the stick drives horizontally, so cap the horizontal
-      // speed and let gravity and jumps own the vertical
+      // speed cap: the stick drives horizontally, so cap horizontal speed
+      // only; gravity and terrain own vertical motion
       const cap = this.effectiveMaxSpeed();
       const horizontal = Math.hypot(this.vx, this.vz);
       if (horizontal > cap) {
@@ -586,7 +566,7 @@ export class Ball {
       // predictive wall barrier: a wall face is steep, and the radial query
       // would pop the ball onto its top instead of stopping it. Resolve it
       // BEFORE integration; compare the ball's bottom to the wall's absolute
-      // top so a jump already above the face can clear it.
+      // top so a natural valley launch can clear it.
       const wall = cave.wallAt(this.s, this.a);
       const along =
         this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
@@ -655,6 +635,20 @@ export class Ball {
             this.damaged = true;
           }
         }
+      }
+      // Raised wall tops are explicit visible surfaces, not hidden cuts in
+      // the cave floor. Land on the matching top mesh when descending through
+      // it, or the ball would encounter a collision behind the door face.
+      const wallTop = cave.wallSurfaceAt(this.s, this.a);
+      if (
+        wallTop !== null &&
+        this.vy <= 0 &&
+        this.y - this.radius < wallTop
+      ) {
+        this.y = wallTop + this.radius;
+        this.vy = 0;
+        this.grounded = true;
+        this.contactNormal.set(0, 1, 0);
       }
       // slippery ground, mild air drag
       const drag = Math.pow(
