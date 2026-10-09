@@ -66,8 +66,24 @@ export class ChaseCamera {
       ball.s,
       this.hit,
     );
+    const wallObstruction = cave.wallRayDistance(
+      this.target.x,
+      this.target.y,
+      this.target.z,
+      this.offset.x,
+      this.offset.y,
+      this.offset.z,
+      distance,
+      ball.s,
+    );
+    const nearest =
+      obstruction < 0
+        ? wallObstruction
+        : wallObstruction < 0
+          ? obstruction
+          : Math.min(obstruction, wallObstruction);
     const actualDistance =
-      obstruction < 0 ? distance : Math.max(minimumDistance, obstruction - 1);
+      nearest < 0 ? distance : Math.max(minimumDistance, nearest - 1);
     camera.position
       .copy(this.target)
       .addScaledVector(this.offset, actualDistance);
@@ -85,8 +101,8 @@ export class ChaseCamera {
     }
     camera.up.set(0, 1, 0);
     camera.lookAt(this.target);
-    // If a rock leaves less than a ball length of room, the focused ball can
-    // be drawn through that obstruction while retaining a usable camera view.
-    return obstruction >= 0 && obstruction < minimumDistance + 1;
+    // If a rock or a wall leaves less than a ball length of room, the focused
+    // ball can be drawn through that obstruction while retaining a view.
+    return nearest >= 0 && nearest < minimumDistance + 1;
   }
 }

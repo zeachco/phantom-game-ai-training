@@ -566,30 +566,56 @@ export class Cave {
     ) * config.CAVE_VERTICAL_SCALE;
   }
 
-  /** Nearest wall ahead of or at arc s, within its visible angular extent,
-   *  for the ball's swept front-face collision. */
+  /** Nearest wall to arc s, with everything the ball's swept barrier and its
+   *  solid push-out need: the front/back faces, the absolute top Y, the top
+   *  height above the floor, and the ball's signed lateral arc offset plus the
+   *  slab's half-width. These are the same numbers the slab mesh is built from,
+   *  so the visible obstacle and its collision cannot drift apart. */
   public wallAt(
     s: number,
     a: number,
-  ): { front: number; back: number; topY: number } | null {
+  ): {
+    front: number;
+    back: number;
+    topY: number;
+    top: number;
+    across: number;
+    halfAcross: number;
+  } | null {
     if (this.#terrainProgress(s) <= 0) return null;
     const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
-    let best: { front: number; back: number; topY: number } | null = null;
+    let best: {
+      front: number;
+      back: number;
+      topY: number;
+      top: number;
+      across: number;
+      halfAcross: number;
+    } | null = null;
     let bestDistance = Infinity;
     for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
       const wall = this.#featureCell(i).wall;
       if (!wall) continue;
-      if (this.#wallAngularHeight(wall, a) === 0) continue;
-      // look ahead far enough that a fast ball can launch over the face
-      const distance = wall.centerS - s;
-      if (distance > 80 || distance < -24) continue;
-      const abs = Math.abs(distance);
-      if (abs >= bestDistance) continue;
-      bestDistance = abs;
+      const back = wall.centerS + wall.halfLen * 2;
+      // near enough for the swept front barrier or the solid body
+      if (s < wall.centerS - 30 || s > back + 30) continue;
+      const distance = Math.abs(s - (wall.centerS + back) / 2);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      const radius = this.radius(s, a);
+      let da = a - wall.angle;
+      da = (((da + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI - Math.PI;
       best = {
         front: wall.centerS,
-        back: wall.centerS + wall.halfLen * 2,
-        topY: this.#wallTopY(wall, wall.centerS, a),
+        back,
+        topY: this.#wallTopY(wall, s, a),
+        top:
+          wall.height *
+          this.#terrainProgress(s) *
+          this.#wallAngularHeight(wall, a) *
+          config.CAVE_VERTICAL_SCALE,
+        across: da * radius,
+        halfAcross: this.#wallHalfAngle(wall) * radius,
       };
     }
     return best;
@@ -609,6 +635,51 @@ export class Cave {
     }
     return null;
   }
+
+  /** Distance along a ray at which it first enters a wall slab body, or -1.
+   *  Used by the chase camera so the wall mesh cannot fill the view when the
+   *  camera would otherwise sit inside it. */
+  public wallRayDistance(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    maxLen: number,
+    sHint: number,
+  ): number {
+    let s = sHint;
+    for (let t = 1; t < maxLen; t += config.RAY_STEP) {
+      const px = ox + dx * t;
+      const py = oy + dy * t;
+      const pz = oz + dz * t;
+      this.nearestRadial(px, py, pz, s, this.#wallRayHit);
+      s = this.#wallRayHit.s;
+      const solid = this.wallAt(this.#wallRayHit.s, this.#wallRayHit.a);
+      if (!solid) continue;
+      if (
+        this.#wallRayHit.s >= solid.front &&
+        this.#wallRayHit.s <= solid.back &&
+        Math.abs(solid.across) < solid.halfAcross &&
+        py < solid.topY
+      )
+        return Math.max(0.01, t - config.RAY_STEP / 2);
+    }
+    return -1;
+  }
+
+  #wallRayHit: RadialHit = {
+    s: 0,
+    a: 0,
+    dist: 0,
+    nx: 0,
+    ny: 0,
+    nz: 0,
+    hx: 0,
+    hy: 0,
+    hz: 0,
+  };
 
   /** Inward radial cuts make raised road lanes, rock columns and jump ramps.
    *  They are part of the analytic radius, so rendering, rays and wheel

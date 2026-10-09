@@ -213,3 +213,33 @@ test('the wall top mesh has matching landing collision across its section span',
     ),
   ).toBe(true);
 });
+
+test('a ball cannot stay inside a wall slab', () => {
+  const terrain = cave(7);
+  let wall: NonNullable<ReturnType<Cave['featureCell']>['wall']> | null = null;
+  for (let i = 0; i < 12 && !wall; i++) wall = terrain.featureCell(i).wall;
+  expect(wall).not.toBeNull();
+
+  // spawn well inside the slab's footprint and let one frame resolve it
+  const insideFront = wall!.centerS + wall!.halfLen * 0.5;
+  const ball = new Ball(terrain.groundSpawn(insideFront));
+  ball.update(terrain);
+
+  const topY = terrain.wallSurfaceAt(ball.s, ball.a);
+  // either pushed out of the footprint, or resting on (or above) the top face
+  if (topY !== null)
+    expect(ball.y - config.BALL_RADIUS).toBeGreaterThan(topY - 0.05);
+});
+
+test('a ball whose skin overlaps a wall face is pushed back out', () => {
+  const terrain = cave(7);
+  let wall: NonNullable<ReturnType<Cave['featureCell']>['wall']> | null = null;
+  for (let i = 0; i < 12 && !wall; i++) wall = terrain.featureCell(i).wall;
+  expect(wall).not.toBeNull();
+
+  const ball = new Ball(terrain.groundSpawn(wall!.centerS - 0.5));
+  ball.controls.moveY = 1;
+  ball.update(terrain);
+  expect(ball.s).toBeLessThanOrEqual(wall!.centerS - config.BALL_RADIUS + 0.05);
+  expect(terrain.wallSurfaceAt(ball.s, ball.a)).toBeNull();
+});

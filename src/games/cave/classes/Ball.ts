@@ -636,19 +636,81 @@ export class Ball {
           }
         }
       }
-      // Raised wall tops are explicit visible surfaces, not hidden cuts in
-      // the cave floor. Land on the matching top mesh when descending through
-      // it, or the ball would encounter a collision behind the door face.
-      const wallTop = cave.wallSurfaceAt(this.s, this.a);
-      if (
-        wallTop !== null &&
-        this.vy <= 0 &&
-        this.y - this.radius < wallTop
-      ) {
-        this.y = wallTop + this.radius;
-        this.vy = 0;
-        this.grounded = true;
-        this.contactNormal.set(0, 1, 0);
+      // Raised wall slabs are solid volumes. The tube query cannot see them
+      // (they are no longer cut into the floor), so resolve the ball against
+      // the same box the mesh draws. The test is a surface overlap, not a
+      // center overlap: a radius-wide dead zone otherwise let the ball's skin
+      // slip into the slab before any push fired. Exit through the nearest
+      // face among front, back, side and top, like a real box.
+      const solid = cave.wallAt(this.s, this.a);
+      if (solid) {
+        const bottomY = this.y - this.radius;
+        const overlapS =
+          this.s + this.radius > solid.front &&
+          this.s - this.radius < solid.back;
+        const overlapA =
+          Math.abs(solid.across) - this.radius < solid.halfAcross;
+        const overlapV = bottomY < solid.topY;
+        if (overlapS && overlapA && overlapV) {
+          let exit = this.s - solid.front + this.radius;
+          let axis: 'front' | 'back' | 'side' | 'top' = 'front';
+          const exitBack = solid.back + this.radius - this.s;
+          if (exitBack < exit) {
+            exit = exitBack;
+            axis = 'back';
+          }
+          const exitSide =
+            solid.halfAcross - Math.abs(solid.across) + this.radius;
+          if (exitSide < exit) {
+            exit = exitSide;
+            axis = 'side';
+          }
+          const exitTop = solid.topY - bottomY;
+          if (exitTop < exit) {
+            exit = exitTop;
+            axis = 'top';
+          }
+          let nx = 0;
+          let ny = 0;
+          let nz = 0;
+          if (axis === 'front') {
+            nx = -this.cx;
+            ny = -this.cy;
+            nz = -this.cz;
+            this.s = Math.max(0, this.s - exit);
+          } else if (axis === 'back') {
+            nx = this.cx;
+            ny = this.cy;
+            nz = this.cz;
+            this.s = Math.max(0, this.s + exit);
+          } else if (axis === 'side') {
+            const dir = solid.across >= 0 ? 1 : -1;
+            nx = this.rx * dir;
+            ny = this.ry * dir;
+            nz = this.rz * dir;
+          } else {
+            ny = 1;
+          }
+          this.x += nx * exit;
+          this.y += ny * exit;
+          this.z += nz * exit;
+          const vn = this.vx * nx + this.vy * ny + this.vz * nz;
+          if (vn < 0) {
+            const bounce =
+              -vn > config.BALL_BOUNCE_SPEED
+                ? config.BALL_RESTITUTION
+                : 0;
+            this.vx -= nx * vn * (1 + bounce);
+            this.vy -= ny * vn * (1 + bounce);
+            this.vz -= nz * vn * (1 + bounce);
+          }
+          if (axis === 'top') {
+            this.grounded = true;
+            this.contactNormal.set(0, 1, 0);
+          }
+          cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
+          this.a = this.hit.a;
+        }
       }
       // slippery ground, mild air drag
       const drag = Math.pow(

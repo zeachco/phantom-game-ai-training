@@ -112,17 +112,12 @@ test('a ball that follows the track line can pull away on the hills around gate 
     const ball = new Ball(terrain.groundSpawn(start));
     driveLine(terrain, ball, 180);
     expect(ball.damaged).toBe(false);
-    // a wall across the band is a deliberate stop that needs a planned jump;
-    // on a stretch without one, the ball must pull away over the hills
-    let walled = false;
-    for (let s = start; s < start + 150; s += 10) {
-      const wall = terrain.featureCell(
-        Math.floor(s / config.CAVE_FEATURE_CELL),
-      ).wall;
-      if (wall && wall.centerS > start && wall.centerS < start + 150)
-        walled = true;
-    }
-    if (walled) {
+    // a wall across the band is a deliberate stop until terrain momentum (or
+    // a boost) carries the ball over it
+    const wall = terrain.wallAt(ball.s, ball.a);
+    const held =
+      wall !== null && wall.front > ball.s && wall.front - ball.s < 30;
+    if (held) {
       expect(ball.s).toBeGreaterThanOrEqual(start - 80);
     } else {
       expect(ball.s - start).toBeGreaterThan(100);

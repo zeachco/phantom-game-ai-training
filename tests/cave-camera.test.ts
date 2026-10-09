@@ -16,8 +16,11 @@ function ball() {
     quat: new Quaternion(),
   } as Ball;
 }
-function cave(obstruction = -1) {
-  return { castWheelRay: () => obstruction } as unknown as Cave;
+function cave(obstruction = -1, wallObstruction = -1) {
+  return {
+    castWheelRay: () => obstruction,
+    wallRayDistance: () => wallObstruction,
+  } as unknown as Cave;
 }
 function expectVisible(camera: PerspectiveCamera, target: Ball) {
   camera.updateMatrixWorld(true);
@@ -77,6 +80,17 @@ test('pulls in before walls and widens the lens to retain the ball', () => {
     expect(camera.position.distanceTo(new Vector3(0, 0.5, 0))).toBeCloseTo(12);
     expectVisible(camera, target);
     expect(follow.update(camera, target, cave(4), 1 / 60)).toBe(true);
+    expectVisible(camera, target);
+  }
+});
+
+test('pulls the camera in front of a wall slab', () => {
+  for (const aspect of [1.6, 390 / 844]) {
+    const camera = new PerspectiveCamera(72, aspect, 0.1, 1600);
+    const follow = new ChaseCamera();
+    const target = ball();
+    expect(follow.update(camera, target, cave(-1, 12), 1 / 60)).toBe(false);
+    expect(camera.position.distanceTo(new Vector3(0, 0.5, 0))).toBeCloseTo(11);
     expectVisible(camera, target);
   }
 });

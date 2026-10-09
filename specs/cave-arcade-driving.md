@@ -1,6 +1,6 @@
 # Cave arcade driving (Monkey Ball style)
 
-Status: ball physics implemented. 24/24 tests green (`bun test`). The ball has
+Status: ball physics implemented. 28/28 tests green (`bun test`). The ball has
 no button-triggered jump or airtime timer: valleys, gravity and carried velocity
 launch it naturally. Every number below is a `Config.ts` knob, listed with its
 role so tuning is a lookup, not an archaeology dig.
@@ -89,10 +89,14 @@ Each feature cell can carry a vertical wall across the driving band:
   its collision surface; both end faces are vertical. Walls no longer alter
   the analytic cave floor, which previously caused stray collisions behind
   the visible doorway.
-- `Cave.wallAt` and the pre-integration swept check block the visible front
-  face; `Cave.wallSurfaceAt` is shared by the top mesh and the ball's landing
-  collision. The angular extents also share one width calculation. Valley
-  momentum, not a jump button, launches the ball over obstacles.
+- `Cave.wallAt` returns the front, back, top and lateral bounds from the same
+  numbers the slab mesh uses. A pre-integration swept check handles the front
+  face; after the tube contact the ball is resolved against the slab as a
+  solid box (surface overlap, not center overlap) and pushed out through the
+  nearest face among front, back, side and top. `Cave.wallSurfaceAt` is shared
+  by the top mesh and the landing collision. `Cave.wallRayDistance` lets the
+  chase camera pull in front of a slab so the camera cannot sit inside it.
+  Valley momentum, not a jump button, launches the ball over obstacles.
 
 ## Boost items
 
