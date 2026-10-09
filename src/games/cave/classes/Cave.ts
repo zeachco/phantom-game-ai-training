@@ -1526,8 +1526,7 @@ export class Cave {
           this.#scene.add(face);
           walls.push(face);
         };
-        // Both vertical end faces and the raised top are rendered because
-        // all three are real collision surfaces.
+        // Render the end faces, top and both sides of the solid slab.
         addFace(front);
         addFace(back);
 
@@ -1571,6 +1570,45 @@ export class Cave {
         top.frustumCulled = false;
         this.#scene.add(top);
         walls.push(top);
+
+        for (const a of [wall.angle - halfAngle, wall.angle + halfAngle]) {
+          const sidePositions = new Float32Array((sSegments + 1) * 2 * 3);
+          const sideIndices: number[] = [];
+          for (let si = 0; si <= sSegments; si++) {
+            const s = front + ((back - front) * si) / sSegments;
+            const base = this.surface(s, a, { x: 0, y: 0, z: 0 });
+            const vertex = si * 2;
+            sidePositions[vertex * 3] = base.x;
+            sidePositions[vertex * 3 + 1] = base.y * config.CAVE_VERTICAL_SCALE;
+            sidePositions[vertex * 3 + 2] = base.z;
+            sidePositions[(vertex + 1) * 3] = base.x;
+            sidePositions[(vertex + 1) * 3 + 1] = this.#wallTopY(wall, s, a);
+            sidePositions[(vertex + 1) * 3 + 2] = base.z;
+            if (si < sSegments) {
+              const next = vertex + 2;
+              sideIndices.push(
+                vertex,
+                next,
+                vertex + 1,
+                next,
+                next + 1,
+                vertex + 1,
+              );
+            }
+          }
+          const sideGeometry = new THREE.BufferGeometry();
+          sideGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(sidePositions, 3),
+          );
+          sideGeometry.setIndex(sideIndices);
+          sideGeometry.computeVertexNormals();
+          sideGeometry.computeBoundingSphere();
+          const side = new THREE.Mesh(sideGeometry, this.#wallMaterial);
+          side.frustumCulled = false;
+          this.#scene.add(side);
+          walls.push(side);
+        }
       }
 
       const pad = feature.boost;

@@ -243,3 +243,57 @@ test('a ball whose skin overlaps a wall face is pushed back out', () => {
   expect(ball.s).toBeLessThanOrEqual(wall!.centerS - config.BALL_RADIUS + 0.05);
   expect(terrain.wallSurfaceAt(ball.s, ball.a)).toBeNull();
 });
+
+test('seed 3 allows a grounded ball to cross the wall front on either side', () => {
+  const terrain = cave(3);
+  const wall = terrain.featureCell(19).wall!;
+  expect(wall).not.toBeNull();
+  for (const offset of [-0.7, -0.55, 0.55, 0.7]) {
+    const s = wall.centerS - config.BALL_RADIUS - 0.3;
+    const a = wall.angle + offset;
+    const point = terrain.surface(s, a, { x: 0, y: 0, z: 0 });
+    const t = { x: 0, y: 0, z: 0 };
+    const n = { ...t };
+    const b = { ...t };
+    terrain.frame(s, t, n, b);
+    const nx = n.x * Math.cos(a) + b.x * Math.sin(a);
+    const ny =
+      (n.y * Math.cos(a) + b.y * Math.sin(a)) / config.CAVE_VERTICAL_SCALE;
+    const nz = n.z * Math.cos(a) + b.z * Math.sin(a);
+    const normalLength = Math.hypot(nx, ny, nz);
+    const ball = new Ball({
+      x: point.x - (nx / normalLength) * config.BALL_RADIUS,
+      y:
+        point.y * config.CAVE_VERTICAL_SCALE -
+        (ny / normalLength) * config.BALL_RADIUS,
+      z: point.z - (nz / normalLength) * config.BALL_RADIUS,
+      s,
+      tx: t.x,
+      ty: t.y,
+      tz: t.z,
+    });
+    const hit = terrain.nearestRadial(
+      ball.x,
+      ball.y,
+      ball.z,
+      s,
+      {} as Parameters<Cave['nearestRadial']>[4],
+    );
+    ball.a = hit.a;
+    const bounds = terrain.wallAt(ball.s, ball.a)!;
+    expect(Math.abs(bounds.across) - ball.radius).toBeGreaterThan(
+      bounds.halfAcross,
+    );
+    // On these banks the sphere's bottom is below the local terrain height,
+    // which used to trigger an invisible barrier outside the bronze slab.
+    expect(ball.y - ball.radius).toBeLessThan(bounds.topY);
+    ball.controls.moveY = 0;
+    ball.vx = t.x * 6;
+    ball.vy = t.y * 6;
+    ball.vz = t.z * 6;
+    ball.update(terrain);
+    expect(ball.s).toBeGreaterThan(wall.centerS + ball.radius);
+    expect(ball.vx * t.x + ball.vy * t.y + ball.vz * t.z).toBeGreaterThan(5);
+    expect(ball.damaged).toBe(false);
+  }
+});

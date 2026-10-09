@@ -572,6 +572,7 @@ export class Ball {
         this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
       if (
         wall &&
+        Math.abs(wall.across) - this.radius < wall.halfAcross &&
         this.s < wall.front - this.radius &&
         this.s + dt * along >= wall.front - this.radius &&
         this.y - this.radius < wall.topY &&
@@ -684,7 +685,9 @@ export class Ball {
             nz = this.cz;
             this.s = Math.max(0, this.s + exit);
           } else if (axis === 'side') {
-            const dir = solid.across >= 0 ? 1 : -1;
+            // Around the floor, increasing angle moves opposite the frame's
+            // right vector: sin(PI + offset) = -sin(offset).
+            const dir = solid.across >= 0 ? -1 : 1;
             nx = this.rx * dir;
             ny = this.ry * dir;
             nz = this.rz * dir;

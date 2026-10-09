@@ -180,3 +180,34 @@ test('airborne movement retains horizontal momentum without jump or airtime time
     config.BALL_MAX_SPEED,
   );
 });
+
+test('both slab sides push a touching sphere outward and stop inward motion', () => {
+  const terrain = floor();
+  const planeHit = terrain.nearestRadial.bind(terrain);
+  terrain.nearestRadial = (x, y, z, s, out) => {
+    planeHit(x, y, z, s, out);
+    out.a = Math.PI - x / config.CAVE_RADIUS;
+    return out;
+  };
+  const halfAcross = 43.2;
+  terrain.wallAt = (_s, a) => ({
+    front: 100,
+    back: 150,
+    topY: 6,
+    top: 6,
+    across: (a - Math.PI) * config.CAVE_RADIUS,
+    halfAcross,
+  });
+  for (const side of [-1, 1]) {
+    const ball = new Ball({ ...spawn, x: side * 43, z: -125, s: 125 });
+    ball.a = Math.PI - ball.x / config.CAVE_RADIUS;
+    ball.controls.moveY = 0;
+    ball.vx = -side * 2;
+    ball.update(terrain);
+    expect(ball.x * side).toBeGreaterThanOrEqual(
+      halfAcross + ball.radius - 0.001,
+    );
+    expect(ball.vx * side).toBeGreaterThanOrEqual(0);
+    expect(ball.y - ball.radius).toBeLessThan(6);
+  }
+});
