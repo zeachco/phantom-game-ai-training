@@ -25,6 +25,45 @@ export class WallSolid {
   private closest = new THREE.Vector3();
   private ray = new THREE.Ray();
   private rayHit = new THREE.Vector3();
+  private insideRay = new THREE.Ray();
+  private insideHit = new THREE.Vector3();
+  private insideDirection = new THREE.Vector3(0.423, 0.721, 0.547).normalize();
+
+  /** A nearest face's plane cannot classify a point in a concave solid.
+   * Count crossings of the complete closed mesh instead. */
+  private containsPoint(point: THREE.Vector3) {
+    if (!this.bounds.containsPoint(point)) return false;
+    this.insideRay.set(point, this.insideDirection);
+    const crossings: number[] = [];
+    for (const patch of this.patches) {
+      if (!this.insideRay.intersectsBox(patch.bounds)) continue;
+      for (const { shape } of patch.triangles) {
+        if (
+          !this.insideRay.intersectTriangle(
+            shape.a,
+            shape.b,
+            shape.c,
+            false,
+            this.insideHit,
+          )
+        )
+          continue;
+        const distance = point.distanceTo(this.insideHit);
+        if (distance < 1e-7) return false;
+        crossings.push(distance);
+      }
+    }
+    crossings.sort((a, b) => a - b);
+    let count = 0;
+    let previous = -Infinity;
+    for (const distance of crossings) {
+      // Both triangles of a quad can report the same edge intersection.
+      if (distance - previous < 1e-6) continue;
+      count++;
+      previous = distance;
+    }
+    return count % 2 === 1;
+  }
 
   constructor(rows: Float32Array[], tangent: THREE.Vector3) {
     const columns = (this.columns = rows[0].length / 6);
@@ -119,25 +158,25 @@ export class WallSolid {
     z: number,
     reach: number,
     face?: Face,
-    skipBase = false,
   ): WallContact | null {
     this.point.set(x, y, z);
     if (!face && this.bounds.distanceToPoint(this.point) > reach) return null;
     let best = Infinity;
     let result: WallContact | null = null;
-    let nearestFace: Face | undefined;
+    const contained = face ? undefined : this.containsPoint(this.point);
     for (const patch of this.patches) {
       if (patch.bounds.distanceToPoint(this.point) ** 2 > best) continue;
       for (const triangle of patch.triangles) {
         if (face && triangle.face !== face) continue;
-        if (skipBase && triangle.face === 'base') continue;
+        // Rock already resolves the embedded baseline. Always leave the slab
+        // through one of its exposed faces, including when spawned inside it.
+        if (!face && triangle.face === 'base') continue;
         triangle.shape.closestPointToPoint(this.point, this.closest);
         const distanceSquared = this.point.distanceToSquared(this.closest);
         if (distanceSquared >= best) continue;
         best = distanceSquared;
-        nearestFace = triangle.face;
         const delta = this.point.clone().sub(this.closest);
-        const inside = delta.dot(triangle.normal) < -1e-7;
+        const inside = contained ?? delta.dot(triangle.normal) < -1e-7;
         const distance = Math.sqrt(distanceSquared);
         const normal =
           distance > 1e-7
@@ -150,20 +189,6 @@ export class WallSolid {
           nz: normal.z,
         };
       }
-    }
-    // The baseline is embedded in rock. An interior sphere must leave through
-    // an exposed face rather than being pushed beneath the cave surface.
-    if (!face && !skipBase && nearestFace === 'base') {
-      const exposed = this.contact(x, y, z, reach, undefined, true);
-      const inside = result !== null && result.dist < 0;
-      const exposedInside = exposed !== null && exposed.dist < 0;
-      if (exposed && inside !== exposedInside) {
-        exposed.dist = -exposed.dist;
-        exposed.nx = -exposed.nx;
-        exposed.ny = -exposed.ny;
-        exposed.nz = -exposed.nz;
-      }
-      return exposed;
     }
     return result;
   }
@@ -180,8 +205,7 @@ export class WallSolid {
         origin.distanceTo(this.rayHit) > maxLen)
     )
       return -1;
-    const contact = this.contact(origin.x, origin.y, origin.z, 0);
-    if (contact && contact.dist < 0) return 0;
+    if (this.containsPoint(origin)) return 0;
     let nearest = maxLen + 1;
     for (const patch of this.patches) {
       if (

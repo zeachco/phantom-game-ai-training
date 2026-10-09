@@ -487,3 +487,75 @@ test('wall rays remain valid after old centerline chunks have been trimmed', () 
     terrain.wallRayDistance(spawn.x, spawn.y, spawn.z, 0, 0, 1, 336, spawn.s),
   ).not.toThrow();
 });
+
+test('seed 4 clear space above curved slabs has no sphere or camera contacts', () => {
+  const scene = new Scene();
+  const terrain = cave(4, scene);
+  terrain.update(0, 3900);
+  for (const [cell, lead, lift] of [
+    [9, 8, 20],
+    [10, 9, 20],
+    [11, 5, 15],
+  ]) {
+    const wall = terrain.featureCell(cell).wall!;
+    const s = wall.centerS - lead;
+    const spawn = terrain.groundSpawn(s);
+    const point = new Vector3(spawn.x, spawn.y + lift, spawn.z);
+    const mesh = scene.children.find(
+      (o) => o.userData.wallFront === wall.centerS,
+    ) as Mesh;
+    const positions = mesh.geometry.getAttribute('position');
+    const indices = mesh.geometry.index!;
+    const triangle = new Triangle();
+    const closest = new Vector3();
+    let distance = Infinity;
+    for (let i = 0; i < indices.count; i += 3) {
+      triangle.a.fromBufferAttribute(positions, indices.getX(i));
+      triangle.b.fromBufferAttribute(positions, indices.getX(i + 1));
+      triangle.c.fromBufferAttribute(positions, indices.getX(i + 2));
+      triangle.closestPointToPoint(point, closest);
+      distance = Math.min(distance, point.distanceTo(closest));
+    }
+    // Independently verify both skin clearance and that the point is above
+    // the rendered solid. Previously the closest face's plane called it inside.
+    expect(distance).toBeGreaterThan(config.BALL_RADIUS + 2);
+    expect(
+      new Raycaster(point, new Vector3(0, 1, 0)).intersectObject(mesh),
+    ).toHaveLength(0);
+    expect(
+      terrain.wallContact(
+        point.x,
+        point.y,
+        point.z,
+        config.BALL_RADIUS + 0.02,
+        s,
+      ),
+    ).toBeNull();
+    expect(
+      terrain.wallRayDistance(point.x, point.y, point.z, 0, 1, 0, 30, s),
+    ).toBe(-1);
+  }
+});
+
+test('a grounded jump passes the curved seed 4 slab without bouncing backward above it', () => {
+  const terrain = cave(4);
+  const wall = terrain.featureCell(9).wall!;
+  const ball = new Ball(terrain.groundSpawn(wall.centerS - 28));
+  ball.nextGate = 4;
+  ball.controls.moveY = 0;
+  for (let frame = 0; frame < 10; frame++) ball.update(terrain);
+  expect(ball.grounded).toBe(true);
+  const tangent = terrain.tangent(ball.s, { x: 0, y: 0, z: 0 });
+  ball.vx = tangent.x * config.BALL_MAX_SPEED;
+  ball.vz = tangent.z * config.BALL_MAX_SPEED;
+  ball.controls.moveY = 1;
+  ball.controls.requestJump();
+  for (let frame = 0; frame < 80; frame++) {
+    ball.update(terrain);
+    expect(
+      ball.vx * tangent.x + ball.vy * tangent.y + ball.vz * tangent.z,
+    ).toBeGreaterThan(0);
+  }
+  expect(ball.damaged).toBe(false);
+  expect(ball.s).toBeGreaterThan(wall.centerS + wall.halfLen * 2 + ball.radius);
+});
