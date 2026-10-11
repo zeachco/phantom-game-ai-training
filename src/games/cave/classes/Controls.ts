@@ -49,6 +49,13 @@ export class Controls {
     return this.#playerActive;
   }
 
+  /** Whether the jump channel is currently held, whatever drives it: a brain's
+   *  third output or a live Space / primary-button press. The HUD timeline
+   *  samples this once per rendered frame. */
+  public get jumpHeld() {
+    return this.jump > 0 || this.#spaceHeld || this.#primaryHeld;
+  }
+
   public requestJump() {
     this.#jumpRequested = true;
   }

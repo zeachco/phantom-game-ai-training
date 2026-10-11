@@ -24,6 +24,9 @@ const neuralVisualizer = new Visualizer(config);
 const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
 
+/** one captured jump sample per pixel column of the jump timeline */
+const JUMP_TIMELINE_WIDTH = 220;
+
 const io = fileUtilities('cave');
 if (config.CLEAR_STORAGE) io.discardModels();
 
@@ -389,6 +392,20 @@ export default async (state: CaveState) => {
   const velocityCtx = velocityCanvas.getContext('2d');
   controlIndicators.append(controlCanvas, velocityCanvas);
 
+  const jumpTimeline = document.createElement('div');
+  jumpTimeline.className = 'jump-timeline';
+  jumpTimeline.title =
+    'jump input each rendered frame, newest at the right edge';
+  const jumpLabel = document.createElement('span');
+  jumpLabel.className = 'jump-timeline-label';
+  jumpLabel.textContent = 'jump';
+  const jumpCanvas = document.createElement('canvas');
+  jumpCanvas.className = 'jump-timeline-canvas';
+  jumpCanvas.width = JUMP_TIMELINE_WIDTH;
+  jumpCanvas.height = 34;
+  const jumpCtx = jumpCanvas.getContext('2d');
+  jumpTimeline.append(jumpLabel, jumpCanvas);
+
   const readout = document.createElement('div');
   readout.className = 'readout';
   const gateCountEl = document.createElement('div');
@@ -466,7 +483,13 @@ export default async (state: CaveState) => {
   const brainStats = document.createElement('div');
   brainStats.className = 'brain-stats';
   brainStats.title = 'followed brain stats';
-  steerOverlay.append(controlIndicators, sectionGauge, readout, brainStats);
+  steerOverlay.append(
+    controlIndicators,
+    jumpTimeline,
+    sectionGauge,
+    readout,
+    brainStats,
+  );
   document.body.appendChild(steerOverlay);
 
   let lastStatsText = '';
@@ -550,6 +573,9 @@ export default async (state: CaveState) => {
 
   let followed: Ball = state.human ?? state.balls[0];
   let lastHud = 0;
+  // one sample per rendered frame, oldest dropped past the canvas width so the
+  // line appears to scroll left
+  const jumpSamples: number[] = [];
   const chaseCamera = new ChaseCamera();
 
   /** The ball the camera and the network visualizer follow: the player while
@@ -722,6 +748,10 @@ export default async (state: CaveState) => {
           followed.color,
         );
       if (velocityCtx) drawCaveVelocityVector(velocityCtx, followed);
+      jumpSamples.push(followed.controls.jumpHeld ? 1 : 0);
+      if (jumpSamples.length > JUMP_TIMELINE_WIDTH)
+        jumpSamples.splice(0, jumpSamples.length - JUMP_TIMELINE_WIDTH);
+      if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
     }
 
     renderer.render(scene, camera);
@@ -952,5 +982,44 @@ function drawCaveVelocityVector(
   );
   ctx.closePath();
   ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * A left-scrolling strip of jump input: one 1px column per rendered frame,
+ * newest at the right edge. A raised bar means the jump channel was held that
+ * frame (a brain's third output or a live Space / primary-button press), so a
+ * single-frame tap reads as a needle and a held jump as a plateau.
+ */
+function drawJumpTimeline(
+  ctx: CanvasRenderingContext2D,
+  samples: number[],
+  color: string,
+  width = JUMP_TIMELINE_WIDTH,
+  height = 34,
+) {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = 'rgba(25, 52, 94, 0.55)';
+  ctx.fillRect(0, 0, width, height);
+
+  // silence baseline, matching the velocity vector's axis
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.25;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, height - 5.5);
+  ctx.lineTo(width, height - 5.5);
+  ctx.stroke();
+
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.9;
+  const offset = width - samples.length;
+  for (let i = 0; i < samples.length; i++) {
+    if (!samples[i]) continue;
+    ctx.fillRect(offset + i, 3, 1, height - 9);
+  }
+
+  ctx.globalAlpha = 0.7;
+  ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
   ctx.globalAlpha = 1;
 }
