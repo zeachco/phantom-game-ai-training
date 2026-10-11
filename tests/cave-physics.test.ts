@@ -56,6 +56,10 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
     wallSurfaceAt() {
       return null;
     },
+    locate(_x: number, _y: number, _z: number, sHint: number, out: RadialHit) {
+      out.s = sHint;
+      out.a = Math.PI;
+    },
     nearestRadial(
       x: number,
       y: number,
@@ -226,6 +230,58 @@ function box() {
     new Vector3(0, 0, -1),
   );
 }
+
+test('collapsed slab faces cannot invalidate a contact with a valid face', () => {
+  const slab = new WallSolid(
+    [-100, -150].map(
+      (z) =>
+        new Float32Array([
+          -43.2,
+          0,
+          z,
+          -43.2,
+          8,
+          z,
+          43.2,
+          0,
+          z,
+          43.2,
+          8,
+          z,
+          43.2,
+          0,
+          z,
+          43.2,
+          8,
+          z,
+        ]),
+    ),
+    new Vector3(0, 0, -1),
+  );
+  const hit = slab.contact(0, 4, -98.62, config.BALL_RADIUS);
+  expect(hit).not.toBeNull();
+  expect(hit!.dist).toBeCloseTo(1.38, 6);
+  expect(hit!.nz).toBeCloseTo(1, 6);
+  expect(
+    slab.rayDistance(new Vector3(0, 4, -90), new Vector3(0, 0, -1), 20),
+  ).toBeCloseTo(10, 6);
+});
+
+test('a fast fall cannot tunnel through a slab between physics steps', () => {
+  const terrain = floor(() => -1000);
+  const slab = box();
+  terrain.wallContact = (x, y, z, r) => {
+    const hit = slab.contact(x, y, z, r);
+    return hit && hit.dist < r ? hit : null;
+  };
+  const ball = new Ball({ ...spawn, y: 20, z: -125, s: 125 });
+  ball.controls.moveY = 0;
+  ball.vy = -80;
+  ball.update(terrain);
+  expect(ball.y - ball.radius).toBeGreaterThanOrEqual(8 - 0.001);
+  expect(ball.damaged).toBe(true);
+  expect(ball.grounded).toBe(true);
+});
 
 test('a grounded jump clears a solid slab that otherwise stops a rolling ball', () => {
   const terrain = floor();

@@ -31,9 +31,9 @@ const STALL_SPEED_SQ = config.BALL_STALL_SPEED * config.BALL_STALL_SPEED;
 const WALL_CONTACT_SKIN = 0.02;
 
 /**
- * Monkey Ball physics: one sphere that rolls through the analytic cave tube.
+ * Monkey Ball physics: one sphere that rolls through the sampled cave tube.
  * The stick accelerates it in the horizontal track plane, gravity pulls it
- * down the slopes. Rock uses the analytic tube; bronze obstacles use the
+ * down the slopes. Rock and bronze obstacles use the
  * same triangles as their meshes. Orientation is purely visual: the ball
  * spins so it reads as rolling, but the simulation is a point with radius.
  */
@@ -528,9 +528,22 @@ export class Ball {
     this.rz = this.frameB.z;
   }
 
-  /** one physics frame, substepped and resolved against the analytic tube */
+  /** Keep each integration step shorter than half a radius, including falls. */
   #move(cave: Cave) {
-    const dt = 1 / config.PHYSICS_SUBSTEPS;
+    // Bound the substep from the real integration velocity. A bounce or a
+    // slope launch can exceed effectiveMaxSpeed(), so clamping the horizontal
+    // component here would under-substep exactly when the ball is fastest.
+    const substeps = Math.max(
+      config.PHYSICS_SUBSTEPS,
+      Math.ceil(
+        Math.hypot(
+          Math.hypot(this.vx, this.vz),
+          Math.abs(this.vy) + config.BALL_GRAVITY,
+        ) /
+          (this.radius * 0.5),
+      ),
+    );
+    const dt = 1 / substeps;
     // normalized stick vector: diagonals are not faster than axes
     let sx = clamp(-1, 1, this.controls.moveX);
     let sy = clamp(-1, 1, this.controls.moveY);
@@ -539,7 +552,7 @@ export class Ball {
       sx /= stick;
       sy /= stick;
     }
-    for (let step = 0; step < config.PHYSICS_SUBSTEPS; step++) {
+    for (let step = 0; step < substeps; step++) {
       this.#refreshFrame(cave);
       // Only terrain, gravity and momentum can launch the ball. There is no
       // airtime timer or scripted jump impulse.
@@ -587,8 +600,7 @@ export class Ball {
         this.vx *= scale;
         this.vz *= scale;
       }
-      // Integrate in substeps shorter than a sphere diameter, then resolve
-      // contact against the same triangles that draw each bronze obstacle.
+      // Resolve against the same triangles that draw the rock and slabs.
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       this.z += this.vz * dt;
@@ -597,56 +609,15 @@ export class Ball {
         this.s +
           dt * (this.vx * this.cx + this.vy * this.cy + this.vz * this.cz),
       );
-      // Resolve rock contact before the separate bronze solids.
-      cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
-      this.s = this.hit.s;
-      this.a = this.hit.a;
-      const penetration = this.radius + this.hit.dist;
       this.grounded = false;
-      if (penetration > 0) {
-        // inward normal points away from the wall, back into the tube
-        const nx = -this.hit.nx;
-        const ny = -this.hit.ny;
-        const nz = -this.hit.nz;
-        this.x += nx * penetration;
-        this.y += ny * penetration;
-        this.z += nz * penetration;
-        this.grounded = true;
-        this.contactNormal.set(nx, ny, nz);
-        const vn = this.vx * nx + this.vy * ny + this.vz * nz;
-        if (vn < 0) {
-          // slow contacts settle, hard ones bounce
-          const bounce =
-            -vn > config.BALL_BOUNCE_SPEED ? config.BALL_RESTITUTION : 0;
-          const impulse = vn * (1 + bounce);
-          this.vx -= nx * impulse;
-          this.vy -= ny * impulse;
-          this.vz -= nz * impulse;
-          if (bounce > 0) {
-            if (ny < 0.5) this.#bounceSpin();
-            // a real hit scrubs some tangential speed
-            const vn2 = this.vx * nx + this.vy * ny + this.vz * nz;
-            const tx = this.vx - nx * vn2;
-            const ty = this.vy - ny * vn2;
-            const tz = this.vz - nz * vn2;
-            const keep = config.BALL_WALL_SCRUB;
-            this.vx = nx * vn2 + tx * keep;
-            this.vy = ny * vn2 + ty * keep;
-            this.vz = nz * vn2 + tz * keep;
-          }
-          if (-vn > config.BALL_CRASH_SPEED) {
-            this.deathPenalty = lerp(
-              1,
-              5,
-              clamp(0, 1, -vn / (this.speed || 1)),
-            );
-            this.damaged = true;
-          }
-        }
-      }
       const reach = this.radius + WALL_CONTACT_SKIN;
-      for (let pass = 0; pass < 6; pass++) {
+      // Curved slabs meeting a bank can require several alternating pushes
+      // before both contacts are clear. Ordinary contacts still exit early.
+      for (let pass = 0; pass < 64; pass++) {
+        this.#resolveRock(cave);
         const contact = cave.wallContact(this.x, this.y, this.z, reach, this.s);
+        // No slab push needed. #resolveRock already placed the ball flush on
+        // the exact mesh, so a second confirm scan is redundant.
         if (!contact || reach - contact.dist < 1e-6) break;
         const { nx, ny, nz } = contact;
         const penetration = reach - contact.dist;
@@ -669,7 +640,8 @@ export class Ball {
         }
       }
       // Progress is a query hint, never an independent collision position.
-      cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
+      // Only the axis coordinate is needed, so skip the exact-mesh query.
+      cave.locate(this.x, this.y, this.z, this.s, this.hit);
       this.s = this.hit.s;
       this.a = this.hit.a;
       // slippery ground, mild air drag
@@ -697,6 +669,52 @@ export class Ball {
     }
     this.#refreshFrame(cave);
     this.speed = Math.hypot(this.vx, this.vy, this.vz);
+  }
+
+  /** Resolve rock again after slab pushes, so neither contact embeds the ball. */
+  #resolveRock(cave: Cave) {
+    cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
+    this.s = this.hit.s;
+    this.a = this.hit.a;
+    const penetration = this.radius + this.hit.dist;
+    if (penetration > 0) {
+      // inward normal points away from the wall, back into the tube
+      const nx = -this.hit.nx;
+      const ny = -this.hit.ny;
+      const nz = -this.hit.nz;
+      this.x += nx * penetration;
+      this.y += ny * penetration;
+      this.z += nz * penetration;
+      this.grounded = true;
+      this.contactNormal.set(nx, ny, nz);
+      const vn = this.vx * nx + this.vy * ny + this.vz * nz;
+      if (vn < 0) {
+        // slow contacts settle, hard ones bounce
+        const bounce =
+          -vn > config.BALL_BOUNCE_SPEED ? config.BALL_RESTITUTION : 0;
+        const impulse = vn * (1 + bounce);
+        this.vx -= nx * impulse;
+        this.vy -= ny * impulse;
+        this.vz -= nz * impulse;
+        if (bounce > 0) {
+          if (ny < 0.5) this.#bounceSpin();
+          // a real hit scrubs some tangential speed
+          const vn2 = this.vx * nx + this.vy * ny + this.vz * nz;
+          const tx = this.vx - nx * vn2;
+          const ty = this.vy - ny * vn2;
+          const tz = this.vz - nz * vn2;
+          const keep = config.BALL_WALL_SCRUB;
+          this.vx = nx * vn2 + tx * keep;
+          this.vy = ny * vn2 + ty * keep;
+          this.vz = nz * vn2 + tz * keep;
+        }
+        if (-vn > config.BALL_CRASH_SPEED) {
+          this.deathPenalty = lerp(1, 5, clamp(0, 1, -vn / (this.speed || 1)));
+          this.damaged = true;
+        }
+      }
+    }
+    return penetration > 1e-6;
   }
 
   /** A wall impact reverses the spin and retains half its angular speed. */

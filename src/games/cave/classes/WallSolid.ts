@@ -88,6 +88,9 @@ export class WallSolid {
           ...(tri.map(get) as [THREE.Vector3, THREE.Vector3, THREE.Vector3]),
         );
         const normal = shape.getNormal(new THREE.Vector3());
+        // Collapsed quads have no surface. Keep them out of both rendering
+        // and collision queries, where closestPointToPoint can yield NaN.
+        if (normal.lengthSq() === 0) continue;
         if (normal.dot(outward) < 0) {
           [tri[1], tri[2]] = [tri[2], tri[1]];
           [shape.b, shape.c] = [shape.c, shape.b];
@@ -173,7 +176,8 @@ export class WallSolid {
         if (!face && triangle.face === 'base') continue;
         triangle.shape.closestPointToPoint(this.point, this.closest);
         const distanceSquared = this.point.distanceToSquared(this.closest);
-        if (distanceSquared >= best) continue;
+        if (!Number.isFinite(distanceSquared) || distanceSquared >= best)
+          continue;
         best = distanceSquared;
         const delta = this.point.clone().sub(this.closest);
         const inside = contained ?? delta.dot(triangle.normal) < -1e-7;

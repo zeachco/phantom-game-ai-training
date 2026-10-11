@@ -11,6 +11,11 @@ interface Pt {
   z: number;
 }
 
+interface RockPatch {
+  bounds: THREE.Box3;
+  triangles: { shape: THREE.Triangle; normal: THREE.Vector3 }[];
+}
+
 /** one streamed segment: control points at both ends plus precomputed
  *  samples of the centerline, its frame and its base radius */
 interface ChunkData {
@@ -84,15 +89,13 @@ const TWO_PI = Math.PI * 2;
 const NOISE_CELLS = Math.round(TWO_PI / config.CAVE_BUMP_ANGLE);
 const WALL_ANGLE_STEP = TWO_PI / SIDES;
 
-/** result of the body/wheel collision query: the nearest point of the
- *  analytic surface to a point, with its radial normal */
+/** Nearest rendered rock triangle and the corresponding cave coordinate. */
 export interface RadialHit {
   s: number;
   a: number;
-  /** signed radial distance: point-to-centerline minus the local radius,
-   *  negative inside the cave, positive outside */
+  /** Signed world distance, negative inside the cave, positive in the rock. */
   dist: number;
-  /** radial outward normal (toward the wall) at the hit */
+  /** Outward surface normal (toward the rock) at the hit. */
   nx: number;
   ny: number;
   nz: number;
@@ -126,7 +129,7 @@ interface WallBounds {
  * chain of cubic Hermite segments (one per CAVE_SEGMENT_LENGTH), each turning
  * the direction by a seeded random angle, and the radius is a base plus long
  * seeded waves plus a fine value-noise skin, so the same seed always yields
- * the same cave. Rock queries use the analytic tube and its sampled mesh;
+ * the same cave. Sphere contacts use the sampled rock mesh;
  * bronze slabs share triangle geometry between rendering and collisions.
  * Old segments are disposed in real time as the balls pass.
  */
@@ -564,9 +567,37 @@ export class Cave {
   }
 
   #wallAngularHeight(wall: NonNullable<FeatureCell['wall']>, a: number) {
-    if (this.#angleDistance(a, wall.angle) > this.#wallHalfAngle(wall))
+    // Generated end columns sit exactly on this boundary. Roundoff must not
+    // collapse their extrusion and leave zero-area front/side triangles.
+    if (this.#angleDistance(a, wall.angle) > this.#wallHalfAngle(wall) + 1e-10)
       return 0;
     return 1;
+  }
+
+  /** Match the float32 center, frame and final vertices in #buildChunk. */
+  #rockVertex(arc: number, angle: number) {
+    const center = this.center(arc, { x: 0, y: 0, z: 0 });
+    const t = { x: 0, y: 0, z: 0 },
+      n = { ...t },
+      b = { ...t };
+    this.frame(arc, t, n, b);
+    const r = this.radius(arc, angle),
+      ca = Math.cos(angle),
+      sa = Math.sin(angle);
+    return {
+      x: Math.fround(
+        Math.fround(center.x) +
+          (Math.fround(n.x) * ca + Math.fround(b.x) * sa) * r,
+      ),
+      y: Math.fround(
+        Math.fround(center.y) +
+          (Math.fround(n.y) * ca + Math.fround(b.y) * sa) * r,
+      ),
+      z: Math.fround(
+        Math.fround(center.z) +
+          (Math.fround(n.z) * ca + Math.fround(b.z) * sa) * r,
+      ),
+    };
   }
 
   /** Interpolate the same triangles as the sampled rock mesh. */
@@ -577,30 +608,7 @@ export class Cave {
     const a0 = Math.floor(around) * WALL_ANGLE_STEP;
     const u = along - Math.floor(along),
       v = around - Math.floor(around);
-    const vertex = (arc: number, angle: number) => {
-      const center = this.center(arc, { x: 0, y: 0, z: 0 });
-      const t = { x: 0, y: 0, z: 0 },
-        n = { ...t },
-        b = { ...t };
-      this.frame(arc, t, n, b);
-      const r = this.radius(arc, angle),
-        ca = Math.cos(angle),
-        sa = Math.sin(angle);
-      return {
-        x: Math.fround(
-          Math.fround(center.x) +
-            (Math.fround(n.x) * ca + Math.fround(b.x) * sa) * r,
-        ),
-        y: Math.fround(
-          Math.fround(center.y) +
-            (Math.fround(n.y) * ca + Math.fround(b.y) * sa) * r,
-        ),
-        z: Math.fround(
-          Math.fround(center.z) +
-            (Math.fround(n.z) * ca + Math.fround(b.z) * sa) * r,
-        ),
-      };
-    };
+    const vertex = (arc: number, angle: number) => this.#rockVertex(arc, angle);
     const vertices =
       u + v <= 1
         ? [
@@ -1071,7 +1079,7 @@ export class Cave {
     return profile;
   }
 
-  /** One surface for rendering, sensors, chassis collisions and suspension. */
+  /** Radius profile sampled by the rock mesh and analytic sensor rays. */
   radius(s: number, a: number) {
     const floor = Math.max(0, Math.min(1, -Math.cos(a) * 2));
     if (floor === 0) return this.#rawRadius(s, a);
@@ -1288,29 +1296,6 @@ export class Cave {
           else low = mid;
         }
         sample(high);
-        // The terrain varies along and around the cave. Its radial direction
-        // alone is not a surface normal on ramps or rock features.
-        const arc = out.s;
-        const angle = out.a;
-        this.surface(arc + 0.25, angle, this.#surfaceA);
-        this.surface(Math.max(0, arc - 0.25), angle, this.#surfaceB);
-        this.#surfaceT.subVectors(this.#surfaceA, this.#surfaceB);
-        this.surface(arc, angle + 0.005, this.#surfaceA);
-        this.surface(arc, angle - 0.005, this.#surfaceB);
-        this.#surfaceN.subVectors(this.#surfaceA, this.#surfaceB);
-        this.#surfaceT.y *= config.CAVE_VERTICAL_SCALE;
-        this.#surfaceN.y *= config.CAVE_VERTICAL_SCALE;
-        this.#surfaceN.cross(this.#surfaceT).normalize();
-        if (
-          this.#surfaceN.x * out.nx +
-            this.#surfaceN.y * out.ny +
-            this.#surfaceN.z * out.nz <
-          0
-        )
-          this.#surfaceN.negate();
-        out.nx = this.#surfaceN.x;
-        out.ny = this.#surfaceN.y;
-        out.nz = this.#surfaceN.z;
         return high;
       }
       if (high === length) return -1;
@@ -1318,21 +1303,116 @@ export class Cave {
     }
   }
 
-  #surfaceA = new THREE.Vector3();
-  #surfaceB = new THREE.Vector3();
-  #surfaceT = new THREE.Vector3();
-  #surfaceN = new THREE.Vector3();
+  #rockRings = new Map<number, THREE.Vector3[]>();
+  #rockPatches = new Map<number, RockPatch[]>();
+  #rockPoint = new THREE.Vector3();
+  #rockClosest = new THREE.Vector3();
+  #rockNearest = new THREE.Vector3();
+  #rockNormal = new THREE.Vector3();
+  /** scratch for the point-to-closest delta, kept separate from #rockClosest */
+  #rockDelta = new THREE.Vector3();
 
-  /** nearest point of the analytic surface to (p), searching the arc around
-   *  sHint. Fills out with the hit, its signed radial distance and its
-   *  radial outward normal. */
-  nearestRadial(
-    px: number,
-    py: number,
-    pz: number,
-    sHint: number,
-    out: RadialHit,
-  ) {
+  #rockRing(row: number) {
+    const cached = this.#rockRings.get(row);
+    if (cached) return cached;
+    const vertices: THREE.Vector3[] = [];
+    for (let column = 0; column <= SIDES; column++) {
+      const p = this.#rockVertex(row * PER, (column / SIDES) * TWO_PI);
+      vertices.push(
+        new THREE.Vector3(p.x, p.y * config.CAVE_VERTICAL_SCALE, p.z),
+      );
+    }
+    this.#rockRings.set(row, vertices);
+    return vertices;
+  }
+
+  #rockRow(row: number) {
+    const cached = this.#rockPatches.get(row);
+    if (cached) return cached;
+    const first = this.#rockRing(row),
+      second = this.#rockRing(row + 1);
+    const patches = first.slice(0, SIDES).map((a, column) => {
+      const shapes = [
+        new THREE.Triangle(a, first[column + 1], second[column]),
+        new THREE.Triangle(
+          first[column + 1],
+          second[column + 1],
+          second[column],
+        ),
+      ];
+      const bounds = new THREE.Box3();
+      const triangles = shapes.map((shape) => {
+        bounds
+          .expandByPoint(shape.a)
+          .expandByPoint(shape.b)
+          .expandByPoint(shape.c);
+        return { shape, normal: shape.getNormal(new THREE.Vector3()) };
+      });
+      return { bounds, triangles };
+    });
+    this.#rockPatches.set(row, patches);
+    return patches;
+  }
+
+  /** Nearest mesh triangle, including steep features beside the radial ray. */
+  #nearestRock(px: number, py: number, pz: number, out: RadialHit) {
+    this.#rockPoint.set(px, py, pz);
+    const row = Math.floor(out.s / PER);
+    const column = Math.floor(
+      (((out.a % TWO_PI) + TWO_PI) % TWO_PI) / WALL_ANGLE_STEP,
+    );
+    let best = Infinity;
+    let outside = false;
+    for (const offset of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
+      const index = row + offset;
+      if (index < this.#controlOffset * SAMPLES) continue;
+      const patches = this.#rockRow(index);
+      // Start with the radial patch to cheaply prune the rest of each ring.
+      for (let k = 0; k < SIDES; k++) {
+        const shift = k % 2 ? -(k + 1) / 2 : k / 2;
+        const patch = patches[(column + shift + SIDES) % SIDES];
+        if (patch.bounds.distanceToPoint(this.#rockPoint) ** 2 > best) continue;
+        for (const { shape, normal } of patch.triangles) {
+          shape.closestPointToPoint(this.#rockPoint, this.#rockClosest);
+          const distance = this.#rockPoint.distanceToSquared(this.#rockClosest);
+          if (distance >= best) continue;
+          best = distance;
+          this.#rockNearest.copy(this.#rockClosest);
+          this.#rockNormal.copy(normal);
+          outside =
+            this.#rockDelta
+              .subVectors(this.#rockPoint, this.#rockNearest)
+              .dot(normal) > 0;
+        }
+      }
+    }
+    // Every candidate was pruned, which means the row window lies entirely
+    // below the retained control range. Fail loudly instead of leaving stale
+    // #rockNearest/#rockNormal behind as a silent pass-through.
+    if (!Number.isFinite(best))
+      throw new Error(
+        `#nearestRock found no candidate near (${px}, ${py}, ${pz}) at s=${out.s}`,
+      );
+    const distance = Math.sqrt(best);
+    out.dist = outside ? distance : -distance;
+    if (distance > 1e-7) {
+      this.#rockNormal
+        .subVectors(this.#rockPoint, this.#rockNearest)
+        .multiplyScalar((outside ? 1 : -1) / distance);
+    }
+    out.nx = this.#rockNormal.x;
+    out.ny = this.#rockNormal.y;
+    out.nz = this.#rockNormal.z;
+    out.hx = this.#rockNearest.x;
+    out.hy = this.#rockNearest.y;
+    out.hz = this.#rockNearest.z;
+    return out;
+  }
+
+  /** Resolve the centerline coordinate (s, a) of a world point without the
+   * exact-mesh query. Progress, gates and the ball frame only need the axis
+   * coordinate, so they avoid the mesh scan. */
+  locate(px: number, py: number, pz: number, sHint: number, out: RadialHit) {
     let bestS = sHint;
     let bestA = 0;
     // Choose the nearest centerline point, not the most negative signed
@@ -1373,34 +1453,25 @@ export class Cave {
     const wx = px - this.#qc.x;
     const wy = py / config.CAVE_VERTICAL_SCALE - this.#qc.y;
     const wz = pz - this.#qc.z;
-    const d = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1;
     bestA = Math.atan2(
       wx * this.#qb.x + wy * this.#qb.y + wz * this.#qb.z,
       wx * this.#qn.x + wy * this.#qn.y + wz * this.#qn.z,
     );
     out.s = bestS;
     out.a = bestA;
-    out.dist = d - this.radius(bestS, bestA);
-    // Transform the radial normal back into world space: the scaled mesh's
-    // Y gradient is compressed, so its world normal has the inverse scale.
-    const rawNx = wx / d;
-    const rawNy = wy / d;
-    const rawNz = wz / d;
-    const worldLength =
-      Math.hypot(rawNx, rawNy / config.CAVE_VERTICAL_SCALE, rawNz) || 1;
-    out.dist /= worldLength;
-    out.nx = rawNx / worldLength;
-    out.ny = rawNy / config.CAVE_VERTICAL_SCALE / worldLength;
-    out.nz = rawNz / worldLength;
-    const r = this.radius(bestS, bestA);
-    const ca = Math.cos(bestA);
-    const sa = Math.sin(bestA);
-    out.hx = this.#qc.x + (this.#qn.x * ca + this.#qb.x * sa) * r;
-    out.hy =
-      (this.#qc.y + (this.#qn.y * ca + this.#qb.y * sa) * r) *
-      config.CAVE_VERTICAL_SCALE;
-    out.hz = this.#qc.z + (this.#qn.z * ca + this.#qb.z * sa) * r;
-    return out;
+  }
+
+  /** Locate the centerline coordinate, then query the exact rendered rock.
+   * Positive distance is outside the cave; the normal points into the rock. */
+  nearestRadial(
+    px: number,
+    py: number,
+    pz: number,
+    sHint: number,
+    out: RadialHit,
+  ) {
+    this.locate(px, py, pz, sHint, out);
+    return this.#nearestRock(px, py, pz, out);
   }
 
   /** the point of the cave axis at arc s, for the camera and the gates */
@@ -1470,6 +1541,14 @@ export class Cave {
     for (const index of this.#floorProfiles.keys()) {
       if (index < minChunk - 1 || index > maxChunk + 1)
         this.#floorProfiles.delete(index);
+    }
+    for (const row of this.#rockPatches.keys()) {
+      if (row < minChunk * SAMPLES || row > (maxChunk + 1) * SAMPLES)
+        this.#rockPatches.delete(row);
+    }
+    for (const row of this.#rockRings.keys()) {
+      if (row < minChunk * SAMPLES || row > (maxChunk + 1) * SAMPLES + 1)
+        this.#rockRings.delete(row);
     }
     // Feature cells and mesh chunks have different lengths. Preserve the
     // path-adjusted future cells and every cell that can affect visible rock;
@@ -1770,6 +1849,8 @@ export class Cave {
     this.#featureCells.clear();
     this.#wallFaces.clear();
     this.#wallSolids.clear();
+    this.#rockPatches.clear();
+    this.#rockRings.clear();
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
     this.#material.dispose();
     this.#rockTexture.dispose();
