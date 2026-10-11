@@ -50,6 +50,8 @@ export default async (state: CaveState) => {
   );
 
   const cave = new Cave(seed, scene);
+  let wireframe = true;
+  cave.setWireframe(wireframe);
   state.cave = cave;
 
   const spawn = cave.getSpawn();
@@ -99,12 +101,12 @@ export default async (state: CaveState) => {
     const body = new THREE.Mesh(
       ballGeometry,
       new THREE.MeshStandardMaterial({
+        wireframe,
         color: ball.color === 'white' ? 0xffffff : ball.color,
         emissive: ball.color === 'white' ? 0x222222 : ball.color,
         emissiveIntensity: ball === human ? 0.7 : 0.12,
         roughness: 0.55,
         metalness: 0.15,
-        depthTest: ball !== human,
       }),
     );
     body.frustumCulled = false;
@@ -113,8 +115,8 @@ export default async (state: CaveState) => {
     const marker = new THREE.Mesh(
       markerGeometry,
       new THREE.MeshBasicMaterial({
+        wireframe,
         color: ball === human ? 0xffffaa : ball.color,
-        depthTest: ball !== human,
       }),
     );
     marker.position.set(
@@ -148,8 +150,6 @@ export default async (state: CaveState) => {
         material.transparent = opacity < 1;
         material.opacity = opacity;
         material.depthWrite = focused;
-        // Normal depth testing is restored before the camera applies its
-        // close-obstruction visibility fallback to the followed ball.
         material.depthTest = true;
       }
     });
@@ -292,7 +292,6 @@ export default async (state: CaveState) => {
   let followed = human;
   let lastHud = 0;
   const chaseCamera = new ChaseCamera();
-  let wireframe = false;
 
   const respawn = (ball: Ball) => {
     // Balls intentionally share one starting transform; there is no
@@ -356,17 +355,7 @@ export default async (state: CaveState) => {
       mesh.quaternion.copy(ball.quat);
     }
 
-    const cameraObstructed = chaseCamera.update(camera, followed, cave);
-    if (cameraObstructed) {
-      ballMeshes.get(followed)?.traverse((object) => {
-        if (!(object instanceof THREE.Mesh)) return;
-        const materials = Array.isArray(object.material)
-          ? object.material
-          : [object.material];
-        object.renderOrder = 10;
-        for (const material of materials) material.depthTest = false;
-      });
-    }
+    chaseCamera.update(camera, followed);
     caveLight.position.copy(camera.position);
 
     // Highlight the followed ball's next ring without rebuilding the mesh.

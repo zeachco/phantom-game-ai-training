@@ -88,14 +88,9 @@ class Config {
   public GATE_NEXT_COLOR = '#ffd23f';
   /** arc distance around the followed car inside which car meshes sync */
   public VISUAL_RANGE = 700;
-  /** arc distance behind the ball at which the camera samples the cave axis */
+  /** Fixed world-space offset behind the ball; independent of its motion. */
   public CAMERA_FOLLOW_DISTANCE = 60;
-  /** camera position blends from the cave axis toward the ball by this fraction */
-  public CAMERA_BALL_BLEND = 0.2;
-  /** how many cave sections ahead the camera looks */
-  public CAMERA_LOOK_AHEAD_SECTIONS = 3;
-  /** exaggeration of the future centerline's deviation from a straight tunnel */
-  public CAMERA_CURVE_AMPLIFICATION = 3;
+  public CAMERA_FOLLOW_HEIGHT = 12;
 
   // env, the sensor fan is a front arc in the car's plane: longest straight
   // ahead, tapering to the edges, so reach is one honest function of where a

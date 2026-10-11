@@ -1,18 +1,18 @@
 import { expect, test } from 'bun:test';
-import { Scene } from 'three';
+import { Mesh, Scene, Triangle, Vector3 } from 'three';
 import { Ball } from '../src/games/cave/classes/Ball';
 import { Cave } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 
 // The geometry queries need no renderer; only the constructor's optional
 // rock texture asks for a canvas. Keep the browser shim local to construction.
-function cave(seed: number) {
+function cave(seed: number, scene = new Scene()) {
   const previous = globalThis.document;
   globalThis.document = {
     createElement: () => ({ getContext: () => null }),
   } as unknown as Document;
   try {
-    return new Cave(seed, new Scene());
+    return new Cave(seed, scene);
   } finally {
     if (previous) globalThis.document = previous;
     else delete (globalThis as { document?: Document }).document;
@@ -44,6 +44,109 @@ test('floor climbs gradually along the road but retains sharp drops and lateral 
       );
     expect(steepestDrop).toBeGreaterThan(config.CAVE_FLOOR_MAX_CLIMB * 2);
     expect(lateralRelief).toBeGreaterThan(5);
+  }
+});
+
+test('seed 3 sphere contacts use the visible rock on steep banks and ceilings', () => {
+  const scene = new Scene();
+  const terrain = cave(3, scene);
+  terrain.update(0, 4320);
+  scene.updateMatrixWorld(true);
+  const rocks = scene.children.filter(
+    (object): object is Mesh =>
+      object instanceof Mesh && object.material.type === 'MeshLambertMaterial',
+  );
+  const mesh = rocks[17];
+  const positions = mesh.geometry.getAttribute('position');
+  const indices = mesh.geometry.index!;
+  const triangle = new Triangle();
+  const nearest = new Vector3();
+  const point = new Vector3();
+  const normal = new Vector3();
+  // Independent contact points from the rendered mesh in the failing stretch.
+  for (let row = 0; row < 12; row += 2) {
+    for (let column = 0; column < config.CAVE_SIDES; column++) {
+      const index = (row * config.CAVE_SIDES + column) * 6;
+      triangle.a
+        .fromBufferAttribute(positions, indices.getX(index))
+        .applyMatrix4(mesh.matrixWorld);
+      triangle.b
+        .fromBufferAttribute(positions, indices.getX(index + 1))
+        .applyMatrix4(mesh.matrixWorld);
+      triangle.c
+        .fromBufferAttribute(positions, indices.getX(index + 2))
+        .applyMatrix4(mesh.matrixWorld);
+      triangle.getNormal(normal);
+      triangle
+        .getMidpoint(point)
+        .addScaledVector(normal, -config.BALL_RADIUS + 0.01);
+      const s = 4080 + row * 5;
+      const hit = terrain.nearestRadial(
+        point.x,
+        point.y,
+        point.z,
+        s,
+        {} as Parameters<Cave['nearestRadial']>[4],
+      );
+      expect(hit.dist).toBeGreaterThan(-config.BALL_RADIUS);
+      const ball = new Ball({
+        x: point.x,
+        y: point.y,
+        z: point.z,
+        s: hit.s,
+        tx: 0,
+        ty: 0,
+        tz: -1,
+      });
+      ball.controls.moveY = 0;
+      ball.update(terrain);
+      point.set(ball.x, ball.y, ball.z);
+      triangle.closestPointToPoint(point, nearest);
+      expect(point.distanceTo(nearest)).toBeGreaterThanOrEqual(
+        ball.radius - 0.001,
+      );
+    }
+  }
+});
+
+test('seed 5 slab corrections leave the entire sphere clear of rock and bronze', () => {
+  const terrain = cave(5);
+  terrain.update(0, 4320);
+  // Independently sampled rendered back/deck faces near gates 4 and 7.
+  for (const [x, y, z, s] of [
+    [
+      191.26767269208068, -16.5014736280183, -2329.5698313627,
+      2339.711849408429,
+    ],
+    [
+      20.970024405127724, -113.23174786238059, -3964.3228946609543,
+      3993.3318078181796,
+    ],
+  ]) {
+    const ball = new Ball({ x, y, z, s, tx: 0, ty: 0, tz: -1 });
+    ball.controls.moveX = 0;
+    ball.controls.moveY = 0;
+    for (let frame = 0; frame < 8; frame++) {
+      ball.update(terrain);
+      const rock = terrain.nearestRadial(
+        ball.x,
+        ball.y,
+        ball.z,
+        ball.s,
+        {} as Parameters<Cave['nearestRadial']>[4],
+      );
+      expect(rock.dist).toBeLessThanOrEqual(-ball.radius + 0.001);
+      expect(
+        terrain.wallContact(
+          ball.x,
+          ball.y,
+          ball.z,
+          ball.radius - 0.001,
+          ball.s,
+        ),
+      ).toBeNull();
+      expect(ball.damaged).toBe(false);
+    }
   }
 });
 

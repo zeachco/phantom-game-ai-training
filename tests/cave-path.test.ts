@@ -99,7 +99,7 @@ test('a boosted line exists: pads and platforms appear on the early cave', () =>
   ).toBeGreaterThan(0.2);
 });
 
-test('walls span a fraction of their section and stop a rolling ball', () => {
+test('walls stop direct impacts and retain sphere clearance when balls slide around', () => {
   for (const seed of [7, 40]) {
     const terrain = cave(seed);
     let wall: NonNullable<ReturnType<Cave['featureCell']>['wall']> | null =
@@ -120,8 +120,25 @@ test('walls span a fraction of their section and stop a rolling ball', () => {
     const front = wall.centerS;
     const ball = new Ball(terrain.groundSpawn(front - 20));
     ball.controls.moveY = 1;
-    for (let f = 0; f < 240 && !ball.damaged; f++) ball.update(terrain);
-    expect(ball.s).toBeLessThanOrEqual(front + 1);
+    let touched = false;
+    for (let f = 0; f < 240 && !ball.damaged; f++) {
+      ball.update(terrain);
+      const hit = terrain.wallContact(
+        ball.x,
+        ball.y,
+        ball.z,
+        ball.radius + 0.05,
+        ball.s,
+      );
+      if (hit) {
+        touched = true;
+        expect(hit.dist).toBeGreaterThanOrEqual(ball.radius - 0.001);
+      }
+      // Exact sloped rock normals can eventually carry an unsteered ball
+      // around the side. Check the direct impact before that valid pass.
+      if (f === 59) expect(ball.s).toBeLessThanOrEqual(front + 1);
+    }
+    expect(touched).toBe(true);
   }
 });
 
@@ -181,6 +198,143 @@ test('wall obstacles have closed geometry extruded toward the tunnel interior', 
     );
   }
   expect(tallest).toBeGreaterThan(1.5);
+});
+
+test('seed 5 checkpoint slabs have valid triangles and detect contacts across their front faces', () => {
+  const scene = new Scene();
+  const terrain = cave(5, scene);
+  terrain.update(0, 4600);
+  const triangle = new Triangle();
+  const point = new Vector3();
+  const normal = new Vector3();
+  // Include the earlier pass-through and the slabs on both sides of gate 7.
+  for (const cell of [6, 7, 8, 12, 13, 14, 15]) {
+    const wall = terrain.featureCell(cell).wall!;
+    const mesh = scene.children.find(
+      (object) => object.userData.wallFront === wall.centerS,
+    ) as Mesh;
+    const positions = mesh.geometry.getAttribute('position');
+    const indices = mesh.geometry.index!;
+    for (let i = 0; i < indices.count; i += 3) {
+      triangle.a.fromBufferAttribute(positions, indices.getX(i));
+      triangle.b.fromBufferAttribute(positions, indices.getX(i + 1));
+      triangle.c.fromBufferAttribute(positions, indices.getX(i + 2));
+      expect(triangle.getArea()).toBeGreaterThan(0);
+    }
+    // Each front quad is followed by deck and base quads in the first row.
+    for (let column = 0; column < mesh.userData.wallColumns - 1; column++) {
+      for (const corner of [0, 3]) {
+        const i = column * 18 + corner;
+        triangle.a.fromBufferAttribute(positions, indices.getX(i));
+        triangle.b.fromBufferAttribute(positions, indices.getX(i + 1));
+        triangle.c.fromBufferAttribute(positions, indices.getX(i + 2));
+        triangle.getNormal(normal);
+        triangle
+          .getMidpoint(point)
+          .addScaledVector(normal, config.BALL_RADIUS - 0.02);
+        const hit = terrain.wallContact(
+          point.x,
+          point.y,
+          point.z,
+          config.BALL_RADIUS,
+          wall.centerS,
+        );
+        expect(hit).not.toBeNull();
+        expect(Number.isFinite(hit!.dist)).toBe(true);
+        expect(hit!.dist).toBeLessThan(config.BALL_RADIUS);
+      }
+    }
+  }
+});
+
+test('seed 5 balls cannot enter the drawn checkpoint slab fronts at normal speed', () => {
+  const scene = new Scene();
+  const terrain = cave(5, scene);
+  terrain.update(0, 4600);
+  for (const cell of [6, 8, 13, 14, 15]) {
+    const wall = terrain.featureCell(cell).wall!;
+    const mesh = scene.children.find(
+      (object) => object.userData.wallFront === wall.centerS,
+    ) as Mesh;
+    const positions = mesh.geometry.getAttribute('position');
+    const indices = mesh.geometry.index!;
+    const i = Math.floor((mesh.userData.wallColumns - 1) / 2) * 18;
+    const triangle = new Triangle(
+      ...([0, 1, 2].map((corner) =>
+        new Vector3().fromBufferAttribute(positions, indices.getX(i + corner)),
+      ) as [Vector3, Vector3, Vector3]),
+    );
+    const normal = triangle.getNormal(new Vector3());
+    const point = triangle
+      .getMidpoint(new Vector3())
+      .addScaledVector(normal, config.BALL_RADIUS + 0.001);
+    const ball = new Ball({
+      x: point.x,
+      y: point.y,
+      z: point.z,
+      s: wall.centerS,
+      tx: 0,
+      ty: 0,
+      tz: -1,
+    });
+    ball.controls.moveX = 0;
+    ball.controls.moveY = 0;
+    ball.vx = -normal.x * config.BALL_MAX_SPEED;
+    ball.vy = -normal.y * config.BALL_MAX_SPEED;
+    ball.vz = -normal.z * config.BALL_MAX_SPEED;
+    for (let frame = 0; frame < 8; frame++) {
+      ball.update(terrain);
+      point.set(ball.x, ball.y, ball.z).sub(triangle.a);
+      expect(point.dot(normal)).toBeGreaterThanOrEqual(ball.radius - 0.001);
+      expect(ball.damaged).toBe(false);
+    }
+  }
+});
+
+test('a seed 5 ball resting on rock inside the gate 7 slab is moved outside its rendered volume', () => {
+  const scene = new Scene();
+  const terrain = cave(5, scene);
+  terrain.update(0, 4600);
+  scene.updateMatrixWorld(true);
+  const wall = terrain.featureCell(14).wall!;
+  const mesh = scene.children.find(
+    (object) => object.userData.wallFront === wall.centerS,
+  ) as Mesh;
+  const ball = new Ball(terrain.groundSpawn(wall.centerS + wall.halfLen));
+  ball.controls.moveX = 0;
+  ball.controls.moveY = 0;
+  const point = new Vector3();
+  const ray = new Raycaster(point, new Vector3(0.13, 1, 0.21).normalize());
+  const inside = () => {
+    point.set(ball.x, ball.y, ball.z);
+    let crossings = 0;
+    let previous = -Infinity;
+    for (const hit of ray.intersectObject(mesh)) {
+      if (hit.distance - previous < 1e-6) continue;
+      crossings++;
+      previous = hit.distance;
+    }
+    return crossings % 2 === 1;
+  };
+  expect(inside()).toBe(true);
+  const triangle = new Triangle();
+  const nearest = new Vector3();
+  const positions = mesh.geometry.getAttribute('position');
+  const indices = mesh.geometry.index!;
+  for (let frame = 0; frame < 8; frame++) {
+    ball.update(terrain);
+    expect(inside()).toBe(false);
+    for (let i = 0; i < indices.count; i += 3) {
+      triangle.a.fromBufferAttribute(positions, indices.getX(i));
+      triangle.b.fromBufferAttribute(positions, indices.getX(i + 1));
+      triangle.c.fromBufferAttribute(positions, indices.getX(i + 2));
+      triangle.closestPointToPoint(point, nearest);
+      expect(point.distanceTo(nearest)).toBeGreaterThanOrEqual(
+        ball.radius - 0.001,
+      );
+    }
+    expect(ball.damaged).toBe(false);
+  }
 });
 
 test('landing uses the exact rendered obstacle deck', () => {
