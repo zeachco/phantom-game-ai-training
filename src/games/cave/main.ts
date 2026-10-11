@@ -407,6 +407,9 @@ export default async (state: CaveState) => {
       followed.y + config.BALL_RADIUS * 2.2,
       followed.z,
     );
+    // the torch takes the followed ball's colour so each car lights its own
+    // patch of cave in its own tint
+    ballLight.color.set(followed.color || '#ffffff');
 
     // Highlight the followed ball's next ring without rebuilding the mesh.
     for (let i = 0; i < cave.gateMeshes.length; i++) {
