@@ -27,6 +27,15 @@ const PANEL_MAX_WIDTH = 800;
 /** one captured jump sample per pixel column of the jump timeline */
 const JUMP_TIMELINE_WIDTH = 110;
 
+/** Screen resolution divisor: 1 keeps the native device pixel ratio, 2 draws
+ *  half of it, 4 a quarter. Zero, negatives and garbage fall back to this. */
+const DEFAULT_SCREEN_SCALE = 2;
+
+/** The `?scale=` override, e.g. 1 for native or 4 for the lightest draw. */
+function screenScale(scale = DEFAULT_SCREEN_SCALE) {
+  return Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_SCREEN_SCALE;
+}
+
 const io = fileUtilities('cave');
 if (config.CLEAR_STORAGE) io.discardModels();
 
@@ -39,9 +48,12 @@ export default async (state: CaveState) => {
   const seed = readSeed();
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  // native resolution so the GPU budget goes to the training pool, not pixels
+  // the GPU budget goes to the training pool, not pixels: 1 = native, 2 = half
   const devicePixelRatio = Math.min(2, window.devicePixelRatio || 1);
-  renderer.setPixelRatio(isDemo ? devicePixelRatio / 2 : devicePixelRatio);
+  const scale = screenScale(
+    Number(new URLSearchParams(location.search).get('scale')),
+  );
+  renderer.setPixelRatio(devicePixelRatio / scale);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputEncoding = THREE.sRGBEncoding;
   // obstacle slabs cast soft shadows from the ball's torch onto the rock
