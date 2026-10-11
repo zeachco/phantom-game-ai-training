@@ -3,6 +3,7 @@ import { GameLoop } from '../../utilities/three/GameLoop';
 import { Ball, getCaveBrainDimensions } from './classes/Ball';
 import { Cave } from './classes/Cave';
 import { ChaseCamera } from './classes/ChaseCamera';
+import { SensorViz } from './classes/SensorViz';
 import { config } from './classes/Config';
 import { ControlType } from './types';
 
@@ -56,6 +57,11 @@ export default async (state: CaveState) => {
   ballLight.shadow.bias = -0.002;
   ballLight.shadow.normalBias = 1.2;
   scene.add(ballLight);
+
+  // Rays are a spectator/debug aid: they appear while the camera follows an
+  // AI ball and hide as soon as the player's own ball is followed.
+  const sensorViz = new SensorViz(config.SENSORS);
+  scene.add(sensorViz.group);
 
   const camera = new THREE.PerspectiveCamera(
     72,
@@ -184,7 +190,7 @@ export default async (state: CaveState) => {
 
   const hint = document.createElement('div');
   hint.textContent =
-    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe';
+    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe\nAI focus draws its sensor fan';
   hint.style.position = 'fixed';
   hint.style.top = '38px';
   hint.style.left = '14px';
@@ -380,6 +386,8 @@ export default async (state: CaveState) => {
       mesh.quaternion.copy(ball.quat);
     }
 
+    const showRays = followed.useAI && !followed.damaged;
+    sensorViz.update(followed, showRays);
     chaseCamera.update(camera, followed, cave);
     caveLight.position.copy(camera.position);
     ballLight.position.set(

@@ -86,6 +86,25 @@ export class Sensor {
     );
   }
 
+  /** World-space direction of ray `index` and that ray's reach. Callers can
+   *  reconstruct the hit endpoint as origin + dir * (1 - readings[index]) *
+   *  reach, which is what the debug fan draws. Ray order matches
+   *  `readings`: the SENSORS fan rays, then up, then down. */
+  rayVector(index: number, out: { x: number; y: number; z: number }) {
+    const ball = this.ball;
+    if (index < config.SENSORS) {
+      out.x = ball.fx * this.#cosOff[index] + ball.rx * this.#sinOff[index];
+      out.y = ball.fy * this.#cosOff[index] + ball.ry * this.#sinOff[index];
+      out.z = ball.fz * this.#cosOff[index] + ball.rz * this.#sinOff[index];
+      return this.#lengths[index];
+    }
+    const sign = index === config.SENSORS ? 1 : -1;
+    out.x = ball.ux * sign;
+    out.y = ball.uy * sign;
+    out.z = ball.uz * sign;
+    return config.VERTICAL_RAY_LENGTH;
+  }
+
   /** march one ray, encode the hit as 1 - t/reach, 0 when nothing is hit */
   #read(
     cave: Cave,
