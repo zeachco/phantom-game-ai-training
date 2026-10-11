@@ -120,6 +120,14 @@ class Config {
   /** below this speed (u/f) the cone axis falls back to the cave tangent: a
    *  near-still velocity direction is just noise */
   public SENSOR_MIN_AXIS_SPEED = 0.5;
+  /** how many checkpoints ahead the cone aims. The ball's next gate counts as
+   *  the first checkpoint later, so 2 lands on the gate after it, pulling the
+   *  cone around an upcoming turn instead of down the current velocity */
+  public SENSOR_AHEAD_CHECKPOINTS = 2;
+  /** cone axis blend: this share of the current movement direction ... */
+  public SENSOR_AXIS_VELOCITY_WEIGHT = 0.3;
+  /** ... and this share of the direction to the lookahead checkpoint */
+  public SENSOR_AXIS_CHECKPOINT_WEIGHT = 0.7;
   /** reach of the center ray, along the cone axis */
   public SENSORS_MAX_LENGTH = 336;
   /** reach of the rim rays, preserving the 60% edge-to-center profile */
@@ -152,6 +160,9 @@ class Config {
   /** cos(55 deg): a contact whose inward normal is within 55 deg of straight
    *  up counts as jumpable ground. Steeper slopes and walls do not. */
   public BALL_JUMP_MAX_SLOPE_COS = 0.5736;
+  /** gauge points an AI ball loses every frame it holds jump while no jump
+   *  actually fires, so a brain cannot mash jump for free */
+  public AI_WASTED_JUMP_GAUGE = 1;
   /** velocity retained per frame while the ball rolls on a surface. Near-unit
    *  drag preserves its valley speed so it can climb out and launch naturally. */
   public BALL_ROLL_DRAG = 0.999;
@@ -338,6 +349,9 @@ class Config {
    * decorative/scoring ring exactly. Ten times the old seven-second budget.
    */
   public SECTION_BUDGET_FRAMES = 2200;
+  /** the section gauge drains this many frames per simulation frame, so the
+   *  budget above is consumed this much faster */
+  public SECTION_GAUGE_DRAIN = 4;
 
   public CLEAR_STORAGE =
     typeof window !== 'undefined' && /clear/.test(window.location.href);

@@ -312,6 +312,7 @@ export class Ball {
   update(cave: Cave) {
     if (this.damaged) return;
     this.controls.update();
+    let jumped = false;
     if (this.controls.consumeJump()) {
       // Fire on real contact, or once inside the coyote window since the last
       // jumpable contact. Consuming the window keeps it to a single air jump.
@@ -320,8 +321,14 @@ export class Ball {
         this.vy = Math.max(0, this.vy) + config.BALL_JUMP_SPEED;
         this.grounded = false;
         this.lastCollisionFrames = config.BALL_JUMP_GRACE_FRAMES + 1;
+        jumped = true;
       }
     }
+    // An AI brain that asks for a jump it cannot use pays for the wasted
+    // press: every frame the jump channel is held without a jump firing
+    // drains one gauge point, so a brain cannot mash jump for free.
+    if (this.useAI && this.controls.jumpHeld && !jumped)
+      this.sectionFramesRemaining -= config.AI_WASTED_JUMP_GAUGE;
     if (this.lastCollisionFrames <= config.BALL_JUMP_GRACE_FRAMES) {
       this.lastCollisionFrames++;
     }
@@ -338,7 +345,8 @@ export class Ball {
     if (this.brain) this.#updateScore(cave);
     // the section gauge drains every frame and is refreshed on progress, so
     // standing still eventually retires the ball
-    if (this.sectionFramesRemaining > 0) this.sectionFramesRemaining--;
+    if (this.sectionFramesRemaining > 0)
+      this.sectionFramesRemaining -= config.SECTION_GAUGE_DRAIN;
     this.#updateSectionProgress();
 
     const crash = this.#assessDamage();

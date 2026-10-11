@@ -178,7 +178,9 @@ describe('cave ball physics', () => {
     const { inputCount, outputCount } = getCaveBrainDimensions(
       ball.sensor!.rayCount,
     );
-    expect(inputCount).toBe(ball.sensor!.rayCount * 2 + 4 + 8);
+    // rayCount current readings + rayCount surface kinds + rayCount previous
+    // readings, then the 4-value ball block and the 10-value feature block
+    expect(inputCount).toBe(ball.sensor!.rayCount * 3 + 4 + 10);
     expect(outputCount).toBe(3);
     expect(() => ball.update(cave)).not.toThrow();
   });
@@ -456,13 +458,32 @@ test('the section gauge drains every frame and refreshes on progress', () => {
   const full = config.SECTION_BUDGET_FRAMES;
   ball.sectionFramesRemaining = full;
   ball.update(cave);
-  expect(ball.sectionFramesRemaining).toBe(full - 1);
+  expect(ball.sectionFramesRemaining).toBe(full - config.SECTION_GAUGE_DRAIN);
 
   // crossing into a new section refreshes the gauge to the full budget
   ball.sectionFramesRemaining = 3;
   ball.s = config.CAVE_SEGMENT_LENGTH + 10;
   ball.update(cave);
   expect(ball.sectionFramesRemaining).toBe(full);
+});
+
+test('an AI holding jump while airborne drains an extra gauge point', () => {
+  const cave = floor();
+  const ball = new Ball(spawn, ControlType.AI, config.BALL_MAX_SPEED, 't', 1);
+  ball.controls.moveX = 0;
+  ball.controls.moveY = 0;
+  ball.grounded = false;
+  ball.vy = 4;
+  ball.lastCollisionFrames = config.BALL_JUMP_GRACE_FRAMES + 1;
+  ball.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+  ball.controls.jump = 1;
+  ball.update(cave);
+  expect(ball.sectionFramesRemaining).toBe(
+    config.SECTION_BUDGET_FRAMES -
+      config.SECTION_GAUGE_DRAIN -
+      config.AI_WASTED_JUMP_GAUGE,
+  );
+  expect(ball.damaged).toBe(false);
 });
 
 test('an empty section gauge retires the ball with a gauge death', () => {

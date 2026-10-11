@@ -52,6 +52,8 @@ export class Sensor {
   };
   /** current cone frame, refreshed every update and reused by rayVector */
   #axis = { x: 0, y: 0, z: -1 };
+  /** scratch point for the lookahead checkpoint, so the aim allocates nothing */
+  #target = { x: 0, y: 0, z: 0 };
   #basisSide = { x: 1, y: 0, z: 0 };
   #basisLift = { x: 0, y: 1, z: 0 };
 
@@ -113,25 +115,69 @@ export class Sensor {
     this.#lengths.push(length);
   }
 
-  /** Point the cone down the ball's velocity, or the cave tangent when it is
-   *  nearly still. Builds an orthonormal frame so ring rays spread in 3D. */
-  #updateBasis() {
+  /** Point the cone along a blend of the ball's movement direction and the
+   *  direction to the checkpoint a couple of gates ahead, falling back to the
+   *  cave tangent when nearly still. Builds an orthonormal frame so ring rays
+   *  spread in 3D. */
+  #updateBasis(cave: Cave) {
     const ball = this.ball;
-    let ax = ball.vx;
-    let ay = ball.vy;
-    let az = ball.vz;
-    let length = Math.hypot(ax, ay, az);
+    let vx = ball.vx;
+    let vy = ball.vy;
+    let vz = ball.vz;
+    let length = Math.hypot(vx, vy, vz);
     if (length < config.SENSOR_MIN_AXIS_SPEED) {
-      ax = ball.cx;
-      ay = ball.cy;
-      az = ball.cz;
-      length = Math.hypot(ax, ay, az);
+      vx = ball.cx;
+      vy = ball.cy;
+      vz = ball.cz;
+      length = Math.hypot(vx, vy, vz);
     }
     if (length < 1e-6) {
-      ax = ball.fx;
-      ay = ball.fy;
-      az = ball.fz;
-      length = Math.hypot(ax, ay, az) || 1;
+      vx = ball.fx;
+      vy = ball.fy;
+      vz = ball.fz;
+      length = Math.hypot(vx, vy, vz) || 1;
+    }
+    vx /= length;
+    vy /= length;
+    vz /= length;
+
+    // the ball's next gate is the first checkpoint later, so aim at the gate
+    // SENSOR_AHEAD_CHECKPOINTS - 1 past it: the cone leans into the turn the
+    // ball is about to take instead of staring down its current velocity
+    const gateIndex = Math.min(
+      ball.nextGate + config.SENSOR_AHEAD_CHECKPOINTS - 1,
+      config.GATES_PER_SEED - 1,
+    );
+    const target = cave.centerAt(cave.gatePositions[gateIndex], this.#target);
+    let dx = target.x - ball.x;
+    let dy = target.y - ball.y;
+    let dz = target.z - ball.z;
+    let dlen = Math.hypot(dx, dy, dz);
+    if (dlen < 1e-6) {
+      dx = ball.fx;
+      dy = ball.fy;
+      dz = ball.fz;
+      dlen = Math.hypot(dx, dy, dz) || 1;
+    }
+    dx /= dlen;
+    dy /= dlen;
+    dz /= dlen;
+
+    let ax =
+      vx * config.SENSOR_AXIS_VELOCITY_WEIGHT +
+      dx * config.SENSOR_AXIS_CHECKPOINT_WEIGHT;
+    let ay =
+      vy * config.SENSOR_AXIS_VELOCITY_WEIGHT +
+      dy * config.SENSOR_AXIS_CHECKPOINT_WEIGHT;
+    let az =
+      vz * config.SENSOR_AXIS_VELOCITY_WEIGHT +
+      dz * config.SENSOR_AXIS_CHECKPOINT_WEIGHT;
+    length = Math.hypot(ax, ay, az);
+    if (length < 1e-6) {
+      ax = vx;
+      ay = vy;
+      az = vz;
+      length = 1;
     }
     ax /= length;
     ay /= length;
@@ -165,7 +211,7 @@ export class Sensor {
   }
 
   update(cave: Cave) {
-    this.#updateBasis();
+    this.#updateBasis(cave);
     const car = this.ball;
     const axis = this.#axis;
     const side = this.#basisSide;

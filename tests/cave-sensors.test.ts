@@ -5,8 +5,19 @@ import { Sensor } from '../src/games/cave/classes/Sensor';
 import { SensorViz } from '../src/games/cave/classes/SensorViz';
 import { config } from '../src/games/cave/classes/Config';
 
-/** Every ray misses, so readings come back 0 and rays draw at full reach. */
-const openCave = { castRay: () => -1 } as unknown as Cave;
+/** Every ray misses, so readings come back 0 and rays draw at full reach.
+ *  Every checkpoint sits straight down -z from the posed ball, so the
+ *  lookahead aim is a clean axis to assert against. */
+const openCave = {
+  castRay: () => -1,
+  gatePositions: Array.from(
+    { length: config.GATES_PER_SEED },
+    (_, i) => (i + 1) * config.GATE_SPACING,
+  ),
+  centerAt(s: number, out: { x: number; y: number; z: number }) {
+    return Object.assign(out, { x: 1, y: 2, z: 3 - s });
+  },
+} as unknown as Cave;
 
 /** A ball frozen at a known pose; the cone only reads the frame and velocity. */
 function posedBall() {
@@ -29,6 +40,7 @@ function posedBall() {
     ux: 0,
     uy: 1,
     uz: 0,
+    nextGate: 0,
   } as unknown as Ball;
   const sensor = new Sensor(ball);
   ball.sensor = sensor;
@@ -66,7 +78,7 @@ test('the center ray runs down the cone axis and the rim sits at half-angle', ()
   expect(dir.y).toBeCloseTo(-1, 8);
 });
 
-test('the cone points down the ball velocity when it is moving', () => {
+test('the cone blends the ball velocity with the lookahead checkpoint', () => {
   const ball = posedBall();
   ball.vx = 0.6;
   ball.vy = 0;
@@ -75,9 +87,16 @@ test('the cone points down the ball velocity when it is moving', () => {
   sensor.update(openCave);
   const dir = { x: 0, y: 0, z: 0 };
   sensor.rayVector(0, dir);
-  expect(dir.x).toBeCloseTo(0.6, 8);
+  // 30% of the movement direction plus 70% of the direction to the second
+  // checkpoint ahead, which the mock places straight down -z from the ball
+  const ex = config.SENSOR_AXIS_VELOCITY_WEIGHT * 0.6;
+  const ez =
+    config.SENSOR_AXIS_VELOCITY_WEIGHT * -0.8 +
+    config.SENSOR_AXIS_CHECKPOINT_WEIGHT * -1;
+  const el = Math.hypot(ex, ez);
+  expect(dir.x).toBeCloseTo(ex / el, 8);
   expect(dir.y).toBeCloseTo(0, 8);
-  expect(dir.z).toBeCloseTo(-0.8, 8);
+  expect(dir.z).toBeCloseTo(ez / el, 8);
 });
 
 test('SensorViz draws every ray to its hit endpoint and a cone surface', () => {
