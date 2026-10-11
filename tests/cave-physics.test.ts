@@ -412,3 +412,41 @@ test('a wall bounce reverses and halves angular velocity instead of resetting gr
   expect(spin.avz).toBeCloseTo(0.15 * config.BALL_SPIN_DAMP, 6);
   expect(ball.quat.x).toBeLessThan(0);
 });
+
+test('a hard side bounce off an obstacle costs a point, floor landings do not', () => {
+  const terrain = floor();
+  const slab = box();
+  terrain.wallContact = (x, y, z, r) => {
+    const hit = slab.contact(x, y, z, r);
+    return hit && hit.dist < r ? hit : null;
+  };
+  const ball = new Ball({ ...spawn, s: 98.4, z: -98.4, y: 4 });
+  ball.brain.score = 50;
+  ball.controls.moveY = 0;
+  ball.vz = -6;
+  ball.update(terrain);
+  expect(ball.vz).toBeGreaterThan(0);
+  expect(ball.brain.score).toBe(50 - config.OBSTACLE_HIT_SCORE);
+
+  const resting = new Ball(spawn);
+  resting.brain.score = 50;
+  resting.controls.moveX = 0;
+  resting.controls.moveY = 0;
+  tick(resting, floor(), 60);
+  expect(resting.brain.score).toBe(50);
+});
+
+test('forward section progress pays the section score', () => {
+  const ball = new Ball(spawn);
+  ball.controls.moveX = 0;
+  ball.controls.moveY = 1;
+  const cave = floor();
+  const start = ball.brain.score;
+  const startSection = Math.floor(spawn.s / config.CAVE_SEGMENT_LENGTH);
+  tick(ball, cave, 130);
+  const sections =
+    Math.floor(ball.s / config.CAVE_SEGMENT_LENGTH) - startSection;
+  expect(sections).toBeGreaterThan(0);
+  expect(ball.s).toBeLessThan(config.GATE_SPACING);
+  expect(ball.brain.score).toBe(start + sections * config.SECTION_SCORE);
+});

@@ -143,6 +143,9 @@ export class Ball {
   private avz = 0;
   /** Briefly retain impact spin instead of overwriting it with ground roll. */
   private spinBounceFrames = 0;
+  /** Frames before a side impact can charge the score again, so one bounce
+   *  does not bill once per collision substep. */
+  private hitCooldown = 0;
   /** scratch collision query, reused so no frame allocates */
   private hit: RadialHit = {
     s: 0,
@@ -263,6 +266,7 @@ export class Ball {
     this.avy = 0;
     this.avz = 0;
     this.spinBounceFrames = 0;
+    this.hitCooldown = 0;
     this.controls.consumeJump();
     this.contactNormal.set(0, 1, 0);
     this.grounded = false;
@@ -306,6 +310,7 @@ export class Ball {
     this.prevS = this.s;
     this.#move(cave);
     if (this.spinBounceFrames > 0) this.spinBounceFrames--;
+    if (this.hitCooldown > 0) this.hitCooldown--;
     if (this.boostFrames > 0) this.boostFrames--;
     if (cave.boostAt(this.s, this.a) > 0.2) {
       if (this.boostFrames <= 0 && this.useAI)
@@ -379,8 +384,8 @@ export class Ball {
               wrap > Math.PI
                 ? wrap - Math.PI * 2
                 : wrap < -Math.PI
-                  ? wrap + Math.PI * 2
-                  : wrap;
+                ? wrap + Math.PI * 2
+                : wrap;
             const lateral = Math.abs(offset) * config.CAVE_RADIUS;
             const threat = (1 - d) * Math.max(0, 1 - lateral / 45);
             if (threat > columnProximity) {
@@ -416,6 +421,9 @@ export class Ball {
     if (section > this.furthestSection) {
       this.furthestSection = section;
       this.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+      // Forward section progress is scored even if the decorative gate ring
+      // itself is missed, so a clean run through the rock always pays.
+      if (!this.finished) this.brain.score += config.SECTION_SCORE;
     }
   }
 
@@ -736,12 +744,18 @@ export class Ball {
     return penetration > 1e-6;
   }
 
-  /** A wall impact reverses the spin and retains half its angular speed. */
+  /** A hard side impact reverses the spin and retains half its angular speed,
+   *  and costs a point: the ball bounced back off an obstacle. Floor and slab
+   *  tops are excluded, only side contacts land here. */
   #bounceSpin() {
     this.avx *= -0.5;
     this.avy *= -0.5;
     this.avz *= -0.5;
     this.spinBounceFrames = 8;
+    if (this.hitCooldown <= 0) {
+      this.hitCooldown = config.BALL_HIT_COOLDOWN_FRAMES;
+      this.brain.score -= config.OBSTACLE_HIT_SCORE;
+    }
   }
 
   /** integrate the visual quaternion by the current angular velocity */

@@ -337,6 +337,13 @@ export default async (state: CaveState) => {
         ball.update(cave);
         if (alive && ball.damaged) ball.deathTime = now;
       }
+      // Race position pays a small per-frame premium: 1st place earns
+      // POSITION_SCORE_SCALE each frame, 2nd half as much, and so on.
+      const ranked = state.balls
+        .filter((ball) => !ball.damaged)
+        .sort((a, b) => b.s - a.s);
+      for (let i = 0; i < ranked.length; i++)
+        ranked[i].brain.score += config.POSITION_SCORE_SCALE / (i + 1);
     }
 
     let minS = human.s;
@@ -353,11 +360,13 @@ export default async (state: CaveState) => {
     );
 
     const living = state.balls.filter((ball) => !ball.damaged);
+    // The camera follows the ball with the best score until the player takes
+    // the controls, then it stays on the player's ball.
     const best = living.reduce(
-      (leader, ball) => (ball.s > leader.s ? ball : leader),
-      human,
+      (leader, ball) => (ball.brain.score > leader.brain.score ? ball : leader),
+      living[0] ?? human,
     );
-    followed = human.damaged ? best : human;
+    followed = human.controls.playerActive && !human.damaged ? human : best;
 
     for (const ball of state.balls) {
       const mesh = ballMeshes.get(ball);

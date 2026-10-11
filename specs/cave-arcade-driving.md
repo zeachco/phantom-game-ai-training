@@ -119,8 +119,21 @@ Unchanged from the car version and ported into `Ball`:
 - Gates are rings across the tube at `GATE_SPACING`; crossing them in order
   pays `GATE_SCORE`, a speed bonus, and `FINISH_BONUS` on the last one.
   Out-of-order entries pay `WRONG_GATE_PENALTY`.
+- Forward section progress resets `SECTION_BUDGET_FRAMES` and pays
+  `SECTION_SCORE`, so clean progress scores even between the sparse rings.
+- A hard side impact that bounces the ball back off a rock bank or bronze slab
+  pays `OBSTACLE_HIT_SCORE` (cooldown `BALL_HIT_COOLDOWN_FRAMES`), and floor
+  landings do not count.
+- Every frame, race position pays `POSITION_SCORE_SCALE / position`: 1st earns
+  slightly more each frame than 2nd, and so on.
 - Forward section progress resets `SECTION_BUDGET_FRAMES`; no progress, or
   staying under `BALL_STALL_SPEED` for the same budget, retires the ball.
+
+## Camera
+
+The chase camera follows the ball with the best score by default. Once the
+player gives any driving input (keyboard or gamepad), it stays on the human
+ball; if the human crashes it falls back to the best-scoring living ball.
 
 ## Brain inputs
 

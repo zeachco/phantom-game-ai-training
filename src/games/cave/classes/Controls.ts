@@ -39,6 +39,15 @@ export class Controls {
   #spaceHeld = false;
   #primaryHeld = false;
   #brainJumpHeld = false;
+  /** set once the player drives with the keyboard or gamepad; main.ts reads
+   *  it to decide whether the camera stays on the human ball */
+  #playerActive = false;
+
+  /** True once the player has given any driving input. The camera follows the
+   *  best-scoring ball until then, and the human ball afterwards. */
+  public get playerActive() {
+    return this.#playerActive;
+  }
 
   public requestJump() {
     this.#jumpRequested = true;
@@ -120,6 +129,8 @@ export class Controls {
     const primary = pad.buttons[0]?.pressed ?? false;
     if (primary && !this.#primaryHeld) this.requestJump();
     this.#primaryHeld = primary;
+    if (this.#gamepadX !== 0 || this.#gamepadY !== 0 || primary)
+      this.#playerActive = true;
     this.#syncOutputs();
   }
 
@@ -170,6 +181,7 @@ export class Controls {
         return;
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
+        this.#playerActive = true;
         if (!this.#spaceHeld && !e.repeat) this.requestJump();
         this.#spaceHeld = true;
         return;
@@ -177,6 +189,7 @@ export class Controls {
       const axis = this.#keyToAxis(e.key);
       if (axis === undefined) return;
       e.preventDefault();
+      this.#playerActive = true;
       this.#held.add(axis);
       recompute();
     };

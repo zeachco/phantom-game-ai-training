@@ -300,6 +300,18 @@ class Config {
   public FINISH_BONUS = 600;
   /** fixed debt for entering a gate out of order */
   public WRONG_GATE_PENALTY = 100;
+  /** flat reward for making forward progress into a new cave section, so
+   *  racing through the cave pays even between the sparse gate rings */
+  public SECTION_SCORE = 10;
+  /** score lost when a hard side impact bounces the ball back off an
+   *  obstacle: the rock banks and the bronze slabs both count */
+  public OBSTACLE_HIT_SCORE = 1;
+  /** frames after an obstacle hit before another one can be charged, so one
+   *  impact does not bill once per collision substep */
+  public BALL_HIT_COOLDOWN_FRAMES = 10;
+  /** per-frame score paid by race position: 1st place earns this each frame,
+   *  2nd half as much, and so on, so leading is worth slightly more */
+  public POSITION_SCORE_SCALE = 1 / 10000;
   /**
    * Reference 60 FPS budget for advancing into the next cave section.
    * Sections are deliberately used instead of gates for the liveness check:

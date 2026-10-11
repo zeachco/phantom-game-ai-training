@@ -94,6 +94,23 @@ test('the primary gamepad button jumps once until it is released and pressed aga
   });
 });
 
+test('playerActive flips on the first driving input, human only', () => {
+  inputs((controls, key) => {
+    expect(controls.playerActive).toBe(false);
+    key('keydown');
+    expect(controls.playerActive).toBe(true);
+    // the camera flag never joins the AI output channels
+    expect(Object.keys(controls)).toEqual(['moveX', 'moveY', 'jump']);
+  });
+  inputs((controls, _key, pad) => {
+    expect(controls.playerActive).toBe(false);
+    pad.axes[1] = -1;
+    controls.update();
+    expect(controls.playerActive).toBe(true);
+  });
+  expect(new Controls(ControlType.AI).playerActive).toBe(false);
+});
+
 test('an AI jump output jumps once on a rising edge', () => {
   const controls = new Controls(ControlType.AI);
   controls.writeJump(1);
