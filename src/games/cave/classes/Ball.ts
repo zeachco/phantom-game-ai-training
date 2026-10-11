@@ -21,10 +21,10 @@ export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
   // AI controls have no event handlers, so their enumerable fields are the
   // actual output channels consumed by Ball.update().
   const controls = new Controls(ControlType.AI);
-  // rayCount current readings + rayCount for the class of each hit + rayCount
-  // previous readings, then the ball and feature blocks.
+  // rayCount current readings + rayCount for the class of each hit, then the
+  // ball and feature blocks.
   return {
-    inputCount: rayCount * 3 + BALL_INPUTS + EXTRA_BRAIN_INPUTS,
+    inputCount: rayCount * 2 + BALL_INPUTS + EXTRA_BRAIN_INPUTS,
     outputCount: Object.keys(controls).length,
   };
 }
@@ -147,10 +147,6 @@ export class Ball {
   private deathPenalty = 0;
   private prevS = 0;
   private brainInputs: number[] = [];
-  /** previous frame's ray values, the one-frame sensor history block */
-  private prevSensorInputs: number[] = [];
-  /** set after the first AI decision, until then the history is flat */
-  private hasPrevSensors = false;
   /** visual rolling angular velocity */
   private avx = 0;
   private avy = 0;
@@ -238,7 +234,6 @@ export class Ball {
 
     if (controlType !== ControlType.DUMMY) {
       this.sensor = new Sensor(this);
-      this.prevSensorInputs = new Array<number>(this.sensor.rayCount).fill(0);
       const { inputCount, outputCount } = getCaveBrainDimensions(
         this.sensor.rayCount,
       );
@@ -303,8 +298,6 @@ export class Ball {
     this.speed = 0;
     this.boostFrames = 0;
     this.hit.dist = -config.BALL_RADIUS;
-    this.hasPrevSensors = false;
-    this.prevSensorInputs.fill(0);
     this.gateHeading = 0;
     this.gatePitch = 0;
   }
@@ -367,13 +360,9 @@ export class Ball {
       this.sensor.update(cave);
       if (this.useAI) {
         const inputs = this.brainInputs;
-        const prev = this.prevSensorInputs;
         const readings = this.sensor.readings;
         inputs.length = 0;
         for (let i = 0; i < readings.length; i++) inputs.push(readings[i]);
-        if (!this.hasPrevSensors)
-          for (let i = 0; i < prev.length; i++) prev[i] = readings[i];
-        for (let i = 0; i < prev.length; i++) inputs.push(prev[i]);
         // the surface class of each current reading: -1 obstacle, +1 boost,
         // 0 ground or miss. The reading itself gates "nothing hit".
         const kinds = this.sensor.kinds;
@@ -446,8 +435,6 @@ export class Ball {
         inputs.push(this.gateDelta);
         inputs.push(this.gateHeading);
         inputs.push(this.gatePitch);
-        // refresh the history after the brain has read it
-        for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);
         const [moveX, moveY, jump] = outputs;
         this.controls.moveX = clamp(-1, 1, moveX);
