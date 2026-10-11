@@ -6,8 +6,6 @@ type GameModule = { default: (state: object) => unknown };
 const apps = new Map<string, () => Promise<unknown>>([
   ['highway', () => import(`./games/highway/main.js`)],
   ['circuit', () => import(`./games/circuit/main.js`)],
-  ['space-shield', () => import(`./games/space-shield/index.js`)],
-  ['waypoints', () => import(`./games/waypoints/main.js`)],
   ['cave', () => import(`./games/cave/main.js`)],
 ]);
 

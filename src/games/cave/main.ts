@@ -11,7 +11,7 @@ import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Ball } from './classes/Ball';
 import { CaveRace } from './classes/CaveRace';
 import { ChaseCamera } from './classes/ChaseCamera';
-import { config } from './classes/Config';
+import { config, isDemo } from './classes/Config';
 import { SensorViz } from './classes/SensorViz';
 import { clearScoreRecords, type defaultState } from './utilities';
 
@@ -358,7 +358,8 @@ export default async (state: CaveState) => {
   panelContent.append(modelActions, followKeys, netWrap, info, footer);
 
   panel.append(toggleBtn, panelContent);
-  document.body.appendChild(panel);
+  // the demo profile hides the whole panel instead of starting it collapsed
+  if (!isDemo) document.body.appendChild(panel);
 
   const position = document.createElement('div');
   position.className = 'cave-position';

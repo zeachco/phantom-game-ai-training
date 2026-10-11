@@ -14,7 +14,7 @@ import { GamePad } from '../../utilities/inputs/Gamepad';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Car } from './classes/Car';
 import { CircuitRace } from './classes/CircuitRace';
-import { config } from './classes/Config';
+import { config, isDemo } from './classes/Config';
 import { drawControlAxes, drawVelocityVector } from './ui/driveIndicators';
 import { TimingBoard } from './ui/TimingBoard';
 import { TrackScoreBoard } from './ui/TrackScoreBoard';
@@ -80,7 +80,7 @@ export default async (state: typeof defaultState) => {
   let camAngle = 0;
   let camAngleSet = false;
   let camSet = false;
-  let panelOpen = !window.location.href.includes('demo=true');
+  let panelOpen = false;
   /** the race owns simulation state; this function coordinates browser UI. */
 
   const panel = document.createElement('aside');
@@ -363,7 +363,8 @@ export default async (state: typeof defaultState) => {
   panelContent.append(actions, followKeys, netWrap, info, footer);
 
   panel.append(toggleBtn, panelContent);
-  document.body.appendChild(panel);
+  // the demo profile hides the whole panel instead of starting it collapsed
+  if (!isDemo) document.body.appendChild(panel);
 
   // The output box and velocity vector mimic the followed car, display only.
   const steerOverlay = document.createElement('div');
