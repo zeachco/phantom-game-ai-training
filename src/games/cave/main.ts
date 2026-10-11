@@ -39,7 +39,9 @@ export default async (state: CaveState) => {
   const seed = readSeed();
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  // native resolution so the GPU budget goes to the training pool, not pixels
+  const devicePixelRatio = Math.min(2, window.devicePixelRatio || 1);
+  renderer.setPixelRatio(isDemo ? devicePixelRatio / 2 : devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputEncoding = THREE.sRGBEncoding;
   // obstacle slabs cast soft shadows from the ball's torch onto the rock
@@ -577,8 +579,8 @@ export default async (state: CaveState) => {
       (follow === 'mixed'
         ? ball.brain instanceof MixedNetwork
         : follow > 0
-          ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
-          : true);
+        ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
+        : true);
     let leader: Ball | undefined;
     for (const ball of state.balls) {
       if (
