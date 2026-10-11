@@ -94,20 +94,23 @@ class Config {
   /** Keep this much clear between the camera and a blocked boom. */
   public CAMERA_COLLISION_MARGIN = 2;
 
-  // env, the sensor fan is a front arc in the car's plane: longest straight
-  // ahead, tapering to the edges, so reach is one honest function of where a
-  // ray points, plus one ray straight up and one straight down for the
-  // ceiling and the floor
+  // env, the sensor is a forward cone opening along the ball's movement
+  // direction: a center ray plus concentric rings, the longest reach straight
+  // down the axis and a shorter reach at the rim, so the brain gets a 3D view
+  // of the tube ahead. Two extra rays stay world-up and world-down for the
+  // floor and the ceiling regardless of which way the ball is moving.
   public SENSORS = 19;
-  /** total fan spread centered on the heading */
+  /** total cone angle: the rim sits this many radians off the movement axis */
   public SENSOR_ANGLE = (Math.PI / 180) * 120;
-  /** packs the rays toward the heading: 1 is even spacing, higher values
-   *  put more of the fan straight ahead where the car actually drives.
-   *  At 2 the middle third of the rays covers only ~5% of the arc */
-  public SENSOR_FORWARD_BIAS = 2;
-  /** reach of the center ray */
+  /** concentric rings the cone spreads its rays over, besides the center ray;
+   *  ring ray counts are sized to the ring circumference so coverage is even */
+  public SENSOR_CONE_RINGS = 2;
+  /** below this speed (u/f) the cone axis falls back to the cave tangent: a
+   *  near-still velocity direction is just noise */
+  public SENSOR_MIN_AXIS_SPEED = 0.5;
+  /** reach of the center ray, along the cone axis */
   public SENSORS_MAX_LENGTH = 336;
-  /** reach of the edge rays, preserving the 60% edge-to-center profile */
+  /** reach of the rim rays, preserving the 60% edge-to-center profile */
   public SENSORS_EDGE_LENGTH = 202;
   /** reach of the vertical rays, the cave never gets higher than this */
   public VERTICAL_RAY_LENGTH = 46;

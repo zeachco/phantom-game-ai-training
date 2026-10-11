@@ -3,36 +3,36 @@ import type { Ball } from './Ball';
 
 /**
  * Debug/spectator aid: draws the sensors of the ball the camera is following.
- * One line per ray, shortened to the actual hit, plus a translucent fan surface
- * joining the horizontal ray endpoints so the coverage the brain sees is
- * legible at a glance. The vertical up/down rays are lines only.
+ * One line per ray, shortened to the actual hit, plus a translucent cone
+ * surface joining the rim ray endpoints, so the forward 3D cone the brain sees
+ * is legible at a glance.
  *
  * All geometry is allocated once and rewritten in place each frame, so showing
- * the fan costs a few hundred bytes of upload and no allocations.
+ * the cone costs a few hundred bytes of upload and no allocations.
  */
 export class SensorViz {
   public readonly group = new THREE.Group();
   /** one segment per ray: origin then endpoint */
   public readonly rays: THREE.LineSegments;
-  /** triangle fan from the ball through consecutive horizontal endpoints */
-  public readonly fan: THREE.Mesh;
+  /** cone lateral surface: the origin and two consecutive rim endpoints */
+  public readonly cone: THREE.Mesh;
 
   #rayCount: number;
-  #fanCount: number;
+  #surface: number[];
   #rayPositions: Float32Array;
-  #fanPositions: Float32Array;
+  #surfacePositions: Float32Array;
   #rayAttribute: THREE.BufferAttribute;
-  #fanAttribute: THREE.BufferAttribute;
-  /** scratch endpoints of the horizontal rays used to build the fan */
-  #fanEnds: Float32Array;
+  #surfaceAttribute: THREE.BufferAttribute;
+  /** scratch world endpoint of every ray, addressed by ray index */
+  #ends: Float32Array;
   #direction = { x: 0, y: 0, z: 0 };
 
-  constructor(fanCount: number, rayCount = fanCount + 2) {
-    this.#fanCount = fanCount;
+  constructor(rayCount: number, surfaceIndices: number[]) {
     this.#rayCount = rayCount;
+    this.#surface = surfaceIndices;
     this.#rayPositions = new Float32Array(rayCount * 6);
-    this.#fanPositions = new Float32Array((fanCount - 1) * 9);
-    this.#fanEnds = new Float32Array(fanCount * 3);
+    this.#surfacePositions = new Float32Array(surfaceIndices.length * 9);
+    this.#ends = new Float32Array(rayCount * 3);
 
     const rayGeometry = new THREE.BufferGeometry();
     this.#rayAttribute = new THREE.BufferAttribute(this.#rayPositions, 3);
@@ -51,12 +51,15 @@ export class SensorViz {
     this.rays.frustumCulled = false;
     this.rays.renderOrder = 5;
 
-    const fanGeometry = new THREE.BufferGeometry();
-    this.#fanAttribute = new THREE.BufferAttribute(this.#fanPositions, 3);
-    this.#fanAttribute.setUsage(THREE.DynamicDrawUsage);
-    fanGeometry.setAttribute('position', this.#fanAttribute);
-    this.fan = new THREE.Mesh(
-      fanGeometry,
+    const surfaceGeometry = new THREE.BufferGeometry();
+    this.#surfaceAttribute = new THREE.BufferAttribute(
+      this.#surfacePositions,
+      3,
+    );
+    this.#surfaceAttribute.setUsage(THREE.DynamicDrawUsage);
+    surfaceGeometry.setAttribute('position', this.#surfaceAttribute);
+    this.cone = new THREE.Mesh(
+      surfaceGeometry,
       new THREE.MeshBasicMaterial({
         color: 0x2f8fd0,
         transparent: true,
@@ -66,14 +69,14 @@ export class SensorViz {
         blending: THREE.AdditiveBlending,
       }),
     );
-    this.fan.frustumCulled = false;
-    this.fan.renderOrder = 4;
+    this.cone.frustumCulled = false;
+    this.cone.renderOrder = 4;
 
-    this.group.add(this.fan, this.rays);
+    this.group.add(this.cone, this.rays);
     this.group.visible = false;
   }
 
-  /** Reposition the fan on `ball` and show or hide the whole visualization. */
+  /** Reposition the cone on `ball` and show or hide the whole visualization. */
   update(ball: Ball, visible: boolean) {
     const sensor = ball.sensor;
     if (!visible || !sensor) {
@@ -98,28 +101,29 @@ export class SensorViz {
       this.#rayPositions[o + 3] = endX;
       this.#rayPositions[o + 4] = endY;
       this.#rayPositions[o + 5] = endZ;
-      if (i < this.#fanCount) {
-        this.#fanEnds[i * 3] = endX;
-        this.#fanEnds[i * 3 + 1] = endY;
-        this.#fanEnds[i * 3 + 2] = endZ;
-      }
+      this.#ends[i * 3] = endX;
+      this.#ends[i * 3 + 1] = endY;
+      this.#ends[i * 3 + 2] = endZ;
     }
+    // cone lateral surface: origin and two consecutive rim endpoints, closing
+    // the ring so the cone seals on itself
+    const n = this.#surface.length;
     let f = 0;
-    for (let i = 0; i < this.#fanCount - 1; i++) {
-      const a = i * 3;
-      const b = (i + 1) * 3;
-      this.#fanPositions[f++] = originX;
-      this.#fanPositions[f++] = originY;
-      this.#fanPositions[f++] = originZ;
-      this.#fanPositions[f++] = this.#fanEnds[a];
-      this.#fanPositions[f++] = this.#fanEnds[a + 1];
-      this.#fanPositions[f++] = this.#fanEnds[a + 2];
-      this.#fanPositions[f++] = this.#fanEnds[b];
-      this.#fanPositions[f++] = this.#fanEnds[b + 1];
-      this.#fanPositions[f++] = this.#fanEnds[b + 2];
+    for (let k = 0; k < n; k++) {
+      const a = this.#surface[k] * 3;
+      const b = this.#surface[(k + 1) % n] * 3;
+      this.#surfacePositions[f++] = originX;
+      this.#surfacePositions[f++] = originY;
+      this.#surfacePositions[f++] = originZ;
+      this.#surfacePositions[f++] = this.#ends[a];
+      this.#surfacePositions[f++] = this.#ends[a + 1];
+      this.#surfacePositions[f++] = this.#ends[a + 2];
+      this.#surfacePositions[f++] = this.#ends[b];
+      this.#surfacePositions[f++] = this.#ends[b + 1];
+      this.#surfacePositions[f++] = this.#ends[b + 2];
     }
     this.#rayAttribute.needsUpdate = true;
-    this.#fanAttribute.needsUpdate = true;
+    this.#surfaceAttribute.needsUpdate = true;
     this.group.visible = true;
   }
 
@@ -127,7 +131,7 @@ export class SensorViz {
   dispose() {
     this.rays.geometry.dispose();
     (this.rays.material as THREE.Material).dispose();
-    this.fan.geometry.dispose();
-    (this.fan.material as THREE.Material).dispose();
+    this.cone.geometry.dispose();
+    (this.cone.material as THREE.Material).dispose();
   }
 }

@@ -136,13 +136,16 @@ player gives any driving input (keyboard or gamepad), it stays on the human
 ball; if the human crashes it falls back to the best-scoring living ball.
 
 While an AI ball is followed, `SensorViz` draws that ball's sensors: one ray
-line each (shortened to the actual hit) plus a translucent fan over the
-horizontal ray endpoints. Following the human hides it.
+line each (shortened to the actual hit) plus a translucent cone surface over
+the rim endpoints. Following the human hides it.
 
 ## Brain inputs
 
-The 19-ray fan runs in the track plane (forward/right from the cave frame)
-plus one ray up and one down the tube normal. After the rays x2 history:
+The sensor is a 19-ray cone opening along the ball's movement direction (the
+cave tangent when it is nearly still): a center ray plus two concentric rings,
+with a cosine-bell reach from the axis to the rim. Two extra rays stay
+world-up and world-down in the tube normal for the floor and the ceiling.
+After the rays x2 history:
 
 1. normalized speed
 2. forward velocity component
@@ -159,9 +162,8 @@ boost-ahead, column-proximity, column-side, gate-delta. Outputs: `moveX`,
 - `classes/Controls.ts` - two-axis stick (keyboard + gamepad + AI).
 - `classes/Cave.ts` - tube geometry, gates, boost pads and boost-item orbs.
 - `classes/ChaseCamera.ts` - follows the ball, frames `BALL_RADIUS`.
-- `classes/Sensor.ts` - the analytic ray fan; `SensorViz` draws it for the
-  followed AI.
-- `classes/Sensor.ts` - the analytic ray fan.
+- `classes/Sensor.ts` - the analytic forward cone; `SensorViz` draws it for
+  the followed AI.
 - `main.ts` - rendering, HUD, stick display.
 
 ## Playtest checklist

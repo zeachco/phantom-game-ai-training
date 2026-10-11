@@ -58,11 +58,6 @@ export default async (state: CaveState) => {
   ballLight.shadow.normalBias = 1.2;
   scene.add(ballLight);
 
-  // Rays are a spectator/debug aid: they appear while the camera follows an
-  // AI ball and hide as soon as the player's own ball is followed.
-  const sensorViz = new SensorViz(config.SENSORS);
-  scene.add(sensorViz.group);
-
   const camera = new THREE.PerspectiveCamera(
     72,
     window.innerWidth / window.innerHeight,
@@ -110,6 +105,15 @@ export default async (state: CaveState) => {
     );
     state.balls.push(ai);
   }
+
+  // Rays are a spectator/debug aid: they appear while the camera follows an
+  // AI ball and hide as soon as the player's own ball is followed.
+  const humanSensor = human.sensor;
+  const sensorViz = new SensorViz(
+    humanSensor?.rayCount ?? config.SENSORS + 2,
+    humanSensor?.surfaceIndices ?? [],
+  );
+  scene.add(sensorViz.group);
 
   const ballGeometry = new THREE.SphereGeometry(config.BALL_RADIUS, 20, 14);
   const markerGeometry = new THREE.SphereGeometry(
@@ -190,7 +194,7 @@ export default async (state: CaveState) => {
 
   const hint = document.createElement('div');
   hint.textContent =
-    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe\nAI focus draws its sensor fan';
+    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe\nAI focus draws its sensor cone';
   hint.style.position = 'fixed';
   hint.style.top = '38px';
   hint.style.left = '14px';
