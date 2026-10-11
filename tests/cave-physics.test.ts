@@ -179,7 +179,7 @@ describe('cave ball physics', () => {
       ball.sensor!.rayCount,
     );
     expect(inputCount).toBe(ball.sensor!.rayCount * 2 + 4 + 8);
-    expect(outputCount).toBe(2);
+    expect(outputCount).toBe(3);
     expect(() => ball.update(cave)).not.toThrow();
   });
 });

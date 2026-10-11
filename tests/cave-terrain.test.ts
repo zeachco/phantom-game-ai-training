@@ -247,7 +247,21 @@ test('the driving band is flat while the sides stay rough', () => {
     const chop = (angle: number) => {
       let total = 0;
       let count = 0;
+      const onRamp = (s: number) => {
+        const cell = Math.floor(s / config.CAVE_FEATURE_CELL);
+        for (let i = cell - 1; i <= cell + 1; i++) {
+          const ramp = terrain.featureCell(i).ramp;
+          if (
+            ramp &&
+            Math.abs(s - ramp.centerS) <
+              ramp.halfLen * 2 + config.CAVE_RAMP_LIP_DROP
+          )
+            return true;
+        }
+        return false;
+      };
       for (let s = 1501; s < 3600; s++) {
+        if (onRamp(s)) continue;
         total += Math.abs(
           terrain.radius(s + 1, angle) -
             2 * terrain.radius(s, angle) +
@@ -293,4 +307,60 @@ test('valley terrain launches the ball naturally without sacrificing speed', () 
   expect(ball.damaged).toBe(false);
   expect(sawNaturalFlight).toBe(true);
   expect(ball.speed).toBeGreaterThan(config.BALL_MAX_SPEED * 0.9);
+});
+
+test('the ramp deck ends in an abrupt cut instead of a long back slope', () => {
+  for (const seed of [2, 40, 100]) {
+    const terrain = cave(seed);
+    let ramp: { centerS: number } | null = null;
+    for (let i = 0; i < 20 && !ramp; i++) {
+      const candidate = terrain.featureCell(i).ramp;
+      if (
+        candidate &&
+        candidate.centerS > config.SPAWN_OFFSET + config.CAVE_TERRAIN_RAMP
+      )
+        ramp = candidate;
+    }
+    if (!ramp) continue;
+    let steepest = 0;
+    for (
+      let s = ramp.centerS - 60;
+      s <= ramp.centerS + 2 * config.CAVE_RAMP_LIP_DROP;
+      s++
+    ) {
+      const drop =
+        (terrain.radius(s + 1, Math.PI) - terrain.radius(s, Math.PI)) *
+        config.CAVE_VERTICAL_SCALE;
+      steepest = Math.max(steepest, drop);
+    }
+    expect(steepest).toBeGreaterThan(config.CAVE_FLOOR_MAX_DROP);
+  }
+});
+
+test('deep terrain deforms more than the same cave with depth scaling off', () => {
+  // config is a singleton: scale the factor to 0 for a control cave, rebuild
+  // the same seed, then restore. a = 0 is the ceiling: radius() returns the
+  // raw profile there, bypassing the floor envelope whose caps can mask an
+  // amplitude change.
+  const range = (t: Cave) => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (let s = 3400; s <= 3600; s += 4) {
+      for (const a of [0, 0.2]) {
+        const r = t.radius(s, a);
+        min = Math.min(min, r);
+        max = Math.max(max, r);
+      }
+    }
+    return max - min;
+  };
+  const factor = config.CAVE_DEPTH_TERRAIN;
+  config.CAVE_DEPTH_TERRAIN = 0;
+  const calm = cave(7);
+  const calmRange = range(calm);
+  config.CAVE_DEPTH_TERRAIN = factor;
+  const wild = cave(7);
+  const wildRange = range(wild);
+  expect(calmRange).toBeGreaterThan(0);
+  expect(wildRange).toBeGreaterThan(calmRange);
 });

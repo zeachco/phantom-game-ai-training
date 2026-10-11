@@ -210,6 +210,9 @@ class Config {
   public CAVE_DEPTH_HEIGHT = 0.5;
   /** how much more likely (and wider) the hard features are at full depth */
   public CAVE_DEPTH_CHANCE = 0.8;
+  /** how much more the long waves and fine bumps deform the tube at full
+   *  depth: amplitudes scale by 1 + this value as a run progresses */
+  public CAVE_DEPTH_TERRAIN = 0.4;
   /** distance between deterministic terrain feature cells */
   public CAVE_FEATURE_CELL = 280;
   /** probability that a feature cell grows rock columns off the floor */
@@ -232,6 +235,9 @@ class Config {
   public CAVE_RAMP_LENGTH = 40;
   /** ramp lip height at full terrain progress (also its launch size) */
   public CAVE_RAMP_HEIGHT = 18;
+  /** forward distance of the abrupt back cut behind a ramp lip: the deck
+   *  ends in a near-shear face so a ball leaving the lip keeps flying */
+  public CAVE_RAMP_LIP_DROP = 6;
   /** probability that a feature cell carries a boost pad on the driving band */
   public CAVE_BOOST_CHANCE = 0.5;
   /** probability that a rock column spans the whole cave (floor to wall) */
@@ -255,9 +261,8 @@ class Config {
   /** the smallest drivable gap the path check keeps open around columns,
    *  in world units (one car width plus margin) */
   public CAVE_PATH_MIN_GAP = 9;
-  /** emissive tints (r, g, b in 0..1) blending over the rock vertex colors:
-   *  the jump platform deck and the boost pads */
-  public CAVE_PLATFORM_COLOR: [number, number, number] = [0.25, 0.9, 1.0];
+  /** emissive tint (r, g, b in 0..1) blending over the rock vertex colors:
+   *  the boost pads */
   public CAVE_BOOST_COLOR: [number, number, number] = [1.0, 0.85, 0.25];
   /** glowing boost items float this far above their floor pad; the ball
    *  collects the boost by rolling through the pad underneath */

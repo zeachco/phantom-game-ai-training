@@ -400,9 +400,10 @@ export class Ball {
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);
-        const [moveX, moveY] = outputs;
+        const [moveX, moveY, jump] = outputs;
         this.controls.moveX = clamp(-1, 1, moveX);
         this.controls.moveY = clamp(-1, 1, moveY);
+        this.controls.writeJump(jump);
       }
     }
   }

@@ -383,9 +383,12 @@ export class Cave {
   #waveRadius(s: number) {
     let r = config.CAVE_RADIUS;
     const progress = this.#terrainProgress(s);
+    // Deformation keeps growing past the terrain ramp: deep sections of a
+    // run deform more than the mouth ever does.
+    const depth = progress * (1 + config.CAVE_DEPTH_TERRAIN * this.#depth(s));
     for (let i = 0; i < this.#waves.length; i++) {
       const w = this.#waves[i];
-      r += progress * w.amp * Math.sin(w.freq * s + w.phase);
+      r += depth * w.amp * Math.sin(w.freq * s + w.phase);
     }
     return r;
   }
@@ -875,21 +878,9 @@ export class Cave {
       }
 
       const ramp = cell.ramp;
-      if (!ramp) continue; // A climb to a flat lip, then a smooth back slope: the launch comes
-      // from leaving the lip at speed, not from a sharp back edge, so a
-      // slow car rolls over the lip instead of pivoting over it.
-      const span = ramp.halfLen * 2;
-      const back = ramp.height / 0.35;
-      const f = (s - (ramp.centerS - span)) / span;
-      if (s > ramp.centerS + back || f <= 0) continue;
-      // Hold the top flat over the last stretch so the lip reads as a real
-      // jump platform instead of a single ridge.
-      const g = f >= 0.8 ? 1 : f / 0.8;
-      let along = g * g * (3 - 2 * g);
-      if (s > ramp.centerS) {
-        const b = 1 - (s - ramp.centerS) / back;
-        along *= b * b * (3 - 2 * b);
-      }
+      if (!ramp) continue;
+      const along = this.#rampAlong(ramp, s);
+      if (along <= 0) continue;
       // Plateau across the whole band (the deck never crowns it and tips
       // a car driving beside its center), falling away into the banks.
       const angular = this.#plateauAcross(
@@ -932,7 +923,10 @@ export class Cave {
     const nx0 = n00 + (n10 - n00) * su;
     const nx1 = n01 + (n11 - n01) * su;
     const n = nx0 + (nx1 - nx0) * sv;
-    const amp = (16 + 24 * this.difficulty) * this.#terrainProgress(s);
+    const amp =
+      (16 + 24 * this.difficulty) *
+      this.#terrainProgress(s) *
+      (1 + config.CAVE_DEPTH_TERRAIN * this.#depth(s));
     return (n - 0.5) * 2 * amp;
   }
 
@@ -969,23 +963,32 @@ export class Cave {
     return 1 - t * t * (3 - 2 * t);
   }
 
-  /** 0..1 ramp deck mask (climb, lip and back slope) for the mesh tint */
+  /** 0..1 along-deck influence of one ramp at arc s: a smoothstep climb, a
+   *  flat lip, then an abrupt linear cut so the deck ends in a shear face
+   *  and a ball leaving the lip keeps flying instead of hugging a slope. */
+  #rampAlong(ramp: NonNullable<FeatureCell['ramp']>, s: number) {
+    const span = ramp.halfLen * 2;
+    const f = (s - (ramp.centerS - span)) / span;
+    if (f <= 0 || s > ramp.centerS + config.CAVE_RAMP_LIP_DROP) return 0;
+    // Hold the top flat over the last stretch so the lip reads as a real
+    // jump platform instead of a single ridge.
+    const g = f >= 0.8 ? 1 : f / 0.8;
+    let along = g * g * (3 - 2 * g);
+    if (s > ramp.centerS) {
+      along *= 1 - (s - ramp.centerS) / config.CAVE_RAMP_LIP_DROP;
+    }
+    return along;
+  }
+
+  /** 0..1 ramp deck mask (climb, lip and back cut), the on-platform input */
   #rampInfluence(s: number, a: number) {
     const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
     let influence = 0;
     for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
       const ramp = this.#featureCell(i).ramp;
       if (!ramp) continue;
-      const span = ramp.halfLen * 2;
-      const back = ramp.height / 0.35;
-      const f = (s - (ramp.centerS - span)) / span;
-      if (s > ramp.centerS + back || f <= 0) continue;
-      const g = f >= 0.8 ? 1 : f / 0.8;
-      let along = g * g * (3 - 2 * g);
-      if (s > ramp.centerS) {
-        const b = 1 - (s - ramp.centerS) / back;
-        along *= b * b * (3 - 2 * b);
-      }
+      const along = this.#rampAlong(ramp, s);
+      if (along <= 0) continue;
       const angular = this.#plateauAcross(
         a,
         config.CAVE_BAND_HALF_WIDTH * 0.9,
@@ -1045,11 +1048,11 @@ export class Cave {
     // Features only subtract radius. This upper bound guarantees that no
     // farther peak can affect this chunk, keeping independently built chunk
     // edges identical regardless of generation/query order.
+    const depthScale = 1 + config.CAVE_DEPTH_TERRAIN;
     const maxRadius =
       config.CAVE_RADIUS +
-      this.#waves.reduce((sum, wave) => sum + wave.amp, 0) +
-      16 +
-      24 * this.difficulty;
+      depthScale * this.#waves.reduce((sum, wave) => sum + wave.amp, 0) +
+      depthScale * (16 + 24 * this.difficulty);
     const lookAhead =
       Math.ceil((maxRadius - config.CAVE_MIN_RADIUS) / stepRise) + 1;
     const last = SAMPLES + lookAhead;
@@ -1065,11 +1068,15 @@ export class Cave {
         // of flipping over it. Fast cars still leave the ground: the capped
         // drop outruns gravity at driving speed.
         const raw = this.#rawRadius(arc, angle);
+        // A ramp's back cut is a deliberate shear face: the deck ends and the
+        // ground drops away within CAVE_RAMP_LIP_DROP, so the gentle drop cap
+        // must not re-smooth it into the long unwind it replaces.
+        const cutAllowance = this.#rampCutDrop(arc, angle);
         nextRadius =
           nextRadius === Infinity
             ? raw
             : Math.min(
-                Math.max(raw, nextRadius - stepDrop),
+                Math.max(raw, nextRadius - stepDrop - cutAllowance),
                 nextRadius + stepRise,
               );
         if (j <= SAMPLES) profile[j * SIDES + k] = nextRadius;
@@ -1077,6 +1084,25 @@ export class Cave {
     }
     this.#floorProfiles.set(index, profile);
     return profile;
+  }
+
+  /** extra floor-profile drop allowed inside a ramp's back cut, 0 elsewhere.
+   *  The cut spans the band plateau, so the allowance follows the same
+   *  angular mask and covers deck-height steps inside CAVE_RAMP_LIP_DROP. */
+  #rampCutDrop(s: number, a: number) {
+    const plateau = this.#plateauAcross(
+      a,
+      config.CAVE_BAND_HALF_WIDTH * 0.9,
+      config.CAVE_BAND_HALF_WIDTH + 0.25,
+    );
+    if (plateau <= 0) return 0;
+    const ramp = this.#featureCell(
+      Math.floor(s / config.CAVE_FEATURE_CELL),
+    ).ramp;
+    if (!ramp) return 0;
+    if (s <= ramp.centerS || s > ramp.centerS + config.CAVE_RAMP_LIP_DROP)
+      return 0;
+    return ramp.height * plateau;
   }
 
   /** Radius profile sampled by the rock mesh and analytic sensor rays. */
@@ -1663,18 +1689,10 @@ export class Cave {
         const road = this.#roadInfluence(s, a);
         const shade =
           0.62 + 0.5 * this.#bumpNoise01(s, a) * (1 - road) + road * 0.22;
-        // Feature tints over the rock shade: the jump platform deck reads as
-        // a cyan slab, boost pads as glowing amber patches.
+        // Feature tint over the rock shade: boost pads glow amber.
         let cr = shade;
         let cg = shade;
         let cb = shade;
-        const platform = this.#rampInfluence(s, a);
-        if (platform > 0.05) {
-          const tint = config.CAVE_PLATFORM_COLOR;
-          cr = cr * (1 - platform) + tint[0] * platform;
-          cg = cg * (1 - platform) + tint[1] * platform;
-          cb = cb * (1 - platform) + tint[2] * platform;
-        }
         const pad = this.boostAt(s, a);
         if (pad > 0.35) {
           const tint = config.CAVE_BOOST_COLOR;

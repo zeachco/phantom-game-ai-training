@@ -66,7 +66,7 @@ function inputs(
   }
 }
 
-test('Space produces one jump per press and leaves the two AI axes unchanged', () => {
+test('Space produces one jump per press and leaves the AI channels unchanged', () => {
   inputs((controls, key) => {
     key('keydown');
     expect(controls.consumeJump()).toBe(true);
@@ -75,7 +75,7 @@ test('Space produces one jump per press and leaves the two AI axes unchanged', (
     key('keyup');
     key('keydown');
     expect(controls.consumeJump()).toBe(true);
-    expect(Object.keys(controls)).toEqual(['moveX', 'moveY']);
+    expect(Object.keys(controls)).toEqual(['moveX', 'moveY', 'jump']);
   });
 });
 
@@ -92,4 +92,16 @@ test('the primary gamepad button jumps once until it is released and pressed aga
     controls.update();
     expect(controls.consumeJump()).toBe(true);
   });
+});
+
+test('an AI jump output jumps once on a rising edge', () => {
+  const controls = new Controls(ControlType.AI);
+  controls.writeJump(1);
+  expect(controls.consumeJump()).toBe(true);
+  controls.writeJump(1);
+  expect(controls.consumeJump()).toBe(false);
+  controls.writeJump(0);
+  controls.writeJump(1);
+  expect(controls.consumeJump()).toBe(true);
+  expect(controls.jump).toBe(1);
 });

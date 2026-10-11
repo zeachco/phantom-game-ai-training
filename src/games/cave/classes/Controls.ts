@@ -14,18 +14,19 @@ function applyDeadzone(value: number) {
  * Monkey Ball controls: two analog axes, exactly like a GameCube stick.
  * `moveY` is forward/back along the track, `moveX` is left/right across it,
  * both in [-1, 1]. WASD / arrows drive the keyboard, the left stick drives
- * the gamepad. Space / the primary button jumps; an AI brain writes the
- * two axes directly. The class has
- * only those two enumerable fields on purpose: a brain's output count is
- * derived from `Object.keys(controls)`.
+ * the gamepad. Space / the primary button jumps; an AI brain writes the two
+ * axes and the jump press. The class has only those three enumerable fields
+ * on purpose: a brain's output count is derived from `Object.keys(controls)`.
  */
 export class Controls {
   /** signed lateral axis: > 0 right, < 0 left, 0 centered */
   public moveX: number = 0;
   /** signed forward axis: > 0 forward (into the cave), < 0 backward */
   public moveY: number = 0;
+  /** the AI jump channel, written by Ball from the brain's third output */
+  public jump: number = 0;
   /** the bound handlers, kept so dispose() can remove them again — real
-   *  privates so Object.keys(controls) counts only the stick axes */
+   *  privates so Object.keys(controls) counts only the control channels */
   #keydown: ((e: KeyboardEvent) => void) | undefined;
   #keyup: ((e: KeyboardEvent) => void) | undefined;
   #gamepadIndex: number | undefined;
@@ -37,6 +38,7 @@ export class Controls {
   #jumpRequested = false;
   #spaceHeld = false;
   #primaryHeld = false;
+  #brainJumpHeld = false;
 
   public requestJump() {
     this.#jumpRequested = true;
@@ -47,6 +49,15 @@ export class Controls {
     const requested = this.#jumpRequested;
     this.#jumpRequested = false;
     return requested;
+  }
+
+  /** A brain writes its jump output here: a rising edge requests one jump,
+   *  exactly like a fresh press. */
+  public writeJump(pressed: number) {
+    const held = pressed > 0.5;
+    if (held && !this.#brainJumpHeld) this.requestJump();
+    this.#brainJumpHeld = held;
+    this.jump = held ? 1 : 0;
   }
 
   constructor(type: ControlType) {
@@ -198,6 +209,8 @@ export class Controls {
     this.#jumpRequested = false;
     this.#spaceHeld = false;
     this.#primaryHeld = false;
+    this.#brainJumpHeld = false;
+    this.jump = 0;
     this.#gamepadX = 0;
     this.#gamepadY = 0;
     this.#keyboardX = 0;
