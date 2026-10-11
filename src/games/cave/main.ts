@@ -560,8 +560,9 @@ export default async (state: CaveState) => {
   let followed: Ball = state.human ?? state.balls[0];
   let lastHud = 0;
   // one sample per rendered frame, oldest dropped past the canvas width so the
-  // line appears to scroll left
+  // line appears to scroll left; cleared whenever the followed ball changes
   const jumpSamples: number[] = [];
+  let previousFollowed = followed;
   const chaseCamera = new ChaseCamera();
 
   /** The ball the camera and the network visualizer follow: the player while
@@ -669,6 +670,10 @@ export default async (state: CaveState) => {
 
     const balls = state.balls;
     followed = followedBall();
+    if (followed !== previousFollowed) {
+      previousFollowed = followed;
+      jumpSamples.length = 0;
+    }
 
     const seen = new Set<string>();
     for (const ball of balls) {
