@@ -25,7 +25,7 @@ const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
 
 /** one captured jump sample per pixel column of the jump timeline */
-const JUMP_TIMELINE_WIDTH = 220;
+const JUMP_TIMELINE_WIDTH = 110;
 
 const io = fileUtilities('cave');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -390,21 +390,13 @@ export default async (state: CaveState) => {
   velocityCanvas.width = 110;
   velocityCanvas.height = 34;
   const velocityCtx = velocityCanvas.getContext('2d');
-  controlIndicators.append(controlCanvas, velocityCanvas);
-
-  const jumpTimeline = document.createElement('div');
-  jumpTimeline.className = 'jump-timeline';
-  jumpTimeline.title =
-    'jump input each rendered frame, newest at the right edge';
-  const jumpLabel = document.createElement('span');
-  jumpLabel.className = 'jump-timeline-label';
-  jumpLabel.textContent = 'jump';
   const jumpCanvas = document.createElement('canvas');
   jumpCanvas.className = 'jump-timeline-canvas';
   jumpCanvas.width = JUMP_TIMELINE_WIDTH;
   jumpCanvas.height = 34;
+  jumpCanvas.title = 'jump input each rendered frame, newest at the right edge';
   const jumpCtx = jumpCanvas.getContext('2d');
-  jumpTimeline.append(jumpLabel, jumpCanvas);
+  controlIndicators.append(controlCanvas, velocityCanvas, jumpCanvas);
 
   const readout = document.createElement('div');
   readout.className = 'readout';
@@ -483,13 +475,7 @@ export default async (state: CaveState) => {
   const brainStats = document.createElement('div');
   brainStats.className = 'brain-stats';
   brainStats.title = 'followed brain stats';
-  steerOverlay.append(
-    controlIndicators,
-    jumpTimeline,
-    sectionGauge,
-    readout,
-    brainStats,
-  );
+  steerOverlay.append(controlIndicators, sectionGauge, readout, brainStats);
   document.body.appendChild(steerOverlay);
 
   let lastStatsText = '';

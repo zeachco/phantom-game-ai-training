@@ -517,22 +517,8 @@ ul:hover {
   width: 110px;
   height: 34px;
 }
-.jump-timeline {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-.jump-timeline-label {
-  font-family: monospace;
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--hud-color);
-  opacity: 0.5;
-}
 .jump-timeline-canvas {
-  width: 220px;
+  width: 110px;
   height: 34px;
 }
 .readout {
