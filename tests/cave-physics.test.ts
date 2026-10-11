@@ -216,6 +216,71 @@ test('jump leaves the ground, rejects an air jump, and becomes available after l
   expect(ball.vy).toBeGreaterThan(1);
 });
 
+test('a jump press just after leaving the ground still fires once (coyote time)', () => {
+  const { ball, cave } = settled();
+  // Pop off the floor without a jump, so the press below arrives while the
+  // ball has no contact but is still inside the grace budget.
+  ball.vy = 4;
+  ball.update(cave);
+  expect(ball.grounded).toBe(false);
+  const before = ball.vy;
+  ball.controls.requestJump();
+  ball.update(cave);
+  expect(ball.vy).toBeGreaterThan(before);
+  // Only one air jump per contact: an immediate second press is rejected.
+  const apex = ball.vy;
+  ball.controls.requestJump();
+  ball.update(cave);
+  expect(ball.vy).toBeLessThan(apex);
+});
+
+test('a contact steeper than the jump slope does not refresh the grace', () => {
+  const cave = floor();
+  // One contact with a 60 deg inward normal, past the 55 deg jumpable limit
+  // (cos 55 ~ 0.57). Every later query reports the ball far off the surface.
+  let contacted = false;
+  cave.nearestRadial = ((
+    _x: number,
+    _y: number,
+    _z: number,
+    sHint: number,
+    out: RadialHit,
+  ) => {
+    if (!contacted) {
+      contacted = true;
+      Object.assign(out, {
+        nx: 0,
+        ny: -0.5,
+        nz: -Math.sqrt(3) / 2,
+        dist: -1,
+        a: Math.PI,
+        s: sHint,
+      });
+    } else {
+      Object.assign(out, {
+        nx: 0,
+        ny: -1,
+        nz: 0,
+        dist: -5,
+        a: Math.PI,
+        s: sHint,
+      });
+    }
+    return out;
+  }) as Cave['nearestRadial'];
+  const ball = new Ball(spawn);
+  ball.update(cave);
+  expect(contacted).toBe(true);
+  ball.vy = 4;
+  ball.update(cave);
+  expect(ball.grounded).toBe(false);
+  const before = ball.vy;
+  ball.controls.requestJump();
+  ball.update(cave);
+  // The wall-like contact never armed the window, so the press is a no-op.
+  expect(ball.vy).toBeLessThan(before);
+});
+
 function box() {
   // Two angular columns, with each pair ordered baseline then deck.
   return new WallSolid(

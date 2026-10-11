@@ -130,6 +130,13 @@ class Config {
   public BALL_ACCEL = 0.17 / 3;
   /** Grounded jump impulse in world units per frame. */
   public BALL_JUMP_SPEED = 1.8;
+  /** Frames after the last jumpable contact during which a jump press is
+   *  still accepted. Rough terrain makes the ball micro-bounce, so a press can
+   *  land on a frame with no contact; this is a short coyote-time window. */
+  public BALL_JUMP_GRACE_FRAMES = 6;
+  /** cos(55 deg): a contact whose inward normal is within 55 deg of straight
+   *  up counts as jumpable ground. Steeper slopes and walls do not. */
+  public BALL_JUMP_MAX_SLOPE_COS = 0.5736;
   /** velocity retained per frame while the ball rolls on a surface. Near-unit
    *  drag preserves its valley speed so it can climb out and launch naturally. */
   public BALL_ROLL_DRAG = 0.999;

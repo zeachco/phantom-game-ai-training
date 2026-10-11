@@ -72,6 +72,11 @@ export class Ball {
   public a = Math.PI;
   /** true while a wall is in contact, the brain reads it as an input */
   public grounded = false;
+  /** frames since the last contact whose inward normal was within
+   *  BALL_JUMP_MAX_SLOPE_COS of straight up; a jump is still granted while
+   *  this is inside the grace budget. Starts out-of-budget so a fresh spawn
+   *  cannot air-jump before it has touched ground. */
+  private lastCollisionFrames = config.BALL_JUMP_GRACE_FRAMES + 1;
   /** inward unit normal of the last contact, used for the visual roll */
   public contactNormal = new THREE.Vector3(0, 1, 0);
   public damaged: boolean;
@@ -261,6 +266,7 @@ export class Ball {
     this.controls.consumeJump();
     this.contactNormal.set(0, 1, 0);
     this.grounded = false;
+    this.lastCollisionFrames = config.BALL_JUMP_GRACE_FRAMES + 1;
     this.a = Math.PI;
     this.damaged = false;
     this.finished = false;
@@ -284,9 +290,18 @@ export class Ball {
   update(cave: Cave) {
     if (this.damaged) return;
     this.controls.update();
-    if (this.controls.consumeJump() && this.grounded) {
-      this.vy = Math.max(0, this.vy) + config.BALL_JUMP_SPEED;
-      this.grounded = false;
+    if (this.controls.consumeJump()) {
+      // Fire on real contact, or once inside the coyote window since the last
+      // jumpable contact. Consuming the window keeps it to a single air jump.
+      const coyote = this.lastCollisionFrames <= config.BALL_JUMP_GRACE_FRAMES;
+      if (this.grounded || coyote) {
+        this.vy = Math.max(0, this.vy) + config.BALL_JUMP_SPEED;
+        this.grounded = false;
+        this.lastCollisionFrames = config.BALL_JUMP_GRACE_FRAMES + 1;
+      }
+    }
+    if (this.lastCollisionFrames <= config.BALL_JUMP_GRACE_FRAMES) {
+      this.lastCollisionFrames++;
     }
     this.prevS = this.s;
     this.#move(cave);
@@ -637,6 +652,8 @@ export class Ball {
         if (ny > 0.35) {
           this.grounded = true;
           this.contactNormal.set(nx, ny, nz);
+          if (ny >= config.BALL_JUMP_MAX_SLOPE_COS)
+            this.lastCollisionFrames = 0;
         }
       }
       // Progress is a query hint, never an independent collision position.
@@ -687,6 +704,7 @@ export class Ball {
       this.z += nz * penetration;
       this.grounded = true;
       this.contactNormal.set(nx, ny, nz);
+      if (ny >= config.BALL_JUMP_MAX_SLOPE_COS) this.lastCollisionFrames = 0;
       const vn = this.vx * nx + this.vy * ny + this.vz * nz;
       if (vn < 0) {
         // slow contacts settle, hard ones bounce
