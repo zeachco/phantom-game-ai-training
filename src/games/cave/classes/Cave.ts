@@ -1192,6 +1192,33 @@ export class Cave {
     return influence * progress;
   }
 
+  /** Classify the cave surface at (s, a) for the sensors: -1 a rock column
+   *  the ball must dodge or jump, +1 a boost pad, 0 plain floor, wall, ramp or
+   *  road. The bronze slabs are separate meshes and are classified by the ray
+   *  that enters one, not here. */
+  surfaceKindAt(s: number, a: number): -1 | 0 | 1 {
+    if (this.boostAt(s, a) > 0.2) return 1;
+    return this.#columnAt(s, a) ? -1 : 0;
+  }
+
+  /** true when (s, a) lies inside a rock column footprint: the same along and
+   *  angular masks the radius cut uses, so the class matches the geometry */
+  #columnAt(s: number, a: number): boolean {
+    if (this.#terrainProgress(s) <= 0) return false;
+    const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
+    for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
+      for (const column of this.#featureCell(i).columns) {
+        if (this.#smoothPulse(s, column.centerS, column.halfLen) <= 0) continue;
+        const angular = Math.exp(
+          -(this.#angleDistance(a, column.angle) ** 2) /
+            (2 * column.angleWidth * column.angleWidth),
+        );
+        if (angular > 0.1) return true;
+      }
+    }
+    return false;
+  }
+
   /** centerline point at arc s, into out */
   center(s: number, out: Pt) {
     const i = Math.max(0, Math.floor(s / LEN));

@@ -9,8 +9,8 @@ import { config } from './Config';
 import { Controls } from './Controls';
 import { Sensor } from './Sensor';
 
-/** Inputs appended after the ray history: normalized speed, forward and
- *  lateral components of the velocity, then grounded. */
+/** Inputs appended after the ray history and its class block: normalized
+ *  speed, forward and lateral components of the velocity, then grounded. */
 const BALL_INPUTS = 4;
 /** Feature block: airborne, on-platform, on-boost, platform-ahead,
  *  boost-ahead, column-proximity, column-side, gate-delta, gate-heading,
@@ -21,8 +21,10 @@ export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
   // AI controls have no event handlers, so their enumerable fields are the
   // actual output channels consumed by Ball.update().
   const controls = new Controls(ControlType.AI);
+  // rayCount current readings + rayCount for the class of each hit + rayCount
+  // previous readings, then the ball and feature blocks.
   return {
-    inputCount: rayCount * 2 + BALL_INPUTS + EXTRA_BRAIN_INPUTS,
+    inputCount: rayCount * 3 + BALL_INPUTS + EXTRA_BRAIN_INPUTS,
     outputCount: Object.keys(controls).length,
   };
 }
@@ -364,6 +366,10 @@ export class Ball {
         if (!this.hasPrevSensors)
           for (let i = 0; i < prev.length; i++) prev[i] = readings[i];
         for (let i = 0; i < prev.length; i++) inputs.push(prev[i]);
+        // the surface class of each current reading: -1 obstacle, +1 boost,
+        // 0 ground or miss. The reading itself gates "nothing hit".
+        const kinds = this.sensor.kinds;
+        for (let i = 0; i < kinds.length; i++) inputs.push(kinds[i]);
         const invMax = 1 / this.maxSpeed;
         inputs.push(Math.min(1, this.speed * invMax));
         inputs.push(

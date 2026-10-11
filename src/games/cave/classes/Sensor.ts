@@ -1,6 +1,6 @@
 import { lerp } from '../../../utilities/math';
 import type { Ball } from './Ball';
-import type { Cave } from './Cave';
+import type { Cave, RadialHit } from './Cave';
 import { config } from './Config';
 
 /**
@@ -25,6 +25,9 @@ export class Sensor {
   rayCount: number;
   /** one 0..1 reading per ray, 0 when nothing is hit within reach */
   readings: number[];
+  /** one surface class per ray, aligned with `readings`: -1 obstacle (rock
+   *  column or bronze slab), +1 boost pad, 0 ground or nothing hit */
+  readonly kinds: number[];
   /** indices of the outermost cone ring, in angular order. `SensorViz` turns
    *  them into the cone surface; the ring closes on itself. */
   readonly surfaceIndices: number[];
@@ -35,6 +38,18 @@ export class Sensor {
   #lift: number[] = [];
   /** each ray's reach, a cosine bell from the center to the cone edge */
   #lengths: number[] = [];
+  /** scratch hit, reused by every ray so a read allocates nothing */
+  #hit: RadialHit = {
+    s: 0,
+    a: 0,
+    dist: 0,
+    nx: 0,
+    ny: 0,
+    nz: 0,
+    hx: 0,
+    hy: 0,
+    hz: 0,
+  };
   /** current cone frame, refreshed every update and reused by rayVector */
   #axis = { x: 0, y: 0, z: -1 };
   #basisSide = { x: 1, y: 0, z: 0 };
@@ -44,6 +59,7 @@ export class Sensor {
     this.ball = ball;
     this.rayCount = config.SENSORS + 2;
     this.readings = new Array(this.rayCount);
+    this.kinds = new Array(this.rayCount).fill(0);
     const half = config.SENSOR_ANGLE / 2;
     const rings = config.SENSOR_CONE_RINGS;
     const weightSum = (rings * (rings + 1)) / 2;
@@ -167,19 +183,11 @@ export class Sensor {
         axis.z * this.#along[i] +
         side.z * this.#side[i] +
         lift.z * this.#lift[i];
-      this.readings[i] = this.#read(
-        cave,
-        car.x,
-        car.y,
-        car.z,
-        dx,
-        dy,
-        dz,
-        this.#lengths[i],
-      );
+      this.#read(cave, i, car.x, car.y, car.z, dx, dy, dz, this.#lengths[i]);
     }
-    this.readings[config.SENSORS] = this.#read(
+    this.#read(
       cave,
+      config.SENSORS,
       car.x,
       car.y,
       car.z,
@@ -188,8 +196,9 @@ export class Sensor {
       car.uz,
       config.VERTICAL_RAY_LENGTH,
     );
-    this.readings[config.SENSORS + 1] = this.#read(
+    this.#read(
       cave,
+      config.SENSORS + 1,
       car.x,
       car.y,
       car.z,
@@ -231,9 +240,13 @@ export class Sensor {
     return config.VERTICAL_RAY_LENGTH;
   }
 
-  /** march one ray, encode the hit as 1 - t/reach, 0 when nothing is hit */
+  /** march one ray and write its reading (1 - t/reach, 0 when nothing is hit)
+   *  and its surface class into the parallel arrays. Source order decides the
+   *  class: a bronze slab entering the ray nearer than the tube is -1, else
+   *  the tube hit is classified by `surfaceKindAt` at its (s, a). */
   #read(
     cave: Cave,
+    index: number,
     ox: number,
     oy: number,
     oz: number,
@@ -243,6 +256,7 @@ export class Sensor {
     length: number,
   ) {
     const car = this.ball;
+    const hit = this.#hit;
     let t = cave.castRay(
       ox,
       oy,
@@ -255,7 +269,9 @@ export class Sensor {
       car.cx,
       car.cy,
       car.cz,
+      hit,
     );
+    let kind = t < 0 ? 0 : cave.surfaceKindAt(hit.s, hit.a);
     const wall =
       cave.wallRayDistance?.(
         ox,
@@ -267,7 +283,11 @@ export class Sensor {
         t < 0 ? length : t,
         car.s,
       ) ?? -1;
-    if (wall >= 0) t = t < 0 ? wall : Math.min(t, wall);
-    return t < 0 ? 0 : Math.max(0, 1 - t / length);
+    if (wall >= 0 && (t < 0 || wall < t)) {
+      t = wall;
+      kind = -1;
+    }
+    this.readings[index] = t < 0 ? 0 : Math.max(0, 1 - t / length);
+    this.kinds[index] = t < 0 ? 0 : kind;
   }
 }
