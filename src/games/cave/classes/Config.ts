@@ -83,7 +83,7 @@ class Config {
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;
   /** scene background and fog, the cave is darker than its mouth */
   public PLANE_COLOR = '#05070a';
-  public CAVE_COLOR = '#46525c';
+  public CAVE_COLOR = '#ffffff';
   public GATE_COLORS = ['#ffffff', '#aa88bb'];
   public GATE_NEXT_COLOR = '#ffd23f';
   /** arc distance around the followed car inside which car meshes sync */
@@ -256,8 +256,9 @@ class Config {
   public CAVE_WALL_MAX = 24;
   /** Base angular width; seeded slabs vary their span around the tunnel. */
   public CAVE_WALL_ANGLE = 0.5;
-  /** emissive tint of the wall faces */
-  public CAVE_WALL_COLOR: [number, number, number] = [0.85, 0.42, 0.3];
+  /** wall face tint multiplied over the obstacle rock photo; white keeps
+   *  the photo's natural colors */
+  public CAVE_WALL_COLOR: [number, number, number] = [1, 1, 1];
   /** the smallest drivable gap the path check keeps open around columns,
    *  in world units (one car width plus margin) */
   public CAVE_PATH_MIN_GAP = 9;

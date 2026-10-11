@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../../../utilities/math';
+import caveWallTextureUrl from '../assets/cave-wall.jpg';
+import obstacleRockTextureUrl from '../assets/obstacle-rock.jpg';
 import { config } from './Config';
 import { ensureDrivablePath } from './PathCheck';
 import { WallSolid, type WallContact } from './WallSolid';
@@ -85,6 +87,27 @@ const SAMPLES = config.CAVE_CHUNK_SAMPLES;
 const SIDES = config.CAVE_SIDES;
 const LEN = config.CAVE_SEGMENT_LENGTH;
 const PER = LEN / SAMPLES;
+/** tube texture tiling: world units per tile along the tube and tiles around
+ *  the ring. The ring is roughly 2*pi*CAVE_RADIUS, so ten tiles around and a
+ *  56-unit tile along the tube stay close to square. */
+const TUBE_TILE = 56;
+const TUBE_TILES_AROUND = 10;
+/** obstacle photo: one world-space tile covers this many units */
+const WALL_TILE = 24;
+
+/** The obstacle slabs are built from shared collision vertices with hard
+ *  edges and no usable UVs, so the rock photo is sampled on the three world
+ *  planes and blended by the face normal. World space also keeps every slab
+ *  from showing the same crop of the texture. */
+const WALL_TRIPLANAR_FRAGMENT = `
+	vec3 wallBlend = pow( abs( vWallNormal ), vec3( 4.0 ) );
+	wallBlend /= max( wallBlend.x + wallBlend.y + wallBlend.z, 1e-4 );
+	vec4 wallSample =
+		texture2D( map, vWallWorld.zy / ${WALL_TILE.toFixed(1)} ) * wallBlend.x +
+		texture2D( map, vWallWorld.xz / ${WALL_TILE.toFixed(1)} ) * wallBlend.y +
+		texture2D( map, vWallWorld.xy / ${WALL_TILE.toFixed(1)} ) * wallBlend.z;
+	diffuseColor *= wallSample;
+`;
 const TWO_PI = Math.PI * 2;
 const NOISE_CELLS = Math.round(TWO_PI / config.CAVE_BUMP_ANGLE);
 const WALL_ANGLE_STEP = TWO_PI / SIDES;
@@ -153,7 +176,8 @@ export class Cave {
   #noiseSalt: number;
   #scene: THREE.Scene;
   #material: THREE.MeshLambertMaterial;
-  #rockTexture: THREE.CanvasTexture;
+  #rockTexture: THREE.Texture;
+  #obstacleTexture: THREE.Texture;
   #gateMaterial: THREE.MeshBasicMaterial;
   #gateNextMaterial: THREE.MeshBasicMaterial;
   #boostItemGeometry: THREE.IcosahedronGeometry;
@@ -187,10 +211,14 @@ export class Cave {
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
 
     this.#scene = scene;
-    this.#rockTexture = this.#createRockTexture();
-    this.#rockTexture.wrapS = THREE.RepeatWrapping;
-    this.#rockTexture.wrapT = THREE.RepeatWrapping;
-    this.#rockTexture.repeat.set(4, 12);
+    // Tiling lives in the tube UVs (see the mesh builder), so the texture is
+    // used as-is. 36.87deg (atan 3/4) is deliberate: ten tiles around the
+    // ring land on the integer lattice (6, 8) after that rotation, so the
+    // ring still closes with no seam while the pattern runs diagonally and
+    // the repeat reads as rock grain instead of a grid.
+    this.#rockTexture = this.#loadTexture(caveWallTextureUrl);
+    this.#rockTexture.rotation = Math.atan2(3, 4);
+    this.#obstacleTexture = this.#loadTexture(obstacleRockTextureUrl);
     this.#material = new THREE.MeshLambertMaterial({
       color: new THREE.Color(config.CAVE_COLOR),
       map: this.#rockTexture,
@@ -218,11 +246,33 @@ export class Cave {
     });
     this.#wallMaterial = new THREE.MeshStandardMaterial({
       color: new THREE.Color(...config.CAVE_WALL_COLOR),
-      emissive: 0x281006,
+      map: this.#obstacleTexture,
+      emissive: 0x141414,
       roughness: 0.95,
       metalness: 0,
       side: THREE.DoubleSide,
     });
+    this.#wallMaterial.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nvarying vec3 vWallWorld;\nvarying vec3 vWallNormal;',
+        )
+        .replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\n\tvWallWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;',
+        )
+        .replace(
+          '#include <beginnormal_vertex>',
+          '#include <beginnormal_vertex>\n\tvWallNormal = normalize( mat3( modelMatrix ) * objectNormal );',
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nvarying vec3 vWallWorld;\nvarying vec3 vWallNormal;',
+        )
+        .replace('#include <map_fragment>', WALL_TRIPLANAR_FRAGMENT);
+    };
 
     this.#generateControl(0);
     ensureDrivablePath(
@@ -340,32 +390,19 @@ export class Cave {
     out.z = dz / len;
   }
 
-  /** A small generated rock texture keeps the cave from reading as a bare
-   *  checkerboard of lit triangles while remaining deterministic/offline. */
-  #createRockTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const context = canvas.getContext('2d');
-    if (!context) return new THREE.CanvasTexture(canvas);
-    const image = context.createImageData(canvas.width, canvas.height);
-    for (let y = 0; y < canvas.height; y++) {
-      for (let x = 0; x < canvas.width; x++) {
-        let h =
-          (x * 374761393 + y * 668265263 + (this.seed + 17) * 1442695041) | 0;
-        h = Math.imul(h ^ (h >>> 13), 1274126177);
-        const noise = ((h ^ (h >>> 16)) >>> 0) / 4294967295;
-        const shade = Math.round(48 + noise * 38);
-        const index = (y * canvas.width + x) * 4;
-        image.data[index] = shade;
-        image.data[index + 1] = Math.round(shade * 1.05);
-        image.data[index + 2] = Math.round(shade * 1.1);
-        image.data[index + 3] = 255;
-      }
-    }
-    context.putImageData(image, 0, 0);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
+  /** Load one of the bundled photo textures. The load is asynchronous, so
+   *  the material keeps its flat tint until the image arrives. Headless
+   *  processes (tests) have no Image and get an empty texture instead of a
+   *  throw. */
+  #loadTexture(url: string) {
+    const texture =
+      typeof Image === 'undefined'
+        ? new THREE.Texture()
+        : new THREE.TextureLoader().load(url);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.encoding = THREE.sRGBEncoding;
+    texture.anisotropy = 4;
     return texture;
   }
 
@@ -1704,8 +1741,10 @@ export class Cave {
         colors[vi * 3] = cr;
         colors[vi * 3 + 1] = cg;
         colors[vi * 3 + 2] = cb;
-        uvs[vi * 2] = (k / SIDES) * 4;
-        uvs[vi * 2 + 1] = (j / SAMPLES) * 12;
+        // global arc length and ring angle: no seam at the chunk edges, and
+        // the tiling lattice no longer lines up with the tunnel direction
+        uvs[vi * 2] = s / TUBE_TILE;
+        uvs[vi * 2 + 1] = (k / SIDES) * TUBE_TILES_AROUND;
         vi++;
       }
     }
@@ -1728,6 +1767,8 @@ export class Cave {
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     geometry.setIndex(indices);
     const mesh = new THREE.Mesh(geometry, this.#material);
+    // the tube receives the slab shadows cast by the ball torch
+    mesh.receiveShadow = true;
     // Keep the cave wide while compressing its rendered vertical profile.
     mesh.scale.y = config.CAVE_VERTICAL_SCALE;
     this.#scene.add(mesh);
@@ -1772,6 +1813,9 @@ export class Cave {
       if (wall && Math.floor(wall.centerS / LEN) === index) {
         const solid = this.#wallSolid(wall);
         const mesh = new THREE.Mesh(solid.geometry(), this.#wallMaterial);
+        // slabs cast and receive the ball torch's shadows
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         mesh.userData.wallFront = wall.centerS;
         mesh.userData.wallColumns = solid.columns;
         mesh.frustumCulled = false;
@@ -1872,6 +1916,7 @@ export class Cave {
     this.gateMeshes = new Array(config.GATES_PER_SEED).fill(null);
     this.#material.dispose();
     this.#rockTexture.dispose();
+    this.#obstacleTexture.dispose();
     this.#gateMaterial.dispose();
     this.#gateNextMaterial.dispose();
     this.#boostItemGeometry.dispose();

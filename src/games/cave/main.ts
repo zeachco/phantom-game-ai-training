@@ -29,6 +29,9 @@ export default async (state: CaveState) => {
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputEncoding = THREE.sRGBEncoding;
+  // obstacle slabs cast soft shadows from the ball's torch onto the rock
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.position = 'fixed';
   renderer.domElement.style.inset = '0';
   renderer.domElement.style.zIndex = '0';
@@ -38,9 +41,21 @@ export default async (state: CaveState) => {
   scene.background = new THREE.Color(config.PLANE_COLOR);
   scene.fog = new THREE.FogExp2(config.PLANE_COLOR, 0.0035);
 
-  scene.add(new THREE.HemisphereLight(0x9bb7d1, 0x11151c, 1.15));
-  const caveLight = new THREE.PointLight(0xffe9c0, 1.8, 420);
+  // the ball's torch is the main light now: the ambient sky and the camera
+  // lamp stay dim so the torch carves the cave locally
+  scene.add(new THREE.HemisphereLight(0x9bb7d1, 0x11151c, 0.4));
+  const caveLight = new THREE.PointLight(0xffe9c0, 0.55, 420);
   scene.add(caveLight);
+  // slightly above the ball so the ball itself stays lit and its own body
+  // does not eat the torch: only obstacles are shadow casters
+  const ballLight = new THREE.PointLight(0xfff1d8, 2.1, 180);
+  ballLight.castShadow = true;
+  ballLight.shadow.mapSize.set(1024, 1024);
+  ballLight.shadow.camera.near = 1;
+  ballLight.shadow.camera.far = 190;
+  ballLight.shadow.bias = -0.002;
+  ballLight.shadow.normalBias = 1.2;
+  scene.add(ballLight);
 
   const camera = new THREE.PerspectiveCamera(
     72,
@@ -358,6 +373,11 @@ export default async (state: CaveState) => {
 
     chaseCamera.update(camera, followed, cave);
     caveLight.position.copy(camera.position);
+    ballLight.position.set(
+      followed.x,
+      followed.y + config.BALL_RADIUS * 2.2,
+      followed.z,
+    );
 
     // Highlight the followed ball's next ring without rebuilding the mesh.
     for (let i = 0; i < cave.gateMeshes.length; i++) {
