@@ -119,15 +119,37 @@ Unchanged from the car version and ported into `Ball`:
 - Gates are rings across the tube at `GATE_SPACING`; crossing them in order
   pays `GATE_SCORE`, a speed bonus, and `FINISH_BONUS` on the last one.
   Out-of-order entries pay `WRONG_GATE_PENALTY`.
-- Forward section progress resets `SECTION_BUDGET_FRAMES` and pays
-  `SECTION_SCORE`, so clean progress scores even between the sparse rings.
+- Forward section progress pays `SECTION_SCORE / position`: the leader banks
+  the full `SECTION_SCORE`, 2nd half as much, and so on. The same pass
+  refreshes the section gauge to `SECTION_BUDGET_FRAMES`.
 - A hard side impact that bounces the ball back off a rock bank or bronze slab
   pays `OBSTACLE_HIT_SCORE` (cooldown `BALL_HIT_COOLDOWN_FRAMES`), and floor
   landings do not count.
 - Every frame, race position pays `POSITION_SCORE_SCALE / position`: 1st earns
   slightly more each frame than 2nd, and so on.
-- Forward section progress resets `SECTION_BUDGET_FRAMES`; no progress, or
-  staying under `BALL_STALL_SPEED` for the same budget, retires the ball.
+- The section gauge drains one frame per simulation step. Running it out
+  retires the ball as a `gauge` death, as does staying under `BALL_STALL_SPEED`
+  for the same budget (`stall`), or a hard hit (`crash`).
+
+## Training
+
+`CaveRace` is the cave twin of the circuit's `CircuitRace` and owns the
+non-visual run:
+
+- One group per brain layer (1..`MAX_NETWORK_LAYERS`) plus an optional mixed
+  group, each a pool of `CARS_PER_GROUP` balls. Groups spawn from their saved
+  champion, mutated per slot (`MAX_MUTATION_LVL` annealed to `MIN_MUTATION_LVL`
+  over `MUTATION_LAP_DECAY` seeds), with explorer, scout and
+  `FINISHED_SWARM_DIVISOR` slots as in the car game.
+- Every death settles the ball: a new group high promotes its brain to the
+  group's `best` and the hall of fame, and persists it. Gauge deaths always
+  mark the group dirty, so a run that exhausted its budget still saves the
+  brain that the next spawn mutates from.
+- Claiming every gate marks the group finished (`mutationOnly` for the seed);
+  once three categories finish, the cave advances to the next seed after a
+  short countdown.
+- Saves live under the `cave_` prefix (`cave_<layer>`, `cave_<kind>_<layer>`)
+  through `fileUtilities('cave')`; race records use `cave_score_<layer>`.
 
 ## Camera
 
@@ -164,6 +186,8 @@ boost-ahead, column-proximity, column-side, gate-delta. Outputs: `moveX`,
 - `classes/ChaseCamera.ts` - follows the ball, frames `BALL_RADIUS`.
 - `classes/Sensor.ts` - the analytic forward cone; `SensorViz` draws it for
   the followed AI.
+- `classes/CaveRace.ts` - training pools, mutation, promotion, seed
+  progression and `cave_` persistence.
 - `main.ts` - rendering, HUD, stick display.
 
 ## Playtest checklist

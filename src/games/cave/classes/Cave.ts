@@ -1902,8 +1902,8 @@ export class Cave {
   }
 
   /** dispose every chunk mesh and material, used when the whole cave is
-   *  regenerated */
-  clear() {
+   *  regenerated. The cave is not reusable after this. */
+  dispose() {
     for (const chunk of [...this.#chunks.values()]) this.#removeChunk(chunk);
     this.#chunks.clear();
     this.#control.length = 0;
@@ -1922,7 +1922,6 @@ export class Cave {
     this.#boostItemGeometry.dispose();
     this.#boostItemMaterial.dispose();
     this.#wallMaterial.dispose();
-    this.#generateControl(0);
   }
 }
 

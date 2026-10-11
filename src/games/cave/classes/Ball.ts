@@ -80,6 +80,8 @@ export class Ball {
   /** inward unit normal of the last contact, used for the visual roll */
   public contactNormal = new THREE.Vector3(0, 1, 0);
   public damaged: boolean;
+  /** what retired the ball: a hard hit, a stall, or the section gauge */
+  public deathCause: 'none' | 'crash' | 'stall' | 'gauge' = 'none';
   public useAI: boolean;
   public sensor?: Sensor;
   public brain: NeuralNetwork;
@@ -112,6 +114,9 @@ export class Ball {
   public deathTime = 0;
   /** frames remaining to advance into another cave section */
   public sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+  /** race position (1 = leader) of the last frame, written by the racer so a
+   *  section pass can pay its position-scaled bonus */
+  public racePosition = 1;
   /** furthest cave section reached; unlike gates, sections keep the ball alive
    *  while it makes forward progress even if it misses a ring */
   private furthestSection = 0;
@@ -273,12 +278,14 @@ export class Ball {
     this.lastCollisionFrames = config.BALL_JUMP_GRACE_FRAMES + 1;
     this.a = Math.PI;
     this.damaged = false;
+    this.deathCause = 'none';
     this.finished = false;
     this.nextGate = 0;
     this.insideGate = -1;
     this.passedGate = false;
     this.completedGateIndex = -1;
     this.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
+    this.racePosition = 1;
     this.furthestSection = Math.floor(spawn.s / config.CAVE_SEGMENT_LENGTH);
     this.framesSinceLastGate = 0;
     this.totalRaceFrames = 0;
@@ -318,10 +325,22 @@ export class Ball {
       this.boostFrames = config.BOOST_DURATION;
     }
     if (this.brain) this.#updateScore(cave);
+    // the section gauge drains every frame and is refreshed on progress, so
+    // standing still eventually retires the ball
+    if (this.sectionFramesRemaining > 0) this.sectionFramesRemaining--;
     this.#updateSectionProgress();
 
-    this.damaged =
-      this.#assessDamage() || this.#checkStall() || this.#checkSectionBudget();
+    const crash = this.#assessDamage();
+    const stall = !crash && this.#checkStall();
+    const gauge = !crash && !stall && this.#checkSectionBudget();
+    this.damaged = crash || stall || gauge;
+    this.deathCause = crash
+      ? 'crash'
+      : stall
+      ? 'stall'
+      : gauge
+      ? 'gauge'
+      : 'none';
     if (this.damaged && this.brain) {
       this.brain.score -= this.deathPenalty + this.speed;
     }
@@ -421,9 +440,12 @@ export class Ball {
     if (section > this.furthestSection) {
       this.furthestSection = section;
       this.sectionFramesRemaining = config.SECTION_BUDGET_FRAMES;
-      // Forward section progress is scored even if the decorative gate ring
-      // itself is missed, so a clean run through the rock always pays.
-      if (!this.finished) this.brain.score += config.SECTION_SCORE;
+      // A section pays its flat reward scaled by race position: the leader
+      // banks SECTION_SCORE, 2nd half that, and so on. Forward progress is
+      // scored even if the decorative gate ring itself is missed.
+      if (!this.finished)
+        this.brain.score +=
+          config.SECTION_SCORE / Math.max(1, this.racePosition);
     }
   }
 

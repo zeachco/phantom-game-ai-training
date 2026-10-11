@@ -19,8 +19,10 @@ class Config {
    *  population that has run many caves keeps the ability to escape the
    *  champion line it converged on */
   public MIN_MUTATION_LVL = 0.1;
-  /** every brain category runs a pool of exactly this many cars, slots 0..N-1 */
-  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 15 : 50;
+  /** every brain category runs a pool of exactly this many balls, slots
+   *  0..N-1. Much smaller than the car game: the cave sphere physics and the
+   *  ray sensors cost far more per ball, so the 3D training pool stays small */
+  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 4 : 6;
   /** a group that has seen one of its cars finish respawns as a
    *  mutation-only swarm of this many cars, on slots 1..N, so the untouched
    *  champion never re-enters that pool */
@@ -303,9 +305,9 @@ class Config {
   public FINISH_BONUS = 600;
   /** fixed debt for entering a gate out of order */
   public WRONG_GATE_PENALTY = 100;
-  /** flat reward for making forward progress into a new cave section, so
-   *  racing through the cave pays even between the sparse gate rings */
-  public SECTION_SCORE = 10;
+  /** reward for making forward progress into a new cave section, paid as
+   *  SECTION_SCORE / race position so the leader banks more than the pack */
+  public SECTION_SCORE = 5;
   /** score lost when a hard side impact bounces the ball back off an
    *  obstacle: the rock banks and the bronze slabs both count */
   public OBSTACLE_HIT_SCORE = 1;

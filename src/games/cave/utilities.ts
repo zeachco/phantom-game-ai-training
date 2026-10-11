@@ -44,9 +44,9 @@ export interface Group {
 
 /** the human driven car, exists while the game runs */
 export const defaultState = {
-  /** alive cars and the corpses still on the cave, both draw and score */
-  cars: [] as Ball[],
-  sortedCars: [] as Ball[],
+  /** alive balls and the corpses still on the cave, both draw and score */
+  balls: [] as Ball[],
+  sortedBalls: [] as Ball[],
   /** live car count: dips while a group's corpses linger, climbs back when
    *  that whole group respawns */
   living: 0,

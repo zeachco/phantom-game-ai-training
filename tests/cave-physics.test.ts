@@ -450,3 +450,26 @@ test('forward section progress pays the section score', () => {
   expect(ball.s).toBeLessThan(config.GATE_SPACING);
   expect(ball.brain.score).toBe(start + sections * config.SECTION_SCORE);
 });
+
+test('the section gauge drains every frame and refreshes on progress', () => {
+  const { ball, cave } = settled();
+  const full = config.SECTION_BUDGET_FRAMES;
+  ball.sectionFramesRemaining = full;
+  ball.update(cave);
+  expect(ball.sectionFramesRemaining).toBe(full - 1);
+
+  // crossing into a new section refreshes the gauge to the full budget
+  ball.sectionFramesRemaining = 3;
+  ball.s = config.CAVE_SEGMENT_LENGTH + 10;
+  ball.update(cave);
+  expect(ball.sectionFramesRemaining).toBe(full);
+});
+
+test('an empty section gauge retires the ball with a gauge death', () => {
+  const { ball, cave } = settled();
+  ball.sectionFramesRemaining = 0;
+  ball.vz = -2;
+  ball.update(cave);
+  expect(ball.damaged).toBe(true);
+  expect(ball.deathCause).toBe('gauge');
+});

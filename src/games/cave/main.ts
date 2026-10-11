@@ -1,30 +1,26 @@
 import * as THREE from 'three';
+import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
+import { fileUtilities } from '../../ai/utils';
 import { GameLoop } from '../../utilities/three/GameLoop';
-import { Ball, getCaveBrainDimensions } from './classes/Ball';
-import { Cave } from './classes/Cave';
+import type { Ball } from './classes/Ball';
+import { CaveRace } from './classes/CaveRace';
 import { ChaseCamera } from './classes/ChaseCamera';
-import { SensorViz } from './classes/SensorViz';
 import { config } from './classes/Config';
-import { ControlType } from './types';
+import { SensorViz } from './classes/SensorViz';
+import { clearScoreRecords, type defaultState } from './utilities';
 
-interface CaveState {
-  cave?: Cave;
-  balls: Ball[];
-  human?: Ball;
-  seed: number;
-}
+type CaveState = typeof defaultState;
 
-const BALL_COUNT = 10;
+const io = fileUtilities('cave');
+if (config.CLEAR_STORAGE) io.discardModels();
 
 /**
- * A small playable 3D cave prototype. The cave and collision queries are
- * deterministic and streamed by Cave; this entry point keeps rendering and
- * input orchestration separate from the simulation classes.
+ * A small playable 3D cave. The cave and collision queries are deterministic
+ * and streamed by Cave; the AI training pools live in CaveRace, leaving this
+ * entry point to coordinate rendering, input and the HUD.
  */
 export default async (state: CaveState) => {
   const seed = readSeed();
-  state.seed = seed;
-  state.balls = [];
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -65,121 +61,16 @@ export default async (state: CaveState) => {
     1600,
   );
 
-  const cave = new Cave(seed, scene);
   // Wireframe is opt-in: the backtick key toggles it for mesh debugging.
   let wireframe = false;
-  cave.setWireframe(wireframe);
-  state.cave = cave;
 
-  const spawn = cave.getSpawn();
-  const human = new Ball(
-    spawn,
-    ControlType.HUMAN,
-    config.BALL_MAX_SPEED,
-    'human',
-    '#ddffbb',
-    1,
-    undefined,
-    0,
-    cave,
-  );
-  state.human = human;
-  state.balls.push(human);
-
-  // The prototype keeps a modest AI population so it remains responsive while
-  // still exercising the same neural inputs and streaming physics.
-  const { inputCount, outputCount } = getCaveBrainDimensions();
-  void inputCount;
-  void outputCount;
-  for (let i = 0; i < BALL_COUNT; i++) {
-    const ai = new Ball(
-      spawn,
-      ControlType.AI,
-      config.BALL_MAX_SPEED,
-      `A${i}`,
-      '',
-      1 + (i % config.MAX_NETWORK_LAYERS),
-      undefined,
-      0,
-      cave,
-    );
-    state.balls.push(ai);
-  }
-
-  // Rays are a spectator/debug aid: they appear while the camera follows an
-  // AI ball and hide as soon as the player's own ball is followed.
-  const humanSensor = human.sensor;
-  const sensorViz = new SensorViz(
-    humanSensor?.rayCount ?? config.SENSORS + 2,
-    humanSensor?.surfaceIndices ?? [],
-  );
-  scene.add(sensorViz.group);
-
-  const ballGeometry = new THREE.SphereGeometry(config.BALL_RADIUS, 20, 14);
-  const markerGeometry = new THREE.SphereGeometry(
-    config.BALL_RADIUS * 0.34,
-    10,
-    8,
-  );
-  const ballMeshes = new Map<Ball, THREE.Group>();
-  for (const ball of state.balls) {
-    const group = new THREE.Group();
-    const body = new THREE.Mesh(
-      ballGeometry,
-      new THREE.MeshStandardMaterial({
-        wireframe,
-        color: ball.color === 'white' ? 0xffffff : ball.color,
-        emissive: ball.color === 'white' ? 0x222222 : ball.color,
-        emissiveIntensity: ball === human ? 0.7 : 0.12,
-        roughness: 0.55,
-        metalness: 0.15,
-      }),
-    );
-    body.frustumCulled = false;
-    group.add(body);
-    // an off-center patch makes the visual roll legible
-    const marker = new THREE.Mesh(
-      markerGeometry,
-      new THREE.MeshBasicMaterial({
-        wireframe,
-        color: ball === human ? 0xffffaa : ball.color,
-      }),
-    );
-    marker.position.set(
-      0,
-      config.BALL_RADIUS * 0.55,
-      -config.BALL_RADIUS * 0.75,
-    );
-    marker.frustumCulled = false;
-    group.add(marker);
-    group.renderOrder = ball === human ? 10 : 1;
-    group.frustumCulled = false;
-    group.visible = false;
-    scene.add(group);
-    ballMeshes.set(ball, group);
-  }
-
-  const updateBallFocusStyle = (
-    ball: Ball,
-    mesh: THREE.Group,
-    focused: boolean,
-  ) => {
-    const opacity = focused ? 1 : 0.5;
-    mesh.renderOrder = focused ? 10 : 1;
-    mesh.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      const materials = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
-      object.renderOrder = focused ? 10 : 1;
-      for (const material of materials) {
-        material.transparent = opacity < 1;
-        material.opacity = opacity;
-        material.depthWrite = focused;
-        material.depthTest = true;
-      }
-    });
-  };
+  const race = new CaveRace(state, io, seed, scene, {
+    onSeedChanged: (nextSeed) => {
+      location.hash = `cave=${nextSeed}`;
+      title.textContent = `CAVE // seed ${nextSeed}`;
+      state.cave?.setWireframe(wireframe);
+    },
+  });
 
   const title = document.createElement('div');
   title.textContent = `CAVE // seed ${seed}`;
@@ -205,6 +96,61 @@ export default async (state: CaveState) => {
   hint.style.whiteSpace = 'pre-line';
   hint.style.maxWidth = 'calc(100vw - 130px)';
   document.body.appendChild(hint);
+
+  // Model controls: the training saves live under the `cave_` prefix. There is
+  // no bundled default, so a fresh run starts from random brains.
+  const modelBar = document.createElement('div');
+  modelBar.className = 'cave-models';
+  const addModelButton = (text: string, title: string, onClick: () => void) => {
+    const button = document.createElement('button');
+    button.className = 'model-btn';
+    button.textContent = text;
+    button.title = title;
+    button.onclick = onClick;
+    return button;
+  };
+  modelBar.append(
+    addModelButton('Save models', 'Download the cave training saves', () =>
+      downloadModelArchive('cave'),
+    ),
+    addModelButton('Import archive', 'Load a cave model archive', async () => {
+      try {
+        const archive = await pickModelArchive();
+        if (archive.game && archive.game !== 'cave') {
+          alert(`This archive is for \`${archive.game}\`, not "cave"`);
+          return;
+        }
+        const written = io.importModels(archive.models);
+        if (!written.length) {
+          alert('No compatible model in this archive');
+          return;
+        }
+        console.info(`Loaded models: ${written.join(', ')}`);
+        race.initialize();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '';
+        if (message !== 'No file selected')
+          alert(message || 'Unable to load models');
+      }
+    }),
+    addModelButton('Clear training', 'Delete every saved cave brain', () => {
+      if (
+        !confirm(
+          'Clear the current training set? This removes the saved models of this game.',
+        )
+      )
+        return;
+      io.discardGameModels();
+      race.initialize();
+    }),
+    addModelButton('Clear records', 'Delete saved cave race records', () => {
+      if (!confirm('Clear all saved cave race records? Brains are kept.'))
+        return;
+      clearScoreRecords();
+      race.initialize();
+    }),
+  );
+  document.body.appendChild(modelBar);
 
   const position = document.createElement('div');
   position.className = 'cave-position';
@@ -315,16 +261,87 @@ export default async (state: CaveState) => {
   document.body.appendChild(steerOverlay);
 
   let lastStatsText = '';
-  let followed = human;
+
+  // Build the training pools from the saved `cave_` models.
+  race.initialize();
+  state.cave?.setWireframe(wireframe);
+
+  // Rays are a spectator/debug aid: they appear while the camera follows an
+  // AI ball and hide as soon as the player's own ball is followed.
+  const humanSensor = state.human?.sensor;
+  const sensorViz = new SensorViz(
+    humanSensor?.rayCount ?? config.SENSORS + 2,
+    humanSensor?.surfaceIndices ?? [],
+  );
+  scene.add(sensorViz.group);
+
+  const ballGeometry = new THREE.SphereGeometry(config.BALL_RADIUS, 20, 14);
+  const markerGeometry = new THREE.SphereGeometry(
+    config.BALL_RADIUS * 0.34,
+    10,
+    8,
+  );
+
+  // Meshes are keyed by ball label (layer:slot, or 'human') so a group
+  // respawn reuses its slot's mesh instead of allocating every generation.
+  const ballMeshes = new Map<string, THREE.Group>();
+  const makeBallMesh = (ball: Ball) => {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      ballGeometry,
+      new THREE.MeshStandardMaterial({
+        wireframe,
+        color: ball.color,
+        emissive: ball.color,
+        emissiveIntensity: ball.useAI ? 0.12 : 0.7,
+        roughness: 0.55,
+        metalness: 0.15,
+      }),
+    );
+    body.frustumCulled = false;
+    group.add(body);
+    // an off-center patch makes the visual roll legible
+    const marker = new THREE.Mesh(
+      markerGeometry,
+      new THREE.MeshBasicMaterial({
+        wireframe,
+        color: ball.useAI ? ball.color : 0xffffaa,
+      }),
+    );
+    marker.position.set(
+      0,
+      config.BALL_RADIUS * 0.55,
+      -config.BALL_RADIUS * 0.75,
+    );
+    marker.frustumCulled = false;
+    group.add(marker);
+    group.frustumCulled = false;
+    group.visible = false;
+    scene.add(group);
+    return group;
+  };
+
+  const updateBallFocusStyle = (mesh: THREE.Group, focused: boolean) => {
+    const opacity = focused ? 1 : 0.5;
+    mesh.renderOrder = focused ? 10 : 1;
+    mesh.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      object.renderOrder = focused ? 10 : 1;
+      for (const material of materials) {
+        material.transparent = opacity < 1;
+        material.opacity = opacity;
+        material.depthWrite = focused;
+        material.depthTest = true;
+      }
+    });
+  };
+
+  let followed = state.human ?? state.balls[0];
   let lastHud = 0;
   const chaseCamera = new ChaseCamera();
-
-  const respawn = (ball: Ball) => {
-    // Balls intentionally share one starting transform; there is no
-    // ball-to-ball collision system, so overlapping spawn slots are harmless.
-    ball.reset(spawn);
-    ball.brain.score = 0;
-  };
 
   const loop = new GameLoop();
   let accumulator = 0;
@@ -335,53 +352,30 @@ export default async (state: CaveState) => {
     const now = performance.now();
     while (accumulator >= 1 / 60) {
       accumulator -= 1 / 60;
-      for (const ball of state.balls) {
-        if (ball.damaged) {
-          if (now - ball.deathTime > 900) {
-            respawn(ball);
-            ball.deathTime = 0;
-          }
-          continue;
-        }
-        const alive = !ball.damaged;
-        ball.update(cave);
-        if (alive && ball.damaged) ball.deathTime = now;
-      }
-      // Race position pays a small per-frame premium: 1st place earns
-      // POSITION_SCORE_SCALE each frame, 2nd half as much, and so on.
-      const ranked = state.balls
-        .filter((ball) => !ball.damaged)
-        .sort((a, b) => b.s - a.s);
-      for (let i = 0; i < ranked.length; i++)
-        ranked[i].brain.score += config.POSITION_SCORE_SCALE / (i + 1);
+      race.update(now);
     }
 
-    let minS = human.s;
-    let maxS = human.s;
-    for (const ball of state.balls) {
-      if (ball.damaged) continue;
-      minS = Math.min(minS, ball.s);
-      maxS = Math.max(maxS, ball.s);
-    }
-    cave.update(
-      minS - config.CAVE_CHUNKS_BEHIND * config.CAVE_SEGMENT_LENGTH,
-      maxS + config.CAVE_CHUNKS_AHEAD * config.CAVE_SEGMENT_LENGTH,
-      dt,
-    );
-
-    const living = state.balls.filter((ball) => !ball.damaged);
+    const balls = state.balls;
+    const living = balls.filter((ball) => !ball.damaged);
+    const human = state.human;
     // The camera follows the ball with the best score until the player takes
     // the controls, then it stays on the player's ball.
     const best = living.reduce(
       (leader, ball) => (ball.brain.score > leader.brain.score ? ball : leader),
-      living[0] ?? human,
+      living[0] ?? human ?? balls[0],
     );
-    followed = human.controls.playerActive && !human.damaged ? human : best;
+    followed =
+      human && human.controls.playerActive && !human.damaged ? human : best;
 
-    for (const ball of state.balls) {
-      const mesh = ballMeshes.get(ball);
-      if (!mesh) continue;
-      updateBallFocusStyle(ball, mesh, ball === followed);
+    const seen = new Set<string>();
+    for (const ball of balls) {
+      seen.add(ball.label);
+      let mesh = ballMeshes.get(ball.label);
+      if (!mesh) {
+        mesh = makeBallMesh(ball);
+        ballMeshes.set(ball.label, mesh);
+      }
+      updateBallFocusStyle(mesh, ball === followed);
       const visible =
         !ball.damaged && Math.abs(ball.s - followed.s) < config.VISUAL_RANGE;
       mesh.visible = visible;
@@ -389,7 +383,21 @@ export default async (state: CaveState) => {
       mesh.position.set(ball.x, ball.y, ball.z);
       mesh.quaternion.copy(ball.quat);
     }
+    for (const [label, mesh] of ballMeshes) {
+      if (seen.has(label)) continue;
+      scene.remove(mesh);
+      mesh.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const materials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+        for (const material of materials) material.dispose();
+      });
+      ballMeshes.delete(label);
+    }
 
+    const cave = state.cave;
+    if (!cave) return;
     const showRays = followed.useAI && !followed.damaged;
     sensorViz.update(followed, showRays);
     chaseCamera.update(camera, followed, cave);
@@ -425,19 +433,19 @@ export default async (state: CaveState) => {
     renderer.render(scene, camera);
     if (now - lastHud > 50) {
       lastHud = now;
-      const followedIndex = state.balls.indexOf(followed);
+      const followedIndex = balls.indexOf(followed);
       const rank =
         1 +
-        state.balls.filter(
+        balls.filter(
           (ball, index) =>
             ball.s > followed.s ||
             (ball.s === followed.s && index < followedIndex),
         ).length;
       positionValue.textContent = String(rank);
-      positionTotal.textContent = `/${state.balls.length}`;
+      positionTotal.textContent = `/${balls.length}`;
       position.setAttribute(
         'aria-label',
-        `Position ${rank} of ${state.balls.length}`,
+        `Position ${rank} of ${balls.length}`,
       );
       if (!isFollowedAlive) return;
       const gateNumber = Math.min(followed.nextGate + 1, config.GATES_PER_SEED);
@@ -478,7 +486,7 @@ export default async (state: CaveState) => {
           `cave_score_${followed.brainLayers}`,
         );
         const history = saved ? JSON.parse(saved).history : undefined;
-        const previousBest = history?.[String(seed)];
+        const previousBest = history?.[String(race.seed)];
         if (typeof previousBest === 'number' && previousBest > 0)
           bestScore = Math.round(previousBest);
       } catch {
@@ -523,7 +531,7 @@ export default async (state: CaveState) => {
         return;
       event.preventDefault();
       wireframe = !wireframe;
-      cave.setWireframe(wireframe);
+      state.cave?.setWireframe(wireframe);
       for (const mesh of ballMeshes.values()) {
         mesh.traverse((object) => {
           if (!(object instanceof THREE.Mesh)) return;
@@ -542,9 +550,9 @@ export default async (state: CaveState) => {
       return;
     }
     if (event.key.toLowerCase() !== 'r') return;
-    location.hash = `cave=${Math.max(0, seed + 1)}`;
-    location.reload();
+    race.applyUserSeed(Math.max(0, race.seed + 1));
   });
+  window.addEventListener('beforeunload', () => race.saveAll());
 };
 
 function readSeed() {

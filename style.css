@@ -453,6 +453,21 @@ ul:hover {
   pointer-events: none;
 }
 
+.cave-models {
+  position: fixed;
+  top: 14px;
+  right: 50%;
+  transform: translateX(50%);
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+}
+
+.cave-models .model-btn {
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
 .cave-position-label {
   font-size: 11px;
   letter-spacing: 2px;
