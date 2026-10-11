@@ -91,6 +91,8 @@ class Config {
   /** Fixed world-space offset behind the ball; independent of its motion. */
   public CAMERA_FOLLOW_DISTANCE = 60;
   public CAMERA_FOLLOW_HEIGHT = 12;
+  /** Keep this much clear between the camera and a blocked boom. */
+  public CAMERA_COLLISION_MARGIN = 2;
 
   // env, the sensor fan is a front arc in the car's plane: longest straight
   // ahead, tapering to the edges, so reach is one honest function of where a

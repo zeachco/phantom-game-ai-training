@@ -50,7 +50,8 @@ export default async (state: CaveState) => {
   );
 
   const cave = new Cave(seed, scene);
-  let wireframe = true;
+  // Wireframe is opt-in: the backtick key toggles it for mesh debugging.
+  let wireframe = false;
   cave.setWireframe(wireframe);
   state.cave = cave;
 
@@ -355,7 +356,7 @@ export default async (state: CaveState) => {
       mesh.quaternion.copy(ball.quat);
     }
 
-    chaseCamera.update(camera, followed);
+    chaseCamera.update(camera, followed, cave);
     caveLight.position.copy(camera.position);
 
     // Highlight the followed ball's next ring without rebuilding the mesh.

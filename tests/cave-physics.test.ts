@@ -56,6 +56,10 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
     wallSurfaceAt() {
       return null;
     },
+    locate(_x: number, _y: number, _z: number, sHint: number, out: RadialHit) {
+      out.s = sHint;
+      out.a = Math.PI;
+    },
     nearestRadial(
       x: number,
       y: number,

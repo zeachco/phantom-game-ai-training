@@ -1309,6 +1309,8 @@ export class Cave {
   #rockClosest = new THREE.Vector3();
   #rockNearest = new THREE.Vector3();
   #rockNormal = new THREE.Vector3();
+  /** scratch for the point-to-closest delta, kept separate from #rockClosest */
+  #rockDelta = new THREE.Vector3();
 
   #rockRing(row: number) {
     const cached = this.#rockRings.get(row);
@@ -1378,12 +1380,19 @@ export class Cave {
           this.#rockNearest.copy(this.#rockClosest);
           this.#rockNormal.copy(normal);
           outside =
-            this.#rockClosest
+            this.#rockDelta
               .subVectors(this.#rockPoint, this.#rockNearest)
               .dot(normal) > 0;
         }
       }
     }
+    // Every candidate was pruned, which means the row window lies entirely
+    // below the retained control range. Fail loudly instead of leaving stale
+    // #rockNearest/#rockNormal behind as a silent pass-through.
+    if (!Number.isFinite(best))
+      throw new Error(
+        `#nearestRock found no candidate near (${px}, ${py}, ${pz}) at s=${out.s}`,
+      );
     const distance = Math.sqrt(best);
     out.dist = outside ? distance : -distance;
     if (distance > 1e-7) {
@@ -1400,15 +1409,10 @@ export class Cave {
     return out;
   }
 
-  /** Locate the centerline coordinate, then query the exact rendered rock.
-   * Positive distance is outside the cave; the normal points into the rock. */
-  nearestRadial(
-    px: number,
-    py: number,
-    pz: number,
-    sHint: number,
-    out: RadialHit,
-  ) {
+  /** Resolve the centerline coordinate (s, a) of a world point without the
+   * exact-mesh query. Progress, gates and the ball frame only need the axis
+   * coordinate, so they avoid the mesh scan. */
+  locate(px: number, py: number, pz: number, sHint: number, out: RadialHit) {
     let bestS = sHint;
     let bestA = 0;
     // Choose the nearest centerline point, not the most negative signed
@@ -1455,6 +1459,18 @@ export class Cave {
     );
     out.s = bestS;
     out.a = bestA;
+  }
+
+  /** Locate the centerline coordinate, then query the exact rendered rock.
+   * Positive distance is outside the cave; the normal points into the rock. */
+  nearestRadial(
+    px: number,
+    py: number,
+    pz: number,
+    sHint: number,
+    out: RadialHit,
+  ) {
+    this.locate(px, py, pz, sHint, out);
     return this.#nearestRock(px, py, pz, out);
   }
 

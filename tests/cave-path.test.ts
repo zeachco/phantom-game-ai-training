@@ -121,6 +121,10 @@ test('walls stop direct impacts and retain sphere clearance when balls slide aro
     const ball = new Ball(terrain.groundSpawn(front - 20));
     ball.controls.moveY = 1;
     let touched = false;
+    // Exact sloped rock normals can eventually carry an unsteered ball around
+    // the side. Until the first contact, the ball must still be approaching the
+    // wall's leading face, not already through it.
+    let approachMaxS = -Infinity;
     for (let f = 0; f < 240 && !ball.damaged; f++) {
       ball.update(terrain);
       const hit = terrain.wallContact(
@@ -133,12 +137,12 @@ test('walls stop direct impacts and retain sphere clearance when balls slide aro
       if (hit) {
         touched = true;
         expect(hit.dist).toBeGreaterThanOrEqual(ball.radius - 0.001);
+      } else if (!touched) {
+        approachMaxS = Math.max(approachMaxS, ball.s);
       }
-      // Exact sloped rock normals can eventually carry an unsteered ball
-      // around the side. Check the direct impact before that valid pass.
-      if (f === 59) expect(ball.s).toBeLessThanOrEqual(front + 1);
     }
     expect(touched).toBe(true);
+    expect(approachMaxS).toBeLessThanOrEqual(front + 1);
   }
 });
 

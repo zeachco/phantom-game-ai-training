@@ -112,7 +112,10 @@ test('seed 3 sphere contacts use the visible rock on steep banks and ceilings', 
 test('seed 5 slab corrections leave the entire sphere clear of rock and bronze', () => {
   const terrain = cave(5);
   terrain.update(0, 4320);
-  // Independently sampled rendered back/deck faces near gates 4 and 7.
+  // Independently sampled rendered back/deck faces near gates 4 and 7: the
+  // world-space midpoint of a triangle from the streamed chunk mesh, offset
+  // inward along its normal by a ball radius. Recorded as golden regression
+  // anchors so a later mesh change cannot silently move this contact.
   for (const [x, y, z, s] of [
     [
       191.26767269208068, -16.5014736280183, -2329.5698313627,

@@ -530,11 +530,14 @@ export class Ball {
 
   /** Keep each integration step shorter than half a radius, including falls. */
   #move(cave: Cave) {
+    // Bound the substep from the real integration velocity. A bounce or a
+    // slope launch can exceed effectiveMaxSpeed(), so clamping the horizontal
+    // component here would under-substep exactly when the ball is fastest.
     const substeps = Math.max(
       config.PHYSICS_SUBSTEPS,
       Math.ceil(
         Math.hypot(
-          Math.min(Math.hypot(this.vx, this.vz), this.effectiveMaxSpeed()),
+          Math.hypot(this.vx, this.vz),
           Math.abs(this.vy) + config.BALL_GRAVITY,
         ) /
           (this.radius * 0.5),
@@ -611,12 +614,11 @@ export class Ball {
       // Curved slabs meeting a bank can require several alternating pushes
       // before both contacts are clear. Ordinary contacts still exit early.
       for (let pass = 0; pass < 64; pass++) {
-        const rockContact = this.#resolveRock(cave);
+        this.#resolveRock(cave);
         const contact = cave.wallContact(this.x, this.y, this.z, reach, this.s);
-        if (!contact || reach - contact.dist < 1e-6) {
-          if (!rockContact) break;
-          continue;
-        }
+        // No slab push needed. #resolveRock already placed the ball flush on
+        // the exact mesh, so a second confirm scan is redundant.
+        if (!contact || reach - contact.dist < 1e-6) break;
         const { nx, ny, nz } = contact;
         const penetration = reach - contact.dist;
         this.x += nx * penetration;
@@ -638,7 +640,8 @@ export class Ball {
         }
       }
       // Progress is a query hint, never an independent collision position.
-      cave.nearestRadial(this.x, this.y, this.z, this.s, this.hit);
+      // Only the axis coordinate is needed, so skip the exact-mesh query.
+      cave.locate(this.x, this.y, this.z, this.s, this.hit);
       this.s = this.hit.s;
       this.a = this.hit.a;
       // slippery ground, mild air drag
