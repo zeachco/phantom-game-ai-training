@@ -26,7 +26,7 @@ export class Sensor {
   /** one 0..1 reading per ray, 0 when nothing is hit within reach */
   readings: number[];
   /** one surface class per ray, aligned with `readings`: -1 obstacle (rock
-   *  column or bronze slab), +1 boost pad, 0 ground or nothing hit */
+   *  column or bronze slab), +1 coin (reward), 0 ground or nothing hit */
   readonly kinds: number[];
   /** indices of the outermost cone ring, in angular order. `SensorViz` turns
    *  them into the cone surface; the ring closes on itself. */

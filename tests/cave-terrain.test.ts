@@ -288,10 +288,10 @@ test('the driving band is flat while the sides stay rough', () => {
   }
 });
 
-test('streams glowing boost items over the boost pads', () => {
+test('streams spinning coins over the coin footprints', () => {
   const terrain = cave(2);
   terrain.update(0, 240 * 4);
-  expect(terrain.boostItemCount()).toBeGreaterThan(0);
+  expect(terrain.coinCount()).toBeGreaterThan(0);
 });
 
 test('valley terrain launches the ball naturally without sacrificing speed', () => {

@@ -140,8 +140,8 @@ class Config {
   // ball, Monkey Ball style: a sphere that rolls through the tube. The stick
   // accelerates it in the camera/track plane, gravity and the walls do the
   // rest.
-  /** top speed in u/f. Kept low so the ball feels heavy; a boost item is the
-   *  only way past it */
+  /** top speed in u/f. Kept low so the ball feels heavy; collected coins are
+   *  the only way past it */
   public BALL_MAX_SPEED = 6 / 3;
   /** sphere radius: collision, rendering and camera framing all read it */
   public BALL_RADIUS = 1.4;
@@ -180,16 +180,19 @@ class Config {
   /** normal impact speed (u/f) at which a wall hit kills the ball. Below the
    *  unboosted top speed: only a near head-on full-speed hit is fatal */
   public BALL_CRASH_SPEED = 8;
-  /** acceleration (u/f^2) of a boost while its timer runs */
-  public BOOST_ACCEL = 0.32 / 3;
-  /** extra top speed while a boost is active, fading linearly to zero over
-   *  BOOST_DURATION. Large: a boost item should double the pace */
-  public BOOST_SPEED_BONUS = 6 / 3;
-  /** frames a boost lasts after (re)triggering; overlapping items refresh
-   *  the timer, they never stack */
-  public BOOST_DURATION = 90;
-  /** score bonus for collecting a boost item, small next to GATE_SCORE */
-  public BOOST_SCORE = 2;
+  /** acceleration (u/f^2) of the temporary coin boost while its timer runs */
+  public COIN_BOOST_ACCEL = 0.32 / 3;
+  /** temporary top-speed bonus while a coin boost is active: 10% */
+  public COIN_SPEED_BONUS = 0.1;
+  /** frames the temporary coin boost lasts after collecting a coin; a fresh
+   *  coin refreshes the timer, boosts never stack */
+  public COIN_BOOST_DURATION = 90;
+  /** permanent top-speed bonus each collected coin adds: 1% */
+  public COIN_PERMANENT_BONUS = 0.01;
+  /** cap on the stacked permanent coin bonus: 100% (double top speed) */
+  public COIN_PERMANENT_CAP = 1;
+  /** score for collecting a coin */
+  public COIN_SCORE = 1;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */
@@ -264,8 +267,25 @@ class Config {
   /** forward distance of the abrupt back cut behind a ramp lip: the deck
    *  ends in a near-shear face so a ball leaving the lip keeps flying */
   public CAVE_RAMP_LIP_DROP = 6;
-  /** probability that a feature cell carries a boost pad on the driving band */
-  public CAVE_BOOST_CHANCE = 0.5;
+  /** probability that a feature cell carries a run of coins on the driving
+   *  band. Kept at the old boost-pad value (0.5) so the per-cell RNG stream
+   *  stays aligned: a different chance would flip pass/fail on some cells and
+   *  shift that cell's later wall/ramp draws, reshaping the terrain */
+  public CAVE_COIN_CHANCE = 0.5;
+  /** number of coins in one run, min..max inclusive */
+  public CAVE_COIN_MIN = 3;
+  public CAVE_COIN_MAX = 7;
+  /** arc distance between two coins in a run */
+  public CAVE_COIN_SPACING = 46;
+  /** pickup footprint of one coin: arc half-length and angular half-width */
+  public CAVE_COIN_HALF_LEN = 12;
+  public CAVE_COIN_HALF_A = 0.16;
+  /** rendered spinning coin: radius, thickness and gold color */
+  public CAVE_COIN_RADIUS = 2.4;
+  public CAVE_COIN_THICKNESS = 0.5;
+  public CAVE_COIN_COLOR = '#ffd23f';
+  /** how high above the floor the coin floats, in world units */
+  public CAVE_COIN_LIFT = 3.6;
   /** probability that a rock column spans the whole cave (floor to wall) */
   public CAVE_COLUMN_FULL_HEIGHT_CHANCE = 0.5;
   /** probability that a column grows inside the driving band but never on
@@ -289,12 +309,8 @@ class Config {
    *  in world units (one car width plus margin) */
   public CAVE_PATH_MIN_GAP = 9;
   /** emissive tint (r, g, b in 0..1) blending over the rock vertex colors:
-   *  the boost pads */
-  public CAVE_BOOST_COLOR: [number, number, number] = [1.0, 0.85, 0.25];
-  /** glowing boost items float this far above their floor pad; the ball
-   *  collects the boost by rolling through the pad underneath */
-  public CAVE_BOOST_ITEM_RADIUS = 2.2;
-  public CAVE_BOOST_ITEM_COLOR = '#ffe27a';
+   *  the coin footprints */
+  public CAVE_COIN_TINT: [number, number, number] = [1.0, 0.85, 0.35];
   /** clearance from the cave floor to a car's body center at spawn */
   public CAVE_GROUND_CLEARANCE = 2.2;
   /** max turn (rad) of the centerline per segment at difficulty 1 */

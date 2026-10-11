@@ -348,7 +348,7 @@ export default async (state: CaveState) => {
     '🕹 human ball, WASD/arrows or a DualShock (left stick + A to jump)',
     '🎯 the followed ball is drawn solid, the rest fade to 50%',
     '🥅 the next gate ring glows and grows',
-    '⚡ a glowing boost pad refills the ball speed',
+    '🪙 a spinning coin adds score and a temporary speed boost',
     '🧭 ` toggles the wireframe view',
     '📉 the section gauge kills a ball that stops progressing',
   ].forEach((line, i) => {

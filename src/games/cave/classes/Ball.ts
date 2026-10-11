@@ -12,8 +12,8 @@ import { Sensor } from './Sensor';
 /** Inputs appended after the ray history and its class block: normalized
  *  speed, forward and lateral components of the velocity, then grounded. */
 const BALL_INPUTS = 4;
-/** Feature block: airborne, on-platform, on-boost, platform-ahead,
- *  boost-ahead, column-proximity, column-side, gate-delta, gate-heading,
+/** Feature block: airborne, on-platform, on-coin, platform-ahead,
+ *  coin-ahead, column-proximity, column-side, gate-delta, gate-heading,
  *  gate-pitch */
 const EXTRA_BRAIN_INPUTS = 10;
 
@@ -140,9 +140,13 @@ export class Ball {
   public finished = false;
 
   private stallFrames = 0;
-  /** frames of boost remaining: collecting a boost item pushes the ball and
-   *  lifts its speed cap while this runs; items refresh it */
-  private boostFrames = 0;
+  /** frames of temporary coin boost remaining: collecting a coin pushes the
+   *  ball and lifts its speed cap while this runs; a fresh coin refreshes it */
+  private coinBoostFrames = 0;
+  /** stacked permanent top-speed bonus from collected coins, 0..cap */
+  public permanentBoost = 0;
+  /** stable keys of the coins this ball already collected in this run */
+  private collectedCoins = new Set<number>();
   /** penalty for the death that just happened, charged with the crash speed */
   private deathPenalty = 0;
   private prevS = 0;
@@ -296,7 +300,9 @@ export class Ball {
     this.stallFrames = 0;
     this.deathPenalty = 0;
     this.speed = 0;
-    this.boostFrames = 0;
+    this.coinBoostFrames = 0;
+    this.permanentBoost = 0;
+    this.collectedCoins.clear();
     this.hit.dist = -config.BALL_RADIUS;
     this.gateHeading = 0;
     this.gatePitch = 0;
@@ -329,11 +335,16 @@ export class Ball {
     this.#move(cave);
     if (this.spinBounceFrames > 0) this.spinBounceFrames--;
     if (this.hitCooldown > 0) this.hitCooldown--;
-    if (this.boostFrames > 0) this.boostFrames--;
-    if (cave.boostAt(this.s, this.a) > 0.2) {
-      if (this.boostFrames <= 0 && this.useAI)
-        this.brain.score += config.BOOST_SCORE;
-      this.boostFrames = config.BOOST_DURATION;
+    if (this.coinBoostFrames > 0) this.coinBoostFrames--;
+    const coin = cave.coinUnder(this.s, this.a);
+    if (coin && !this.collectedCoins.has(coin.key)) {
+      this.collectedCoins.add(coin.key);
+      this.coinBoostFrames = config.COIN_BOOST_DURATION;
+      this.permanentBoost = Math.min(
+        config.COIN_PERMANENT_CAP,
+        this.permanentBoost + config.COIN_PERMANENT_BONUS,
+      );
+      if (this.useAI) this.brain.score += config.COIN_SCORE;
     }
     if (this.brain) this.#updateScore(cave);
     // the section gauge drains every frame and is refreshed on progress, so
@@ -363,7 +374,7 @@ export class Ball {
         const readings = this.sensor.readings;
         inputs.length = 0;
         for (let i = 0; i < readings.length; i++) inputs.push(readings[i]);
-        // the surface class of each current reading: -1 obstacle, +1 boost,
+        // the surface class of each current reading: -1 obstacle, +1 coin,
         // 0 ground or miss. The reading itself gates "nothing hit".
         const kinds = this.sensor.kinds;
         for (let i = 0; i < kinds.length; i++) inputs.push(kinds[i]);
@@ -392,7 +403,7 @@ export class Ball {
         const cellIndex = Math.floor(this.s / config.CAVE_FEATURE_CELL);
         const reach = config.CAVE_FEATURE_CELL * 1.5;
         let platformAhead = 0;
-        let boostAhead = 0;
+        let coinAhead = 0;
         let columnProximity = 0;
         let columnSide = 0;
         for (let i = cellIndex; i <= cellIndex + 2; i++) {
@@ -402,10 +413,9 @@ export class Ball {
             if (d >= 0)
               platformAhead = Math.max(platformAhead, 1 - Math.min(1, d));
           }
-          if (cell.boost) {
-            const d =
-              (cell.boost.centerS - cell.boost.halfLen - this.s) / reach;
-            if (d >= 0) boostAhead = Math.max(boostAhead, 1 - Math.min(1, d));
+          for (const coin of cell.coins) {
+            const d = (coin.centerS - coin.halfLen - this.s) / reach;
+            if (d >= 0) coinAhead = Math.max(coinAhead, 1 - Math.min(1, d));
           }
           for (const col of cell.columns) {
             const d = (col.centerS - col.halfLen - this.s) / reach;
@@ -427,9 +437,9 @@ export class Ball {
         }
         inputs.push(this.grounded ? 0 : 1);
         inputs.push(clamp(0, 1, cave.platformAt(this.s, surfaceA)));
-        inputs.push(clamp(0, 1, cave.boostAt(this.s, surfaceA)));
+        inputs.push(clamp(0, 1, cave.coinAt(this.s, surfaceA)));
         inputs.push(platformAhead);
-        inputs.push(boostAhead);
+        inputs.push(coinAhead);
         inputs.push(columnProximity);
         inputs.push(columnSide);
         inputs.push(this.gateDelta);
@@ -608,14 +618,12 @@ export class Ball {
     }
   }
 
-  /** the speed cap right now: a running boost lifts it above the normal
-   *  top speed, fading back down as the boost timer runs out */
+  /** the speed cap right now: collected coins raise it permanently up to
+   *  COIN_PERMANENT_CAP, and a fresh coin lifts it further for a while */
   effectiveMaxSpeed(): number {
-    if (this.boostFrames <= 0) return this.maxSpeed;
-    return (
-      this.maxSpeed +
-      config.BOOST_SPEED_BONUS * (this.boostFrames / config.BOOST_DURATION)
-    );
+    const permanent = 1 + this.permanentBoost;
+    const temp = this.coinBoostFrames > 0 ? 1 + config.COIN_SPEED_BONUS : 1;
+    return this.maxSpeed * permanent * temp;
   }
 
   /** refresh the cave frame at the ball's arc position: tangent as forward,
@@ -686,14 +694,14 @@ export class Ball {
       // stick-directed acceleration
       this.vx += (cfx * sy + crx * sx) * config.BALL_ACCEL * dt;
       this.vz += (cfz * sy + crz * sx) * config.BALL_ACCEL * dt;
-      // a boost item pushes along the cave tangent up to the lifted cap
-      if (this.boostFrames > 0) {
+      // a fresh coin pushes along the cave tangent up to the lifted cap
+      if (this.coinBoostFrames > 0) {
         const alongSpeed =
           this.vx * this.cx + this.vy * this.cy + this.vz * this.cz;
         if (alongSpeed < this.effectiveMaxSpeed()) {
-          this.vx += this.cx * config.BOOST_ACCEL * dt;
-          this.vy += this.cy * config.BOOST_ACCEL * dt;
-          this.vz += this.cz * config.BOOST_ACCEL * dt;
+          this.vx += this.cx * config.COIN_BOOST_ACCEL * dt;
+          this.vy += this.cy * config.COIN_BOOST_ACCEL * dt;
+          this.vz += this.cz * config.COIN_BOOST_ACCEL * dt;
         }
       }
       // speed cap: the stick drives horizontally, so cap horizontal speed

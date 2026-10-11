@@ -29,8 +29,11 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
     centerAt(s: number, out: object) {
       return Object.assign(out, { x: 0, y: 0, z: -s });
     },
-    boostAt(_s: number, _a: number) {
+    coinAt(_s: number, _a: number) {
       return 0;
+    },
+    coinUnder(_s: number, _a: number) {
+      return null;
     },
     platformAt(_s: number, _a: number) {
       return 0;
@@ -41,7 +44,7 @@ function floor(height = (_x: number, _z: number) => 0, grade = 0) {
         road: null,
         columns: [],
         ramp: null,
-        boost: null,
+        coins: [],
       };
     },
     castRay() {
@@ -150,9 +153,9 @@ describe('cave ball physics', () => {
     );
   });
 
-  test('a boost lifts the speed cap and pushes the ball past it', () => {
+  test('a collected coin lifts the speed cap and pushes the ball past it', () => {
     const cave = floor();
-    cave.boostAt = (s: number) => (s > 150 ? 1 : 0);
+    cave.coinUnder = (s: number) => (s > 150 ? { key: 1, influence: 1 } : null);
     const { ball } = settled();
     ball.controls.moveY = 1;
     tick(ball, cave, 500);

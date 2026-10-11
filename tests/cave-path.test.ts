@@ -83,20 +83,24 @@ test('the path guarantee keeps a drivable line on every seed', () => {
   }
 });
 
-test('a boosted line exists: pads and platforms appear on the early cave', () => {
+test('a rewarding line exists: coins and platforms appear on the early cave', () => {
   const terrain = cave(7);
-  let pads = 0;
+  let coinS = -1;
+  let coinA = 0;
   let platforms = 0;
   for (let i = 0; i < 12; i++) {
     const cell = terrain.featureCell(i);
-    if (cell.boost) pads++;
+    const first = cell.coins[0];
+    if (first) {
+      coinS = first.centerS;
+      coinA = first.centerA;
+    }
     if (cell.ramp) platforms++;
   }
-  expect(pads).toBeGreaterThan(0);
+  expect(coinS).toBeGreaterThanOrEqual(0);
   expect(platforms).toBeGreaterThan(0);
-  expect(
-    terrain.boostAt(terrain.featureCell(2).boost?.centerS ?? 0, Math.PI),
-  ).toBeGreaterThan(0.2);
+  // a coin footprint reads full strength at its own center
+  expect(terrain.coinAt(coinS, coinA)).toBeGreaterThan(0.5);
 });
 
 test('walls stop direct impacts and retain sphere clearance when balls slide around', () => {

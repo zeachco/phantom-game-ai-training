@@ -26,8 +26,8 @@ interface ChunkData {
   samples: Float32Array;
   mesh: THREE.Mesh | null;
   gates: THREE.Mesh[];
-  /** glowing boost items floating over this chunk's boost pads */
-  items: THREE.Mesh[];
+  /** spinning coin pickups floating over this chunk's coin footprints */
+  coins: THREE.Mesh[];
   /** Closed bronze obstacle meshes, separate from the rock tube. */
   walls: THREE.Mesh[];
 }
@@ -64,13 +64,15 @@ export interface FeatureCell {
     angleWidth: number;
     height: number;
   } | null;
-  /** boost pad on the driving band: a glowing patch that pushes the ball */
-  boost: {
+  /** one spinning coin pickup: its footprint on the driving band plus a
+   *  stable key so a ball collects each coin only once per run */
+  coins: {
     centerS: number;
-    halfLen: number;
     centerA: number;
+    halfLen: number;
     halfA: number;
-  } | null;
+    key: number;
+  }[];
   /** A bronze slab following any arc of the tunnel circumference. */
   wall: {
     /** leading face, where the step begins (the ball's collision plane) */
@@ -180,11 +182,9 @@ export class Cave {
   #obstacleTexture: THREE.Texture;
   #gateMaterial: THREE.MeshBasicMaterial;
   #gateNextMaterial: THREE.MeshBasicMaterial;
-  #boostItemGeometry: THREE.IcosahedronGeometry;
-  #boostItemMaterial: THREE.MeshBasicMaterial;
+  #coinGeometry: THREE.CylinderGeometry;
+  #coinMaterial: THREE.MeshBasicMaterial;
   #wallMaterial: THREE.MeshStandardMaterial;
-  /** animation clock for the spinning boost items, advanced by update() */
-  #time = 0;
 
   constructor(seed: number, scene: THREE.Scene) {
     this.seed = seed;
@@ -235,14 +235,14 @@ export class Cave {
       transparent: true,
       opacity: 0.85,
     });
-    this.#boostItemGeometry = new THREE.IcosahedronGeometry(
-      config.CAVE_BOOST_ITEM_RADIUS,
-      1,
+    this.#coinGeometry = new THREE.CylinderGeometry(
+      config.CAVE_COIN_RADIUS,
+      config.CAVE_COIN_RADIUS,
+      config.CAVE_COIN_THICKNESS,
+      20,
     );
-    this.#boostItemMaterial = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(config.CAVE_BOOST_ITEM_COLOR),
-      transparent: true,
-      opacity: 0.9,
+    this.#coinMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(config.CAVE_COIN_COLOR),
     });
     this.#wallMaterial = new THREE.MeshStandardMaterial({
       color: new THREE.Color(...config.CAVE_WALL_COLOR),
@@ -516,14 +516,32 @@ export class Cave {
         rise: config.CAVE_ROAD_RISE * (0.7 + 0.3 * rng()),
       };
     }
-    let boost: FeatureCell['boost'] = null;
-    if (rng() < config.CAVE_BOOST_CHANCE) {
-      boost = {
-        centerS: center + 20 + rng() * (config.CAVE_FEATURE_CELL - 40),
-        halfLen: 30 + rng() * 30,
-        centerA: Math.PI + (rng() - 0.5) * 0.2,
-        halfA: 0.18 + rng() * 0.12,
-      };
+    // A run of coins on the driving band: each coin gets its own footprint and
+    // a stable key so a ball can collect it exactly once per run.
+    const coins: FeatureCell['coins'] = [];
+    if (rng() < config.CAVE_COIN_CHANCE) {
+      const count =
+        config.CAVE_COIN_MIN +
+        Math.floor(rng() * (config.CAVE_COIN_MAX - config.CAVE_COIN_MIN + 1));
+      const centerA = Math.PI + (rng() - 0.5) * 0.5;
+      const runLen = (count - 1) * config.CAVE_COIN_SPACING;
+      const start =
+        center +
+        30 +
+        rng() * Math.max(1, config.CAVE_FEATURE_CELL - 60 - runLen);
+      // The run shares one footprint width; the last draw keeps the feature
+      // RNG stream aligned with the rest of the cave (same draw count as the
+      // old boost pads, so no other feature's dice shift).
+      const halfA = config.CAVE_COIN_HALF_A * (0.9 + 0.2 * rng());
+      for (let k = 0; k < count; k++) {
+        coins.push({
+          centerS: start + k * config.CAVE_COIN_SPACING,
+          centerA,
+          halfLen: config.CAVE_COIN_HALF_LEN,
+          halfA,
+          key: index * 64 + k,
+        });
+      }
     }
 
     // Volatility is the roughness of the stretch: columns make it hard, a
@@ -579,7 +597,7 @@ export class Cave {
       };
     }
 
-    const cell: FeatureCell = { volatility, road, columns, ramp, boost, wall };
+    const cell: FeatureCell = { volatility, road, columns, ramp, coins, wall };
     this.#featureCells.set(index, cell);
     return cell;
   }
@@ -1174,30 +1192,37 @@ export class Cave {
     return this.#rampInfluence(s, a);
   }
 
-  /** 0..1 boost pad influence at (s, a); the car triggers its push from it */
-  boostAt(s: number, a: number): number {
-    const progress = this.#terrainProgress(s);
-    if (progress <= 0) return 0;
+  /** The coin whose footprint contains (s, a), with its pickup influence and
+   *  stable key, or null. Scans the feature cells around s. */
+  coinUnder(s: number, a: number): { key: number; influence: number } | null {
     const cellIndex = Math.floor(s / config.CAVE_FEATURE_CELL);
-    let influence = 0;
+    let best: { key: number; influence: number } | null = null;
     for (let i = cellIndex - 1; i <= cellIndex + 1; i++) {
-      const pad = this.#featureCell(i).boost;
-      if (!pad) continue;
-      const along = this.#smoothPulse(s, pad.centerS, pad.halfLen);
-      if (along <= 0) continue;
-      const acrossRaw = 1 - this.#angleDistance(a, pad.centerA) / pad.halfA;
-      if (acrossRaw <= 0) continue;
-      influence = Math.max(influence, along * acrossRaw);
+      for (const coin of this.#featureCell(i).coins) {
+        const along = this.#smoothPulse(s, coin.centerS, coin.halfLen);
+        if (along <= 0) continue;
+        const acrossRaw = 1 - this.#angleDistance(a, coin.centerA) / coin.halfA;
+        if (acrossRaw <= 0) continue;
+        const influence = along * acrossRaw;
+        if (!best || influence > best.influence)
+          best = { key: coin.key, influence };
+      }
     }
-    return influence * progress;
+    return best;
+  }
+
+  /** 0..1 coin footprint influence at (s, a); the sensors read it as a reward
+   *  and the ball collects the coin it sits on */
+  coinAt(s: number, a: number): number {
+    return this.coinUnder(s, a)?.influence ?? 0;
   }
 
   /** Classify the cave surface at (s, a) for the sensors: -1 a rock column
-   *  the ball must dodge or jump, +1 a boost pad, 0 plain floor, wall, ramp or
-   *  road. The bronze slabs are separate meshes and are classified by the ray
-   *  that enters one, not here. */
+   *  the ball must dodge or jump, +1 a coin (reward), 0 plain floor, wall,
+   *  ramp or road. The bronze slabs are separate meshes and are classified by
+   *  the ray that enters one, not here. */
   surfaceKindAt(s: number, a: number): -1 | 0 | 1 {
-    if (this.boostAt(s, a) > 0.2) return 1;
+    if (this.coinAt(s, a) > 0.2) return 1;
     return this.#columnAt(s, a) ? -1 : 0;
   }
 
@@ -1610,7 +1635,7 @@ export class Cave {
       this.#material,
       this.#gateMaterial,
       this.#gateNextMaterial,
-      this.#boostItemMaterial,
+      this.#coinMaterial,
       this.#wallMaterial,
     ]) {
       material.wireframe = enabled;
@@ -1619,7 +1644,6 @@ export class Cave {
 
   /** build or drop the chunk meshes so the window [minS, maxS] stays meshed */
   update(minS: number, maxS: number, dt = 1 / 60) {
-    this.#time += dt;
     const minChunk = Math.max(0, Math.floor(minS / LEN));
     const maxChunk = Math.floor(maxS / LEN);
     for (let i = minChunk; i <= maxChunk; i++) {
@@ -1661,11 +1685,11 @@ export class Cave {
       this.#control.shift();
       this.#controlOffset++;
     }
-    // spin the boost items so they read as collectible pickups
+    // spin the coins around the floor normal so they read as pickups
     for (const chunk of this.#chunks.values()) {
-      for (const item of chunk.items) {
-        item.rotation.y += dt * 2.2;
-        item.rotation.x += dt * 1.1;
+      for (const coin of chunk.coins) {
+        const axis = coin.userData.spinAxis as THREE.Vector3;
+        coin.rotateOnWorldAxis(axis, dt * 2.6);
       }
     }
   }
@@ -1679,7 +1703,7 @@ export class Cave {
       this.#scene.remove(gate);
       gate.geometry.dispose();
     }
-    for (const item of chunk.items) this.#scene.remove(item);
+    for (const coin of chunk.coins) this.#scene.remove(coin);
     for (const wall of chunk.walls) {
       this.#scene.remove(wall);
       wall.geometry.dispose();
@@ -1687,10 +1711,10 @@ export class Cave {
     this.#chunks.delete(chunk.index);
   }
 
-  /** number of boost items currently meshed, used by the HUD/tests */
-  public boostItemCount() {
+  /** number of coins currently meshed, used by the HUD/tests */
+  public coinCount() {
     let count = 0;
-    for (const chunk of this.#chunks.values()) count += chunk.items.length;
+    for (const chunk of this.#chunks.values()) count += chunk.coins.length;
     return count;
   }
 
@@ -1753,13 +1777,13 @@ export class Cave {
         const road = this.#roadInfluence(s, a);
         const shade =
           0.62 + 0.5 * this.#bumpNoise01(s, a) * (1 - road) + road * 0.22;
-        // Feature tint over the rock shade: boost pads glow amber.
+        // Feature tint over the rock shade: coin footprints glow gold.
         let cr = shade;
         let cg = shade;
         let cb = shade;
-        const pad = this.boostAt(s, a);
+        const pad = this.coinAt(s, a);
         if (pad > 0.35) {
-          const tint = config.CAVE_BOOST_COLOR;
+          const tint = config.CAVE_COIN_TINT;
           const t = (pad - 0.35) / 0.65;
           cr = cr * (1 - t) + tint[0] * t;
           cg = cg * (1 - t) + tint[1] * t;
@@ -1827,9 +1851,9 @@ export class Cave {
       gates.push(ring);
     }
 
-    // glowing boost items floating over this chunk's boost pads: collected by
-    // rolling through the pad underneath (boostAt drives the push)
-    const items: THREE.Mesh[] = [];
+    // spinning coins floating over this chunk's coin footprints: collected by
+    // rolling through the footprint underneath (coinUnder drives the reward)
+    const coins: THREE.Mesh[] = [];
     const walls: THREE.Mesh[] = [];
     const firstCell = Math.floor((index * LEN) / config.CAVE_FEATURE_CELL) - 1;
     const lastCell =
@@ -1850,34 +1874,49 @@ export class Cave {
         walls.push(mesh);
       }
 
-      const pad = feature.boost;
-      if (!pad) continue;
-      if (Math.floor(pad.centerS / LEN) !== index) continue;
-      const at = this.surface(pad.centerS, pad.centerA, {
-        x: 0,
-        y: 0,
-        z: 0,
-      });
-      const center = this.centerAt(pad.centerS, { x: 0, y: 0, z: 0 });
-      let dx = center.x - at.x;
-      let dy = center.y - at.y;
-      let dz = center.z - at.z;
-      const len = Math.hypot(dx, dy, dz) || 1;
-      dx /= len;
-      dy /= len;
-      dz /= len;
-      const lift = config.CAVE_BOOST_ITEM_RADIUS + 2.2;
-      const orb = new THREE.Mesh(
-        this.#boostItemGeometry,
-        this.#boostItemMaterial,
-      );
-      orb.position.set(at.x + dx * lift, at.y + dy * lift, at.z + dz * lift);
-      orb.frustumCulled = false;
-      this.#scene.add(orb);
-      items.push(orb);
+      for (const coin of feature.coins) {
+        if (Math.floor(coin.centerS / LEN) !== index) continue;
+        const at = this.surface(coin.centerS, coin.centerA, {
+          x: 0,
+          y: 0,
+          z: 0,
+        });
+        const center = this.centerAt(coin.centerS, { x: 0, y: 0, z: 0 });
+        let dx = center.x - at.x;
+        let dy = center.y - at.y;
+        let dz = center.z - at.z;
+        const len = Math.hypot(dx, dy, dz) || 1;
+        dx /= len;
+        dy /= len;
+        dz /= len;
+        const lift = config.CAVE_COIN_LIFT;
+        const ct: Pt = { x: 0, y: 0, z: 0 };
+        const cn: Pt = { x: 0, y: 0, z: 0 };
+        const cb: Pt = { x: 0, y: 0, z: 0 };
+        this.tangent(coin.centerS, ct);
+        this.#frameFromTangent(ct, cn, cb);
+        const coinMesh = new THREE.Mesh(this.#coinGeometry, this.#coinMaterial);
+        coinMesh.position.set(
+          at.x + dx * lift,
+          at.y + dy * lift,
+          at.z + dz * lift,
+        );
+        // the cylinder's axis follows the tangent, so the disk faces down the
+        // cave; spinning it around the floor normal flashes face then edge
+        const basis = new THREE.Matrix4().makeBasis(
+          new THREE.Vector3(cb.x, cb.y, cb.z),
+          new THREE.Vector3(ct.x, ct.y, ct.z),
+          new THREE.Vector3(cn.x, cn.y, cn.z),
+        );
+        coinMesh.quaternion.setFromRotationMatrix(basis);
+        coinMesh.userData.spinAxis = new THREE.Vector3(dx, dy, dz);
+        coinMesh.frustumCulled = false;
+        this.#scene.add(coinMesh);
+        coins.push(coinMesh);
+      }
     }
 
-    const chunk: ChunkData = { index, samples, mesh, gates, items, walls };
+    const chunk: ChunkData = { index, samples, mesh, gates, coins, walls };
     this.#chunks.set(index, chunk);
     return chunk;
   }
@@ -1946,8 +1985,8 @@ export class Cave {
     this.#obstacleTexture.dispose();
     this.#gateMaterial.dispose();
     this.#gateNextMaterial.dispose();
-    this.#boostItemGeometry.dispose();
-    this.#boostItemMaterial.dispose();
+    this.#coinGeometry.dispose();
+    this.#coinMaterial.dispose();
     this.#wallMaterial.dispose();
   }
 }
