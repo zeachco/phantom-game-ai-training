@@ -1,6 +1,12 @@
 import * as THREE from 'three';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import { fileUtilities } from '../../ai/utils';
+import { Visualizer } from '../../ai/v2/Visualizer';
+import { layerColor } from '../../utilities/ai/colors';
+import { contrastText } from '../../utilities/colors';
+import { createCanvas, resizeCanvas } from '../../utilities/dom';
+import { GamePad } from '../../utilities/inputs/Gamepad';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Ball } from './classes/Ball';
 import { CaveRace } from './classes/CaveRace';
@@ -10,6 +16,13 @@ import { SensorViz } from './classes/SensorViz';
 import { clearScoreRecords, type defaultState } from './utilities';
 
 type CaveState = typeof defaultState;
+
+const neuralVisualizer = new Visualizer(config);
+
+/** the panel takes that share of the screen while open, capped in width,
+ * the 3D cave keeps whatever is left */
+const PANEL_RATIO = 0.75;
+const PANEL_MAX_WIDTH = 800;
 
 const io = fileUtilities('cave');
 if (config.CLEAR_STORAGE) io.discardModels();
@@ -97,10 +110,39 @@ export default async (state: CaveState) => {
   hint.style.maxWidth = 'calc(100vw - 130px)';
   document.body.appendChild(hint);
 
-  // Model controls: the training saves live under the `cave_` prefix. There is
-  // no bundled default, so a fresh run starts from random brains.
-  const modelBar = document.createElement('div');
-  modelBar.className = 'cave-models';
+  // ---- side panel: model actions, brain follow keys and the live network
+  // visualization ported from the circuit game. It starts hidden. ----
+  const networkCanvas = createCanvas();
+  networkCanvas.className = 'neural-canvas';
+  const networkCtx = networkCanvas.getContext('2d');
+
+  const followPad = new GamePad(new Map());
+  /** 0 follows the best-scoring AI ball, 1-9 that brain layer, 'mixed' the
+   *  mixed brain; the human ball takes over while the player drives */
+  let follow: number | 'mixed' = 0;
+  /** the AI ball the camera currently tracks and when it took it; a new
+   *  leader only takes over past FOLLOW_SWITCH_SCORE_GAP or once
+   *  FOLLOW_SWITCH_MIN_MS have elapsed, so a close duel stops flickering */
+  let followTarget: Ball | undefined;
+  let followTargetSince = 0;
+  const FOLLOW_SWITCH_SCORE_GAP = 5;
+  const FOLLOW_SWITCH_MIN_MS = 5_000;
+  let panelOpen = false;
+
+  const panel = document.createElement('aside');
+  panel.className = 'side-panel';
+  panel.style.width = `${PANEL_RATIO * 100}%`;
+  panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'side-panel-toggle';
+  toggleBtn.textContent = '❮';
+  toggleBtn.setAttribute('aria-label', 'Toggle models panel');
+  toggleBtn.onclick = () => {
+    panelOpen = panel.classList.toggle('open');
+    toggleBtn.textContent = panelOpen ? '❯' : '❮';
+  };
+
   const addModelButton = (text: string, title: string, onClick: () => void) => {
     const button = document.createElement('button');
     button.className = 'model-btn';
@@ -109,7 +151,9 @@ export default async (state: CaveState) => {
     button.onclick = onClick;
     return button;
   };
-  modelBar.append(
+  const modelActions = document.createElement('div');
+  modelActions.className = 'model-actions';
+  modelActions.append(
     addModelButton('Save models', 'Download the cave training saves', () =>
       downloadModelArchive('cave'),
     ),
@@ -150,7 +194,171 @@ export default async (state: CaveState) => {
       race.initialize();
     }),
   );
-  document.body.appendChild(modelBar);
+
+  const followKeys = document.createElement('div');
+  followKeys.className = 'follow-keys';
+  const followLabel = document.createElement('span');
+  followLabel.textContent = 'Follow';
+
+  const setFollow = (value: number | 'mixed') => {
+    follow = value;
+    followTarget = undefined;
+    followKeys.querySelectorAll('button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.follow === String(value));
+    });
+    // Mixed colors change every frame, so mixed and "all" keep a neutral DOM
+    // outline instead of repainting the panel continuously.
+    const color =
+      typeof value === 'number' && value > 0
+        ? layerColor(value, config.MAX_NETWORK_LAYERS)
+        : '#c4c4c4';
+    networkCanvas.style.setProperty('--network-color', color);
+  };
+
+  /** one entry per follow button: brain 1-9, all AI, mixed */
+  const followBtns = new Map<
+    HTMLButtonElement,
+    { key: string; running?: boolean }
+  >();
+
+  const resetBrainSaves = (value: number | 'mixed') => {
+    if (value === 'mixed') {
+      if (!confirm(`Reset the saved weights of the mixed brain?`)) return;
+      io.discardModel(MIXED_LEVELS, MIXED_KIND);
+    } else if (value === 0) {
+      if (!confirm('Reset all the saved cave weights?')) return;
+      io.discardGameModels();
+    } else {
+      if (!confirm(`Reset the saved weights of brain ${value}?`)) return;
+      io.discardModel(value);
+    }
+    console.info(
+      `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
+    );
+    race.initialize();
+    followTarget = undefined;
+  };
+
+  /** long press (or right click) a brain button to reset its saved weights */
+  const armReset = (
+    btn: HTMLButtonElement,
+    value: number | 'mixed',
+    onClick: () => void,
+  ) => {
+    let timer = 0;
+    let swallowClick = false;
+
+    // registered before the follow click, so the click released after a
+    // long press never also switches the camera
+    btn.addEventListener('click', (e) => {
+      if (swallowClick) {
+        swallowClick = false;
+        e.stopImmediatePropagation();
+        return;
+      }
+      onClick();
+    });
+
+    const cancelHold = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = 0;
+    };
+    btn.addEventListener('pointerdown', () => {
+      timer = window.setTimeout(() => {
+        timer = 0;
+        swallowClick = true;
+        resetBrainSaves(value);
+      }, 650);
+    });
+    btn.addEventListener('pointerup', cancelHold);
+    btn.addEventListener('pointerleave', cancelHold);
+    btn.addEventListener('pointercancel', cancelHold);
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      cancelHold();
+      if (swallowClick) swallowClick = false;
+      else resetBrainSaves(value);
+    });
+  };
+
+  followKeys.append(followLabel);
+  (
+    [
+      ['brain 1', 1],
+      ['brain 2', 2],
+      ['brain 3', 3],
+      ['brain 4', 4],
+      ['brain 5', 5],
+      ['brain 6', 6],
+      ['brain 7', 7],
+      ['brain 8', 8],
+      ['brain 9', 9],
+      ['all', 0],
+      ['mixed', 'mixed'],
+    ] as [string, number | 'mixed'][]
+  ).forEach(([label, value]) => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.dataset.follow = String(value);
+    btn.title = 'Click to follow, long press or right-click to reset';
+    const color =
+      typeof value === 'number' && value > 0
+        ? layerColor(value, config.MAX_NETWORK_LAYERS)
+        : '#c4c4c4';
+    btn.style.setProperty('--btn-color', color);
+    // black or white, whichever keeps the higher contrast on the ball color
+    btn.style.setProperty('--btn-text', contrastText(color));
+    followKeys.append(btn);
+    followBtns.set(btn, { key: String(value) });
+    armReset(btn, value, () => setFollow(value));
+  });
+  setFollow(0);
+
+  // the brain preview lives in the panel, it grows into whatever is left
+  const netWrap = document.createElement('div');
+  netWrap.style.flex = '1';
+  netWrap.style.position = 'relative';
+  netWrap.style.minHeight = '0';
+  networkCanvas.style.position = 'absolute';
+  networkCanvas.style.left = '0';
+  networkCanvas.style.top = '0';
+  netWrap.append(networkCanvas);
+
+  const legend = document.createElement('div');
+  legend.className = 'side-panel-legend';
+  [
+    'At a glance',
+    '🕹 human ball, WASD/arrows or a DualShock (left stick + A to jump)',
+    '🎯 the followed ball is drawn solid, the rest fade to 50%',
+    '🥅 the next gate ring glows and grows',
+    '⚡ a glowing boost pad refills the ball speed',
+    '🧭 ` toggles the wireframe view',
+    '📉 the section gauge kills a ball that stops progressing',
+  ].forEach((line, i) => {
+    const el = document.createElement('span');
+    el.textContent = line;
+    if (i === 0) el.className = 'legend-title';
+    legend.append(el);
+  });
+
+  const about = document.createElement('div');
+  about.className = 'side-panel-about';
+  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one for the rock ahead (the mixed brain). Each ball is a rolling sphere in a streamed 3D cave: a forward sensor cone feeds its brain, and gravity, jumps and hard wall impacts decide who survives. Gates are claimed in order along the tunnel, and a section gauge kills any ball that stops making forward progress. The cave is infinite: each time a brain completes the last gate the seed advances to a fresh random cave, and groups that already finished a cave return as a mutation-only swarm of their champion, so brains are selected for completing unknown caves, not for shaving frames off one. A random explorer and a scout that re-runs the group's oldest saved line keep the population from converging on a single overfit brain.`;
+
+  const footer = document.createElement('div');
+  footer.className = 'side-panel-footer';
+  footer.textContent = 'Long press for reset (right-click also works)';
+
+  const info = document.createElement('div');
+  info.className = 'side-panel-info';
+  info.append(about, legend);
+
+  const panelContent = document.createElement('div');
+  panelContent.className = 'side-panel-content';
+  panelContent.append(modelActions, followKeys, netWrap, info, footer);
+
+  panel.append(toggleBtn, panelContent);
+  document.body.appendChild(panel);
 
   const position = document.createElement('div');
   position.className = 'cave-position';
@@ -339,13 +547,104 @@ export default async (state: CaveState) => {
     });
   };
 
-  let followed = state.human ?? state.balls[0];
+  let followed: Ball = state.human ?? state.balls[0];
   let lastHud = 0;
   const chaseCamera = new ChaseCamera();
+
+  /** The ball the camera and the network visualizer follow: the player while
+   *  they drive, otherwise the best-scoring ball of the selected category. A
+   *  new leader only takes over past FOLLOW_SWITCH_SCORE_GAP or once
+   *  FOLLOW_SWITCH_MIN_MS have elapsed, so a close duel stops flickering. */
+  function followedBall(): Ball {
+    const human = state.human;
+    if (human?.controls.playerActive && !human.damaged) return human;
+    const inCategory = (ball: Ball) =>
+      !ball.damaged &&
+      (follow === 'mixed'
+        ? ball.brain instanceof MixedNetwork
+        : follow > 0
+          ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
+          : true);
+    let leader: Ball | undefined;
+    for (const ball of state.balls) {
+      if (
+        ball.useAI &&
+        inCategory(ball) &&
+        (!leader || ball.brain.score > leader.brain.score)
+      )
+        leader = ball;
+    }
+    if (!leader) leader = state.balls.find((ball) => !ball.damaged);
+    const current = followTarget;
+    const now = performance.now();
+    if (
+      current &&
+      current !== leader &&
+      leader &&
+      state.balls.includes(current) &&
+      inCategory(current) &&
+      leader.brain.score - current.brain.score <= FOLLOW_SWITCH_SCORE_GAP &&
+      now - followTargetSince < FOLLOW_SWITCH_MIN_MS
+    )
+      return current;
+    if (leader !== current) {
+      followTarget = leader;
+      followTargetSince = now;
+    }
+    return leader ?? state.balls[0];
+  }
+
+  /** Fill the follow buttons with their running/dead state once per HUD tick. */
+  function updateFollowButtons() {
+    const running = new Set<string>();
+    for (const ball of state.balls) {
+      if (ball.damaged || !ball.useAI) continue;
+      running.add(
+        ball.brain instanceof MixedNetwork ? 'mixed' : String(ball.brainLayers),
+      );
+    }
+    followBtns.forEach((info, btn) => {
+      const isRunning =
+        info.key === '0' ? state.living > 0 : running.has(info.key);
+      if (isRunning === info.running) return;
+      info.running = isRunning;
+      btn.classList.toggle('running', isRunning);
+      btn.classList.toggle('dead', !isRunning);
+    });
+  }
+
+  /** The 3D viewport and the network canvas split the window while the panel
+   *  is open, exactly like the circuit game. */
+  let viewWidth = window.innerWidth;
+  function layoutViewport() {
+    const panelWidth = Math.round(
+      Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH),
+    );
+    const next = panelOpen ? window.innerWidth - panelWidth : window.innerWidth;
+    if (next !== viewWidth) {
+      viewWidth = next;
+      renderer.setSize(next, window.innerHeight);
+      camera.aspect = next / window.innerHeight;
+      camera.updateProjectionMatrix();
+    }
+    if (panelOpen)
+      resizeCanvas(
+        networkCanvas,
+        networkCtx,
+        netWrap.clientWidth,
+        netWrap.clientHeight,
+      );
+  }
 
   const loop = new GameLoop();
   let accumulator = 0;
   loop.play((_elapsed, dt) => {
+    // 1-9 follow a brain layer, 0 the mixed brain (click the panel for "all").
+    for (let digit = 0; digit <= 9; digit++) {
+      if (followPad.once(`Digit${digit}`))
+        setFollow(digit === 0 ? 'mixed' : digit);
+    }
+
     // Keep physics, AI and race timers at 60 Hz on every display. Limit
     // catch-up after tab suspension so it cannot spiral into a long frame.
     accumulator = Math.min(accumulator + dt, 5 / 60);
@@ -356,16 +655,7 @@ export default async (state: CaveState) => {
     }
 
     const balls = state.balls;
-    const living = balls.filter((ball) => !ball.damaged);
-    const human = state.human;
-    // The camera follows the ball with the best score until the player takes
-    // the controls, then it stays on the player's ball.
-    const best = living.reduce(
-      (leader, ball) => (ball.brain.score > leader.brain.score ? ball : leader),
-      living[0] ?? human ?? balls[0],
-    );
-    followed =
-      human && human.controls.playerActive && !human.damaged ? human : best;
+    followed = followedBall();
 
     const seen = new Set<string>();
     for (const ball of balls) {
@@ -434,8 +724,17 @@ export default async (state: CaveState) => {
     }
 
     renderer.render(scene, camera);
+    layoutViewport();
+    // The human ball has a stub brain, so keep showing the best racing AI
+    // while the player drives.
+    const visualized = followed.useAI
+      ? followed
+      : state.balls.find((ball) => ball.useAI && !ball.damaged);
+    if (panelOpen && visualized?.brain)
+      neuralVisualizer.renderNetwork(networkCtx, visualized.brain);
     if (now - lastHud > 50) {
       lastHud = now;
+      updateFollowButtons();
       const followedIndex = balls.indexOf(followed);
       const rank =
         1 +
@@ -519,9 +818,9 @@ export default async (state: CaveState) => {
   });
 
   window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    // force layoutViewport to reapply the split at the new window size
+    viewWidth = -1;
+    layoutViewport();
   });
   window.addEventListener('keydown', (event) => {
     if (event.code === 'Backquote' || event.key === '`') {

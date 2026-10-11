@@ -1,20 +1,21 @@
 import * as THREE from 'three';
 import { NeuralNetwork } from '../../../ai/Network';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
-import { lerp } from '../../../utilities/math';
 import { getRandomColor } from '../../../utilities/colors';
+import { lerp } from '../../../utilities/math';
+import { ControlType } from '../types';
 import type { Cave, RadialHit } from './Cave';
 import { config } from './Config';
 import { Controls } from './Controls';
-import { ControlType } from '../types';
 import { Sensor } from './Sensor';
 
 /** Inputs appended after the ray history: normalized speed, forward and
  *  lateral components of the velocity, then grounded. */
 const BALL_INPUTS = 4;
 /** Feature block: airborne, on-platform, on-boost, platform-ahead,
- *  boost-ahead, column-proximity, column-side, gate-delta */
-const EXTRA_BRAIN_INPUTS = 8;
+ *  boost-ahead, column-proximity, column-side, gate-delta, gate-heading,
+ *  gate-pitch */
+const EXTRA_BRAIN_INPUTS = 10;
 
 export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
   // AI controls have no event handlers, so their enumerable fields are the
@@ -109,6 +110,12 @@ export class Ball {
   public gateY = 0;
   public gateZ = 0;
   public gateDelta = 0;
+  /** signed angle from the velocity heading to the ball→gate vector, in
+   *  [-1, 1]; 0 means the ball is driving straight at the next gate */
+  public gateHeading = 0;
+  /** signed elevation of the ball→gate vector off the velocity/tangent plane,
+   *  in [-1, 1]; positive means the gate sits above the heading plane */
+  public gatePitch = 0;
   /** performance.now() of the crash: the corpse fades from 0.5 to 0 over
    *  DEAD_LIFETIME; the whole brain group respawns when every corpse has expired */
   public deathTime = 0;
@@ -296,6 +303,8 @@ export class Ball {
     this.hit.dist = -config.BALL_RADIUS;
     this.hasPrevSensors = false;
     this.prevSensorInputs.fill(0);
+    this.gateHeading = 0;
+    this.gatePitch = 0;
   }
 
   update(cave: Cave) {
@@ -337,10 +346,10 @@ export class Ball {
     this.deathCause = crash
       ? 'crash'
       : stall
-      ? 'stall'
-      : gauge
-      ? 'gauge'
-      : 'none';
+        ? 'stall'
+        : gauge
+          ? 'gauge'
+          : 'none';
     if (this.damaged && this.brain) {
       this.brain.score -= this.deathPenalty + this.speed;
     }
@@ -403,8 +412,8 @@ export class Ball {
               wrap > Math.PI
                 ? wrap - Math.PI * 2
                 : wrap < -Math.PI
-                ? wrap + Math.PI * 2
-                : wrap;
+                  ? wrap + Math.PI * 2
+                  : wrap;
             const lateral = Math.abs(offset) * config.CAVE_RADIUS;
             const threat = (1 - d) * Math.max(0, 1 - lateral / 45);
             if (threat > columnProximity) {
@@ -421,6 +430,8 @@ export class Ball {
         inputs.push(columnProximity);
         inputs.push(columnSide);
         inputs.push(this.gateDelta);
+        inputs.push(this.gateHeading);
+        inputs.push(this.gatePitch);
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         const outputs = this.brain.process(inputs);
@@ -544,8 +555,55 @@ export class Ball {
       const dot = this.fx * dx + this.fy * dy + this.fz * dz;
       const around = crossX * this.ux + crossY * this.uy + crossZ * this.uz;
       this.gateDelta = clamp(-1, 1, Math.atan2(around, dot) / Math.PI);
+      // The same bearing, measured from where the ball is actually heading:
+      // the velocity direction while it moves, the cave tangent while not.
+      // Yaw is the turn to line up with the gate, pitch the climb to it, so
+      // together they give the full 3D heading error to the next gate.
+      const dist = Math.hypot(dx, dy, dz) || 1;
+      let hx = this.vx;
+      let hy = this.vy;
+      let hz = this.vz;
+      const speed = Math.hypot(hx, hy, hz);
+      if (speed < config.SENSOR_MIN_AXIS_SPEED) {
+        hx = this.fx;
+        hy = this.fy;
+        hz = this.fz;
+      } else {
+        hx /= speed;
+        hy /= speed;
+        hz /= speed;
+      }
+      // right = heading x up, normalized so a near-vertical heading stays sane
+      let rxv = hy * this.uz - hz * this.uy;
+      let ryv = hz * this.ux - hx * this.uz;
+      let rzv = hx * this.uy - hy * this.ux;
+      const rlen = Math.hypot(rxv, ryv, rzv) || 1;
+      rxv /= rlen;
+      ryv /= rlen;
+      rzv /= rlen;
+      const dirX = dx / dist;
+      const dirY = dy / dist;
+      const dirZ = dz / dist;
+      this.gateHeading = clamp(
+        -1,
+        1,
+        Math.atan2(
+          dirX * rxv + dirY * ryv + dirZ * rzv,
+          dirX * hx + dirY * hy + dirZ * hz,
+        ) / Math.PI,
+      );
+      this.gatePitch = clamp(
+        -1,
+        1,
+        Math.asin(
+          clamp(-1, 1, dirX * this.ux + dirY * this.uy + dirZ * this.uz),
+        ) /
+          (Math.PI / 2),
+      );
     } else {
       this.gateDelta = 0;
+      this.gateHeading = 0;
+      this.gatePitch = 0;
     }
   }
 
@@ -693,10 +751,8 @@ export class Ball {
       this.s = this.hit.s;
       this.a = this.hit.a;
       // slippery ground, mild air drag
-      const drag = Math.pow(
-        this.grounded ? config.BALL_ROLL_DRAG : config.BALL_AIR_DRAG,
-        dt,
-      );
+      const drag =
+        (this.grounded ? config.BALL_ROLL_DRAG : config.BALL_AIR_DRAG) ** dt;
       this.vx *= drag;
       this.vy *= drag;
       this.vz *= drag;
@@ -707,7 +763,7 @@ export class Ball {
         this.avy = (n.z * this.vx - n.x * this.vz) / this.radius;
         this.avz = (n.x * this.vy - n.y * this.vx) / this.radius;
       } else if (!this.grounded) {
-        const spin = Math.pow(config.BALL_SPIN_DAMP, dt);
+        const spin = config.BALL_SPIN_DAMP ** dt;
         this.avx *= spin;
         this.avy *= spin;
         this.avz *= spin;
@@ -767,8 +823,9 @@ export class Ball {
   }
 
   /** A hard side impact reverses the spin and retains half its angular speed,
-   *  and costs a point: the ball bounced back off an obstacle. Floor and slab
-   *  tops are excluded, only side contacts land here. */
+   *  costs a point and drains part of the section gauge: the ball bounced back
+   *  off an obstacle instead of clearing it. Floor and slab tops are excluded,
+   *  only side contacts land here. */
   #bounceSpin() {
     this.avx *= -0.5;
     this.avy *= -0.5;
@@ -777,6 +834,11 @@ export class Ball {
     if (this.hitCooldown <= 0) {
       this.hitCooldown = config.BALL_HIT_COOLDOWN_FRAMES;
       this.brain.score -= config.OBSTACLE_HIT_SCORE;
+      this.sectionFramesRemaining = Math.max(
+        0,
+        this.sectionFramesRemaining -
+          config.SECTION_BUDGET_FRAMES * config.OBSTACLE_GAUGE_PENALTY,
+      );
     }
   }
 

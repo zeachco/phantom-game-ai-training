@@ -132,6 +132,9 @@ export class CaveRace {
   }
 
   #isExplorerSlot(group: Group, slot: number) {
+    // the demo profile is mutations only, so no random explorer and no scout
+    // ever replaces one of its three slots
+    if (config.DEMO) return false;
     if (slot === 0) return false;
     if (this.#groupSeedGates(group) >= config.EXPLORER_LAP_LIMIT) return false;
     const size = group.mutationOnly
@@ -141,6 +144,7 @@ export class CaveRace {
   }
 
   #isScoutSlot(group: Group, slot: number) {
+    if (config.DEMO) return false;
     if (group.mutationOnly || group.isMixed) return false;
     return slot === config.CARS_PER_GROUP - 1 - config.EXPLORER_CARS;
   }

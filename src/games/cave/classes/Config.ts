@@ -1,8 +1,14 @@
 import { CTRL_COLORS } from '../../../ai/utils';
 
+/** `?demo=true` is the light showcase profile: the cave runs a tiny
+ *  mutation-only population, so a hosted demo never grinds a weak machine. */
+export const isDemo =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('demo') === 'true';
+
 export function likelyLagsOnHeavyJs(): boolean {
   if (typeof window === 'undefined') return true;
-  if (location.href.includes('demo=true')) return true;
+  if (isDemo) return true;
   const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
   const memory =
     (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8; // Chromium only, GiB, rounded down to 0.25..8
@@ -19,14 +25,17 @@ class Config {
    *  population that has run many caves keeps the ability to escape the
    *  champion line it converged on */
   public MIN_MUTATION_LVL = 0.1;
+  /** the demo profile only simulates three balls per brain, one original
+   *  and two mutations; the full profile is much richer */
+  public DEMO = isDemo;
   /** every brain category runs a pool of exactly this many balls, slots
    *  0..N-1. Much smaller than the car game: the cave sphere physics and the
    *  ray sensors cost far more per ball, so the 3D training pool stays small */
-  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 4 : 6;
+  public CARS_PER_GROUP = isDemo ? 3 : likelyLagsOnHeavyJs() ? 4 : 6;
   /** a group that has seen one of its cars finish respawns as a
    *  mutation-only swarm of this many cars, on slots 1..N, so the untouched
    *  champion never re-enters that pool */
-  public FINISHED_CARS_PER_GROUP = 5;
+  public FINISHED_CARS_PER_GROUP = isDemo ? 3 : 5;
   /** a finished group's cars mutate at max / this divisor: the brain already
    *  won this cave, but the swarm keeps hunting genuinely different lines
    *  for the next one instead of freezing the champion */
@@ -39,8 +48,9 @@ class Config {
   public MUTATION_LADDER_CAP = 10;
   /** the last slots of a pool drive a fresh fully-random brain instead of a
    *  champion mutation: a standing source of novelty, so the population can
-   *  never fully converge on one overfit line */
-  public EXPLORER_CARS = 1;
+   *  never fully converge on one overfit line. The demo runs originals and
+   *  mutations only, nothing random */
+  public EXPLORER_CARS = isDemo ? 0 : 1;
   /** random explorers only earn a car slot while the group is still finding
    *  its feet: once its cars have claimed this many gates on the current
    *  seed, the line is proven and the slot reverts to a regular mutation
@@ -311,6 +321,10 @@ class Config {
   /** score lost when a hard side impact bounces the ball back off an
    *  obstacle: the rock banks and the bronze slabs both count */
   public OBSTACLE_HIT_SCORE = 1;
+  /** share of the section gauge a side impact costs. A ball that keeps
+   *  bouncing back off obstacles drains its own liveness budget, while one
+   *  that rolls over the top is untouched */
+  public OBSTACLE_GAUGE_PENALTY = 0.1;
   /** frames after an obstacle hit before another one can be charged, so one
    *  impact does not bill once per collision substep */
   public BALL_HIT_COOLDOWN_FRAMES = 10;
