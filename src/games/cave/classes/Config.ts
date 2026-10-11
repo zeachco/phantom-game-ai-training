@@ -111,7 +111,7 @@ class Config {
   // down the axis and a shorter reach at the rim, so the brain gets a 3D view
   // of the tube ahead. Two extra rays stay world-up and world-down for the
   // floor and the ceiling regardless of which way the ball is moving.
-  public SENSORS = 19;
+  public SENSORS = 9;
   /** total cone angle: the rim sits this many radians off the movement axis */
   public SENSOR_ANGLE = (Math.PI / 180) * 120;
   /** concentric rings the cone spreads its rays over, besides the center ray;

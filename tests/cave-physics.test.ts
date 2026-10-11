@@ -178,9 +178,9 @@ describe('cave ball physics', () => {
     const { inputCount, outputCount } = getCaveBrainDimensions(
       ball.sensor!.rayCount,
     );
-    // rayCount current readings + rayCount surface kinds + rayCount previous
-    // readings, then the 4-value ball block and the 10-value feature block
-    expect(inputCount).toBe(ball.sensor!.rayCount * 3 + 4 + 10);
+    // rayCount current readings + rayCount surface kinds, then the 4-value
+    // ball block and the 10-value feature block
+    expect(inputCount).toBe(ball.sensor!.rayCount * 2 + 4 + 10);
     expect(outputCount).toBe(3);
     expect(() => ball.update(cave)).not.toThrow();
   });
