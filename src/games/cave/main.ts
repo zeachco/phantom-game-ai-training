@@ -123,21 +123,6 @@ export default async (state: CaveState) => {
   scoreBoard.setAttribute('aria-label', 'Best score per brain group');
   document.body.appendChild(scoreBoard);
 
-  const hint = document.createElement('div');
-  hint.textContent =
-    'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe\nAI focus draws its sensor cone';
-  hint.style.position = 'fixed';
-  hint.style.bottom = '12px';
-  hint.style.right = '24px';
-  hint.style.zIndex = '2';
-  hint.style.color = '#e8edf4';
-  hint.style.font = '600 12px monospace';
-  hint.style.textShadow = '0 1px 3px #000';
-  hint.style.whiteSpace = 'pre-line';
-  hint.style.textAlign = 'right';
-  hint.style.pointerEvents = 'none';
-  document.body.appendChild(hint);
-
   // ---- side panel: model actions, brain follow keys and the live network
   // visualization ported from the circuit game. It starts hidden. ----
   const networkCanvas = createCanvas();
@@ -663,24 +648,64 @@ export default async (state: CaveState) => {
     return best;
   }
 
+  function bestBall(group: Group): Ball | undefined {
+    return group.pool.reduce<Ball | undefined>(
+      (best, ball) =>
+        !best || ball.brain.score > best.brain.score ? ball : best,
+      undefined,
+    );
+  }
+
   /** Redraw the top-left board with each group's best score, in a stable order
-   *  (layers 1..9, then mixed); only rewrites the DOM when a value changes. */
+   *  (layers 1..9, then mixed). The row treatment mirrors the 2D games: the
+   *  group keeps its brain color and its emoji says whether the visible record
+   *  is live, dead, or from an earlier cave. */
   let lastBoardText = '';
   function updateScoreBoard() {
     const ordered = [...race.groups].sort((a, b) =>
       a.isMixed === b.isMixed ? a.layer - b.layer : a.isMixed ? 1 : -1,
     );
-    const lines = ['best'];
-    for (const group of ordered) {
+    const rows = ordered.map((group) => {
       const best = groupBestScore(group);
-      const label = group.isMixed ? 'mixed' : String(group.layer);
+      const leader = bestBall(group);
+      const liveScore = leader?.brain.score ?? -Infinity;
+      const currentRecord = group.scores.seed;
+      const isHistorical = best > liveScore + Number.EPSILON;
+      const isCurrentLeader =
+        currentRecord > 0 && liveScore >= currentRecord - Number.EPSILON;
+      const emoji = isHistorical
+        ? '👻'
+        : leader?.damaged
+          ? isCurrentLeader
+            ? '🏆'
+            : '💀'
+          : isCurrentLeader
+            ? '💚'
+            : '💜';
+      const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
       const score = best > 0 ? String(Math.round(best)) : '—';
-      lines.push(`${label.padStart(6)}${score.padStart(8)}`);
-    }
-    const text = lines.join('\n');
-    if (text !== lastBoardText) {
-      lastBoardText = text;
-      scoreBoard.textContent = text;
+      const color = group.isMixed
+        ? config.MIXED_COLOR
+        : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
+      const textColor = leader?.damaged && !isHistorical ? '#def' : color;
+      return { best, emoji, label, score, textColor };
+    });
+    const renderKey = rows
+      .map(({ best, emoji, label, score, textColor }) =>
+        [best, emoji, label, score, textColor].join('|'),
+      )
+      .join('||');
+    if (renderKey === lastBoardText) return;
+    lastBoardText = renderKey;
+
+    const title = document.createElement('div');
+    title.textContent = 'best';
+    scoreBoard.replaceChildren(title);
+    for (const rowData of rows) {
+      const row = document.createElement('div');
+      row.style.color = rowData.textColor;
+      row.textContent = `${rowData.emoji} ${rowData.label} ${rowData.score}`;
+      scoreBoard.appendChild(row);
     }
   }
 

@@ -65,10 +65,14 @@ describe('climb sensors', () => {
     expect(sensor.readings[RIGHT]).toBe(0);
   });
 
-  test('side walls are invisible to every sensor', () => {
+  test('horizontal sensors detect side walls but ignore platforms', () => {
     const sensor = new Sensor(8);
-    sensor.update(100, 200, towerWith());
-    expect(sensor.readings[LEFT]).toBe(0);
+    sensor.update(
+      100,
+      200,
+      towerWith([{ x: 0, y: 200, w: config.TOWER_WIDTH }]),
+    );
+    expect(sensor.readings[LEFT]).toBeCloseTo(1 - 100 / L, 6);
     expect(sensor.readings[RIGHT]).toBe(0);
   });
 

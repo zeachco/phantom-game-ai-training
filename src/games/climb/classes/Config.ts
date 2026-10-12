@@ -132,6 +132,8 @@ class Config {
   public MAX_JUMP_HEIGHT_MULTIPLIER = 2;
   /** top horizontal speed in u/f */
   public MAX_SPEED = 7;
+  /** horizontal speed multiplier when bouncing off a side wall */
+  public WALL_BOUNCE = 1.1;
   /** ground horizontal acceleration per frame, deliberately gentle for the
    *  doubled top speed */
   public ACCEL = 0.3;
@@ -157,7 +159,8 @@ class Config {
   public HEIGHT_BUDGET_FRAMES = 450;
 
   // sensors, a full 360° ring around the player. Odd rays report the nearest
-  // obstacle; even rays pass through it to the next, and side walls are hidden.
+  // obstacle; even rays pass through it to the next. Horizontal rays report
+  // side walls only and ignore platforms.
   public SENSOR_LENGTH = 300;
 
   public CLEAR_STORAGE =

@@ -98,6 +98,11 @@ export class Player {
     const input = clamp(-1, 1, this.controls.right - this.controls.left);
     const accel = this.grounded ? config.ACCEL : config.AIR_ACCEL;
     if (input !== 0) {
+      // Braking input should not leave a grounded player sliding away from
+      // the requested direction for several frames. Apply ground friction
+      // twice while the input opposes the current velocity.
+      if (this.grounded && this.vx * input < 0)
+        this.vx *= config.GROUND_FRICTION ** 2;
       this.vx += accel * input;
       this.facing = input > 0 ? 1 : -1;
       if (this.vx > config.MAX_SPEED) this.vx = config.MAX_SPEED;
@@ -128,10 +133,10 @@ export class Player {
     this.y += this.vy;
     if (this.x < PLAYER_HALF_W) {
       this.x = PLAYER_HALF_W;
-      if (this.vx < 0) this.vx = 0;
+      if (this.vx < 0) this.vx = -this.vx * config.WALL_BOUNCE;
     } else if (this.x > config.TOWER_WIDTH - PLAYER_HALF_W) {
       this.x = config.TOWER_WIDTH - PLAYER_HALF_W;
-      if (this.vx > 0) this.vx = 0;
+      if (this.vx > 0) this.vx = -this.vx * config.WALL_BOUNCE;
     }
     if (this.y <= 0) {
       this.y = 0;
@@ -237,15 +242,19 @@ export class Player {
       this.sensor.draw(ctx, this.x, this.y + BODY_HEIGHT * 0.5, this.color);
     const alpha = this.damaged
       ? clamp(0, 1, 0.5 * (1 - (now - this.deathTime) / config.DEAD_LIFETIME))
-      : 1;
+      : focused
+        ? 1
+        : 0.5;
     if (alpha <= 0) return;
     ctx.save();
     ctx.fillStyle = 'white';
-    for (const p of this.#particles) {
-      ctx.globalAlpha = p.life * 0.4;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, (1 - p.life) * 6 + 1, 0, Math.PI * 2);
-      ctx.fill();
+    if (focused) {
+      for (const p of this.#particles) {
+        ctx.globalAlpha = p.life * 0.4;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (1 - p.life) * 6 + 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     const stretch = 1 + Math.min(0.3, Math.abs(this.vy) * 0.02);
     const sx = 1 / Math.sqrt(stretch);

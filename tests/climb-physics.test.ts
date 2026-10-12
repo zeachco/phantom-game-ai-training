@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { config, SENSORS } from '../src/games/climb/classes/Config';
 import {
   getClimbBrainDimensions,
+  PLAYER_HALF_W,
   Player,
 } from '../src/games/climb/classes/Player';
 import type { Platform, Tower } from '../src/games/climb/classes/Tower';
@@ -151,6 +152,28 @@ describe('climb player physics', () => {
     expect(player.vx).toBe(0);
     expect(player.x).toBeGreaterThan(config.TOWER_WIDTH / 2); // slid right
     expect(player.x).toBeLessThan(config.TOWER_WIDTH / 2 + 60);
+  });
+
+  test('opposite ground input applies doubled friction before acceleration', () => {
+    const player = groundPlayer();
+    player.vx = config.MAX_SPEED;
+    player.controls.left = 1;
+    player.update(0);
+    expect(player.vx).toBeCloseTo(
+      config.MAX_SPEED * config.GROUND_FRICTION ** 2 - config.ACCEL,
+      6,
+    );
+  });
+
+  test('side walls bounce horizontal velocity at the configured multiplier', () => {
+    const player = groundPlayer(PLAYER_HALF_W + 1);
+    player.vx = -4;
+    player.update(0);
+    expect(player.x).toBe(PLAYER_HALF_W);
+    expect(player.vx).toBeCloseTo(
+      4 * config.GROUND_FRICTION * config.WALL_BOUNCE,
+      6,
+    );
   });
 
   test('a fall past the death speed kills, a shorter drop onto the ground does not', () => {

@@ -7,8 +7,8 @@ import type { Tower } from './Tower';
  * ray SENSORS/4 points up and ray SENSORS/2 straight down.
  *
  * Odd rays report the nearest obstacle. Even rays pass through that obstacle
- * and report the next one. The ground counts as an obstacle; side walls are
- * intentionally invisible to the sensor ring.
+ * and report the next one. The ground counts as an obstacle. The two
+ * horizontal rays are dedicated side-wall sensors and ignore platforms.
  *
  * A reading is `1 − hit/SENSOR_LENGTH` (1 on contact, 0 when nothing is hit),
  * circuit's convention.
@@ -43,11 +43,20 @@ export class Sensor {
       const dy = sin[i] * L;
       let nearest = 1;
       let next = 1;
+      const horizontal = Math.abs(sin[i]) < 1e-9;
+
+      // Horizontal rays are dedicated side-wall sensors: they ignore every
+      // platform and report the wall in the direction they face.
+      if (horizontal) {
+        const wallX = cos[i] > 0 ? config.TOWER_WIDTH : 0;
+        const t = (wallX - cx) / dx;
+        if (t >= 0 && t < nearest) nearest = t;
+      }
 
       // The ground is the first obstacle for a downward ray when nothing
       // else is between the player and it. Keep the two nearest hits so even
       // rays can see through one platform and report the next one.
-      if (sin[i] < 0) {
+      if (!horizontal && sin[i] < 0) {
         const t = slabEntryT(
           cx,
           cy,
@@ -66,13 +75,13 @@ export class Sensor {
         }
       }
 
-      // Platforms: side walls are deliberately not tested. The loose axis
-      // filters keep slab tests to rows the ray can actually reach.
+      // Platforms: horizontal rays deliberately skip platforms. The loose
+      // axis filters keep slab tests to rows the ray can actually reach.
       const yLo = cy - L;
       const yHi = cy + L;
       const xLo = cx - L;
       const xHi = cx + L;
-      for (let p = 0; p < platforms.length; p++) {
+      for (let p = 0; !horizontal && p < platforms.length; p++) {
         const plat = platforms[p];
         if (plat.y < yLo || plat.y > yHi) continue;
         if (plat.x + plat.w < xLo || plat.x > xHi) continue;
@@ -94,7 +103,7 @@ export class Sensor {
         }
       }
 
-      const hit = i % 2 === 0 ? next : nearest;
+      const hit = horizontal ? nearest : i % 2 === 0 ? next : nearest;
       readings[i] = hit >= 1 ? 0 : 1 - hit;
     }
   }
