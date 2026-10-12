@@ -170,16 +170,17 @@ class Config {
    *  reachable while keeping corpses' falls numerically stable */
   public TERMINAL_VELOCITY = 20;
   /** an AI player that fails to set a new personal-best height for this many
-   *  simulation frames dies: 5 s at the 90 FPS reference */
-  public HEIGHT_BUDGET_FRAMES = 450;
+   *  simulation frames dies: ~0.2 s at the 90 FPS reference, a 23x faster
+   *  idle gauge than the old 5 s budget */
+  public HEIGHT_BUDGET_FRAMES = 20;
   /** a jump must follow a landing within this many simulation frames to keep
    *  the climb combo alive */
   public COMBO_FRAME_BUDGET = 8;
   /** combo values are displayed as x2..x10; x1 is the landing starter */
   public MAX_COMBO = 10;
-  /** x2 is 1.5x the normal jump strength; each later step adds the same
-   *  half-strength increment, capped by MAX_COMBO */
-  public COMBO_JUMP_STRENGTH = 1.5;
+  /** x2 is 1.1x the normal jump strength; each later step adds the same
+   *  tenth-strength increment, capped by MAX_COMBO */
+  public COMBO_JUMP_STRENGTH = 1.1;
 
   // sensors, object-centric: one slot per each of the SLOTS vertically
   // nearest platforms (dx, dy, visible, width, the standing platform

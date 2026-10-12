@@ -136,7 +136,7 @@ export class Player {
           Math.max(1, this.comboValue) + 1,
         );
       // Horizontal momentum and the landing combo both buy airtime. Combo
-      // strength is linear: x2 is 1.5x the launch strength, x3 is 2x, and
+      // strength is linear: x2 is 1.1x the launch strength, x3 is 1.2x, and
       // so on, capped at x10. Height remains proportional to impulse².
       const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
       const heightMultiplier =
@@ -253,6 +253,19 @@ export class Player {
     this.#updateParticles();
   }
 
+  /** the platform the eyes point at: the first row above the feet (the
+   *  "next" platform whether standing or mid-jump) plus up to three more
+   *  rows at full horizontal speed */
+  #eyeTarget(): Platform | null {
+    const platforms = this.tower.platforms;
+    let next = 0;
+    while (next < platforms.length && platforms[next].y <= this.y) next++;
+    if (next >= platforms.length) return null;
+    const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
+    const index = next + Math.round(3 * speedRatio);
+    return platforms[Math.min(index, platforms.length - 1)];
+  }
+
   #addComboPoint(): void {
     this.comboValue = Math.min(config.MAX_COMBO, this.comboValue + 1);
     this.#comboFrames = config.COMBO_FRAME_BUDGET;
@@ -332,6 +345,17 @@ export class Player {
     ctx.lineWidth = 2;
     ctx.stroke();
     const eyeY = PLAYER_HEIGHT * 0.2;
+    // Pupils track the platform the climber is aiming for: the next row
+    // above at low speed, the one four rows up at top speed, and the rows
+    // in between at intermediate speed.
+    const target = this.#eyeTarget();
+    let aimX: number = this.facing;
+    let aimY = 0;
+    if (target) {
+      aimX = target.x + target.w / 2 - this.x;
+      aimY = target.y - (this.y + PLAYER_HEIGHT * 0.5);
+    }
+    const aimLen = Math.hypot(aimX, aimY) || 1;
     for (const offset of [-4, 4]) {
       const eyeX = this.facing * 4 + offset;
       ctx.fillStyle = 'white';
@@ -340,7 +364,7 @@ export class Player {
       ctx.fill();
       ctx.fillStyle = '#222';
       ctx.beginPath();
-      ctx.arc(eyeX + this.facing, eyeY, 1.4, 0, Math.PI * 2);
+      ctx.arc(eyeX + (aimX / aimLen) * 1.4, eyeY + (aimY / aimLen) * 1.4, 1.4, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
