@@ -151,7 +151,8 @@ class Config {
    *  simulation frames dies: 5 s at the 90 FPS reference */
   public HEIGHT_BUDGET_FRAMES = 450;
 
-  // sensors, a full 360° ring around the player
+  // sensors, a full 360° ring around the player. Odd rays report the nearest
+  // obstacle; even rays pass through it to the next, and side walls are hidden.
   public SENSOR_LENGTH = 300;
 
   public CLEAR_STORAGE =

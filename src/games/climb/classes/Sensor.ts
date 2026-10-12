@@ -6,6 +6,10 @@ import type { Tower } from './Tower';
  * ring is counter-clockwise in world space (y up), so with the default count
  * ray SENSORS/4 points up and ray SENSORS/2 straight down.
  *
+ * Odd rays report the nearest obstacle. Even rays pass through that obstacle
+ * and report the next one. The ground counts as an obstacle; side walls are
+ * intentionally invisible to the sensor ring.
+ *
  * A reading is `1 − hit/SENSOR_LENGTH` (1 on contact, 0 when nothing is hit),
  * circuit's convention.
  */
@@ -16,10 +20,6 @@ export class Sensor {
   /** precomputed ray directions (unit) and full segment lengths */
   #cos: number[] = [];
   #sin: number[] = [];
-  /** scratch ray endpoints, reused so no frame allocates */
-  #bx: number[] = [];
-  #by: number[] = [];
-
   constructor(rayCount = SENSORS) {
     this.rayCount = rayCount;
     this.readings = new Array(rayCount).fill(0);
@@ -27,40 +27,26 @@ export class Sensor {
       const angle = (i / rayCount) * Math.PI * 2;
       this.#cos.push(Math.cos(angle));
       this.#sin.push(Math.sin(angle));
-      this.#bx.push(0);
-      this.#by.push(0);
     }
   }
 
   update(cx: number, cy: number, tower: Tower) {
     const L = config.SENSOR_LENGTH;
-    const width = config.TOWER_WIDTH;
     const thickness = config.PLATFORM_THICKNESS;
     const platforms = tower.platforms;
     const readings = this.readings;
     const cos = this.#cos;
     const sin = this.#sin;
-    const bx = this.#bx;
-    const by = this.#by;
 
     for (let i = 0; i < this.rayCount; i++) {
       const dx = cos[i] * L;
       const dy = sin[i] * L;
-      bx[i] = dx;
-      by[i] = dy;
-      let best = 1; // 1 = no hit; a hit stores its entry offset in [0, 1)
+      let nearest = 1;
+      let next = 1;
 
-      // side walls, analytic: the player is always inside the tower, so a
-      // ray pointing at a wall meets it when the offset stays below 1
-      if (cos[i] < 0) {
-        const t = -cx / dx;
-        if (t > 0 && t < best) best = t;
-      } else if (cos[i] > 0) {
-        const t = (width - cx) / dx;
-        if (t > 0 && t < best) best = t;
-      }
-
-      // the ground slab, only rays pointing down can meet it
+      // The ground is the first obstacle for a downward ray when nothing
+      // else is between the player and it. Keep the two nearest hits so even
+      // rays can see through one platform and report the next one.
       if (sin[i] < 0) {
         const t = slabEntryT(
           cx,
@@ -69,14 +55,19 @@ export class Sensor {
           dy,
           0,
           -config.GROUND_THICKNESS,
-          width,
+          config.TOWER_WIDTH,
           0,
         );
-        if (t >= 0 && t < best) best = t;
+        if (t >= 0 && t < next) {
+          if (t < nearest) {
+            next = nearest;
+            nearest = t;
+          } else next = t;
+        }
       }
 
-      // platforms: the loose axis filters keep the slab tests to the rows the
-      // ray can actually reach
+      // Platforms: side walls are deliberately not tested. The loose axis
+      // filters keep slab tests to rows the ray can actually reach.
       const yLo = cy - L;
       const yHi = cy + L;
       const xLo = cx - L;
@@ -95,10 +86,16 @@ export class Sensor {
           plat.x + plat.w,
           plat.y,
         );
-        if (t >= 0 && t < best) best = t;
+        if (t >= 0 && t < next) {
+          if (t < nearest) {
+            next = nearest;
+            nearest = t;
+          } else next = t;
+        }
       }
 
-      readings[i] = best >= 1 ? 0 : 1 - best;
+      const hit = i % 2 === 0 ? next : nearest;
+      readings[i] = hit >= 1 ? 0 : 1 - hit;
     }
   }
 
