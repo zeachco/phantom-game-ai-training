@@ -44,6 +44,15 @@ export class Tower {
     return Math.min(1, this.seed / config.DIFFICULTY_SEED_BASE);
   }
 
+  /** Difficulty also ramps with height, so a single tower gets narrower
+   *  platforms and wider gaps as the player climbs. A high seed still starts
+   *  at its seed difficulty. */
+  difficultyAt(y: number) {
+    const progressHeight = config.SEED_TARGET_FLOORS * config.FLOOR_HEIGHT;
+    const progress = Math.min(1, Math.max(0, y) / progressHeight);
+    return Math.max(this.difficulty(), progress);
+  }
+
   /** generate rows until the tower reaches at least `targetY` */
   ensureAbove(targetY: number) {
     while (this.#rowY < targetY) {
@@ -51,7 +60,7 @@ export class Tower {
         lerp(
           config.ROW_SPACING_MIN,
           config.ROW_SPACING_MAX,
-          this.difficulty(),
+          this.difficultyAt(this.#rowY),
         ) *
         (0.9 + this.#rng() * 0.2);
       this.#spawnRow();
@@ -69,7 +78,7 @@ export class Tower {
   /** place the next row into the band reachable from the previous one, so
    *  every row is jumpable from the row below */
   #spawnRow() {
-    const d = this.difficulty();
+    const d = this.difficultyAt(this.#rowY);
     const rng = this.#rng;
     const w = clamp(
       config.PLATFORM_MIN_WIDTH * 0.7,

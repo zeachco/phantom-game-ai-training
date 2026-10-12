@@ -14,22 +14,24 @@ highest living player, so the whole screen is the race to the top.
   (`#climb=<seed>`): same seed, same rows. Rows are generated on demand as
   the players climb (and are never culled, a full seed is a few dozen
   platforms). Each row's landing point is drawn from the band reachable
-  from the previous row, so every row is jumpable from the one below. As
-  the seed number rises the rows get narrower and the gaps wider — a fresh
-  tower is forgiving, a high one is a knife edge.
+  from the previous row, so every row is jumpable from the one below. As the
+  seed number or the player's height rises, rows get narrower and gaps wider
+  — a fresh tower is forgiving, a high one is a knife edge.
 - Platforms are one-way: you can jump up through them and only land on top
   of them while falling. A single jump, no double jump, but with coyote
   time (a jump press right after walking off an edge still fires) and a
-  jump buffer (a press just before landing still fires on touchdown).
+  jump buffer (a press just before landing still fires on touchdown). Jump
+  momentum matters: launching at top movement speed gives up to 2x the normal
+  jump height, so the longer gaps can be crossed by carrying speed.
 - Score is height: +1 per new floor (50 units) of personal-best height on
   the current seed. Dying while falling subtracts the impact speed from the
   brain's score, and idling is punished — an AI player that fails to set a
   new personal-best for 450 simulation frames dies to the height budget,
   which costs a flat stall penalty on top.
-- Falling too fast kills: past a fall speed of ~14 units/frame the player
-  dies, the corpse keeps falling to the ground and fades from 50% opacity
-  to 0 over 3 s. A missed row that lands you on the one below is cheap; a
-  long fall is not.
+- Falling too fast kills: past a fall speed of ~20 units/frame the player
+  dies, corresponding to roughly 260 units of free fall. The corpse keeps
+  falling to the ground and fades from 50% opacity to 0 over 3 s. A missed
+  row that lands you on the one below is cheap; a long fall is not.
 - There are no generations: a brain category waits until every player in
   its pool is dead and the corpses are gone, then respawns the whole pool
   together — slot 0 clones the group's best brain, the higher slots carry

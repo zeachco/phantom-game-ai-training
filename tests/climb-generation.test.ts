@@ -69,11 +69,8 @@ describe('climb tower generation', () => {
     const easySpacings = spacings(easy);
     const hardSpacings = spacings(hard);
     expect(mean(easySpacings)).toBeLessThan(mean(hardSpacings));
-    // each row's spacing stays inside its difficulty band
-    for (const s of easySpacings)
-      expect(s).toBeGreaterThanOrEqual(config.ROW_SPACING_MIN * 0.9 - 1e-6);
-    for (const s of easySpacings)
-      expect(s).toBeLessThanOrEqual(config.ROW_SPACING_MIN * 1.1 + 1e-6);
+    // A max-difficulty seed stays in the widest spacing band. The easy seed
+    // now ramps toward that band as its height increases.
     for (const s of hardSpacings)
       expect(s).toBeGreaterThanOrEqual(config.ROW_SPACING_MAX * 0.9 - 1e-6);
     for (const s of hardSpacings)
@@ -82,12 +79,33 @@ describe('climb tower generation', () => {
     const meanWidth = (platforms: { w: number }[]) =>
       mean(platforms.slice(1).map((p) => p.w));
     expect(meanWidth(easy)).toBeGreaterThan(meanWidth(hard));
-    for (const p of easy.slice(1))
-      expect(p.w).toBeGreaterThanOrEqual(
-        config.PLATFORM_MAX_WIDTH * 0.85 - 1e-6,
-      );
     for (const p of hard.slice(1))
       expect(p.w).toBeLessThanOrEqual(config.PLATFORM_MIN_WIDTH * 1.15 + 1e-6);
+  });
+
+  test('one seed gets harder as the tower rises', () => {
+    const tower = new Tower(0);
+    const platforms = rows(
+      tower,
+      config.SEED_TARGET_FLOORS * config.FLOOR_HEIGHT,
+    );
+    const early = platforms.filter((p) => p.y < 500);
+    const late = platforms.filter((p) => p.y > 2000);
+    const mean = (xs: number[]) =>
+      xs.reduce((sum, v) => sum + v, 0) / xs.length;
+    expect(mean(late.map((p) => p.w))).toBeLessThan(
+      mean(early.map((p) => p.w)),
+    );
+
+    const spacings = (fromY: number, toY: number) =>
+      platforms
+        .slice(1)
+        .map((p, i) => ({ spacing: p.y - platforms[i].y, y: p.y }))
+        .filter(({ y }) => y >= fromY && y < toY)
+        .map(({ spacing }) => spacing);
+    expect(mean(spacings(2000, Infinity))).toBeGreaterThan(
+      mean(spacings(0, 500)),
+    );
   });
 
   test('the jump apex clears the worst possible row spacing', () => {

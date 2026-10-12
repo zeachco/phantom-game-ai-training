@@ -86,8 +86,22 @@ describe('climb player physics', () => {
     player.controls.jump = 1;
     player.update(2);
     player.controls.jump = 0;
-    expect(player.vy).toBe(config.JUMP_SPEED);
+    expect(player.vy).toBeGreaterThan(config.JUMP_SPEED);
+    expect(player.vy).toBeLessThanOrEqual(
+      config.JUMP_SPEED * Math.sqrt(config.MAX_JUMP_HEIGHT_MULTIPLIER),
+    );
     expect(player.grounded).toBe(false);
+  });
+
+  test('full movement speed gives twice the jump height', () => {
+    const player = groundPlayer();
+    player.vx = config.MAX_SPEED;
+    player.controls.right = 1;
+    player.controls.jump = 1;
+    player.update(0);
+    expect(player.vy).toBe(
+      config.JUMP_SPEED * Math.sqrt(config.MAX_JUMP_HEIGHT_MULTIPLIER),
+    );
   });
 
   test('a jump press just before touchdown is buffered and fires on landing', () => {
@@ -136,12 +150,12 @@ describe('climb player physics', () => {
     tick(player, 60, 10);
     expect(player.vx).toBe(0);
     expect(player.x).toBeGreaterThan(config.TOWER_WIDTH / 2); // slid right
-    expect(player.x).toBeLessThan(config.TOWER_WIDTH / 2 + 40);
+    expect(player.x).toBeLessThan(config.TOWER_WIDTH / 2 + 60);
   });
 
   test('a fall past the death speed kills, a shorter drop onto the ground does not', () => {
     const killer = groundPlayer();
-    killer.y = 200;
+    killer.y = 400;
     killer.update(0);
     tick(killer, 60);
     expect(killer.damaged).toBe(true);

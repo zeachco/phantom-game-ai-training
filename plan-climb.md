@@ -61,24 +61,26 @@ yet), so no "Load models" button.
   at y = 0 is solid and always present.
 - Platforms are one-way rectangles. Rows are generated per seed with
   `mulberry32(seed)`: vertical spacing 32→42 u and width 140→60 u as
-  difficulty `min(1, seed / 100)` rises; each row's landing point is drawn
-  from the band reachable from the previous row (`JUMP_REACH = 55` u
-  horizontal), clamped inside the walls.
+  difficulty rises with either `min(1, seed / 100)` or progress toward the
+  50-floor target; each row's landing point is drawn from the band reachable
+  from the previous row (`JUMP_REACH = 55` u horizontal), clamped inside the
+  walls.
 - Streaming: `ensureAbove(highest living feet + 800 u)` generates new rows on
   demand; rows are never culled (a full seed is ≈ 70 platforms, memory is
   trivial, and culling would void the floor under respawned players).
 
 ## Physics (Player.ts, per frame at 90 FPS reference)
 
-- `GRAVITY 0.75`, `JUMP_SPEED 9` (apex ≈ 54 u > max row spacing),
-  `MAX_SPEED 3.5`, ground accel 0.6, air accel 0.21 (35 %), ground friction
-  ×0.88 per idle frame (slides a little, not much), terminal −20 u/f.
+- `GRAVITY 0.75`, `JUMP_SPEED 9` at rest (apex ≈ 54 u), with jump height
+  scaling linearly from 1x to 2x with launch speed; `MAX_SPEED 7`, ground
+  accel 0.3, air accel 0.105, ground friction ×0.88 per idle frame (slides a
+  little, not much), terminal −20 u/f.
 - One-way landing: while falling, a platform top crossed between the
   previous and current foot position and overlapping the body width lands
   the player. Standing players re-check support each frame (walking off an
   edge starts the coyote window).
-- Death: `vy ≤ −DEATH_VELOCITY` (14 u/f, ≈ 130 u of fall) → corpse keeps
-  falling to the ground, then fades over `DEAD_LIFETIME` (3 s); or the 900
+- Death: `vy ≤ −DEATH_VELOCITY` (≈ 20 u/f, ≈ 260 u of fall) → corpse keeps
+  falling to the ground, then fades over `DEAD_LIFETIME` (3 s); or the 450
   frame height budget expires → same death + `STALL_PENALTY` (AI only).
 - Score: +1 per new floor (`FLOOR_HEIGHT = 50` u) of personal-best height on
   the current seed; velocity deaths also subtract the impact speed.

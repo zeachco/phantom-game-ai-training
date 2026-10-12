@@ -103,7 +103,7 @@ class Config {
   public PLATFORM_THICKNESS = 14;
   public PLATFORM_MIN_WIDTH = 60;
   public PLATFORM_MAX_WIDTH = 140;
-  /** vertical gap between rows, widening with the seed difficulty */
+  /** vertical gap between rows, widening with tower difficulty */
   public ROW_SPACING_MIN = 32;
   public ROW_SPACING_MAX = 42;
   /** seed at which the tower difficulty reaches its maximum */
@@ -126,15 +126,17 @@ class Config {
   // runs every animation frame, so on a faster machine the world simply runs
   // faster — every frame count below is relative to that
   public GRAVITY = 0.75;
-  /** grounded jump impulse; apex JUMP_SPEED²/2·GRAVITY ≈ 54u, above the max
-   *  row spacing so every row is reachable */
+  /** grounded jump impulse at zero horizontal speed; the launch impulse is
+   *  scaled so a player moving at MAX_SPEED gets up to 2x the jump height */
   public JUMP_SPEED = 9;
+  public MAX_JUMP_HEIGHT_MULTIPLIER = 2;
   /** top horizontal speed in u/f */
-  public MAX_SPEED = 3.5;
-  /** ground horizontal acceleration per frame */
-  public ACCEL = 0.6;
+  public MAX_SPEED = 7;
+  /** ground horizontal acceleration per frame, deliberately gentle for the
+   *  doubled top speed */
+  public ACCEL = 0.3;
   /** air control, a fraction of the ground acceleration */
-  public AIR_ACCEL = 0.21;
+  public AIR_ACCEL = 0.105;
   /** ground velocity kept per idle frame: the player slides a little, not
    *  much — a released key settles in about a fifth of a second */
   public GROUND_FRICTION = 0.88;
@@ -143,9 +145,12 @@ class Config {
   public COYOTE_FRAMES = 6;
   /** frames a jump press is remembered before landing */
   public JUMP_BUFFER_FRAMES = 6;
-  /** falling at or below this speed kills: about 130u of free fall */
-  public DEATH_VELOCITY = 14;
-  /** physics terminal speed, below the death speed so falls stay stable */
+  /** safe fall distance is about twice the old 130u threshold */
+  public DEATH_HEIGHT = 260;
+  /** falling at or below the speed reached after DEATH_HEIGHT of free fall */
+  public DEATH_VELOCITY = Math.sqrt(2 * this.GRAVITY * this.DEATH_HEIGHT);
+  /** physics terminal speed, just above the death speed so the threshold is
+   *  reachable while keeping corpses' falls numerically stable */
   public TERMINAL_VELOCITY = 20;
   /** an AI player that fails to set a new personal-best height for this many
    *  simulation frames dies: 5 s at the 90 FPS reference */

@@ -110,7 +110,13 @@ export class Player {
     if (this.vy < -config.TERMINAL_VELOCITY)
       this.vy = -config.TERMINAL_VELOCITY;
     if (this.jumpBuffer > 0 && (this.grounded || this.coyoteFrames > 0)) {
-      this.vy = config.JUMP_SPEED;
+      // Momentum buys airtime: jump height scales from 1x at rest to 4x at
+      // top speed. Since height is proportional to impulse², use the square
+      // root so the configured multiplier describes actual height.
+      const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
+      const heightMultiplier =
+        1 + (config.MAX_JUMP_HEIGHT_MULTIPLIER - 1) * speedRatio;
+      this.vy = config.JUMP_SPEED * Math.sqrt(heightMultiplier);
       this.grounded = false;
       this.coyoteFrames = 0;
       this.jumpBuffer = 0;
