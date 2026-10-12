@@ -29,6 +29,7 @@ const neuralVisualizer = new Visualizer(config);
 
 const io = fileUtilities('circuit');
 if (config.CLEAR_STORAGE) io.discardModels();
+io.compactSaves();
 
 async function loadDefaultModels(onlyMissing = false): Promise<string[]> {
   const response = await fetch(

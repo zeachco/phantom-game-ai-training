@@ -38,6 +38,7 @@ function screenScale(scale = DEFAULT_SCREEN_SCALE) {
 
 const io = fileUtilities('cave');
 if (config.CLEAR_STORAGE) io.discardModels();
+io.compactSaves();
 
 /**
  * A small playable 3D cave. The cave and collision queries are deterministic

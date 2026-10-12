@@ -29,6 +29,7 @@ const neuralVisualizer = new Visualizer(config);
 
 const io = fileUtilities('highway');
 if (config.CLEAR_STORAGE) io.discardModels();
+io.compactSaves();
 
 export default async (state: typeof defaultState) => {
   const carCanvas = createCanvas();
@@ -610,7 +611,7 @@ export default async (state: typeof defaultState) => {
     const [bestModel] = [...state.sortedModels].sort(
       (a, b) => (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0),
     );
-    const deathCarModel = bestModel[bestModel.length - 1];
+    const deathCarModel = bestModel?.[bestModel.length - 1];
     if (deathCarModel) {
       const bestLayerNb = deathCarModel.levels.length;
       state.player = new Car(

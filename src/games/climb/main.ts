@@ -23,6 +23,7 @@ const neuralVisualizer = new Visualizer(config);
 
 const io = fileUtilities('climb');
 if (config.CLEAR_STORAGE) io.discardModels();
+io.compactSaves();
 
 /** the panel takes that share of the screen while open, capped in width */
 const PANEL_RATIO = 0.75;

@@ -116,7 +116,13 @@ export function loadScores(group: Group, seed: number): GroupScores {
 }
 
 export function saveScores(group: Group, scores = group.scores) {
-  localStorage.setItem(scoreKey(group), JSON.stringify(scores));
+  try {
+    localStorage.setItem(scoreKey(group), JSON.stringify(scores));
+  } catch (err) {
+    // A full storage budget must not stop the animation frame, the same way
+    // the neural saves degrade instead of throwing.
+    console.warn(`Could not save scores for ${group.key}`, err);
+  }
 }
 
 /** Remove race records without touching any saved neural networks. */

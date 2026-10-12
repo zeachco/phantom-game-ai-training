@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { NeuralNetwork } from '../src/ai/Network';
-import { fileUtilities, type ModelsByLayerCount } from '../src/ai/utils';
+import {
+  fileUtilities,
+  type ModelsByLayerCount,
+  SAVE_PRECISION,
+} from '../src/ai/utils';
 import {
   type ClimbModelIo,
   ClimbRace,
@@ -235,7 +239,8 @@ test('climb model saves use the climb_ prefix and the scores round-trip', () => 
     expect(loaded[2]?.length).toBe(1);
     expect(loaded[2]?.[0].levels.length).toBe(brain.levels.length);
     expect(loaded[2]?.[0].levels[0].weights[0][0]).toBe(
-      brain.levels[0].weights[0][0],
+      Math.round(brain.levels[0].weights[0][0] * 10 ** SAVE_PRECISION) /
+        10 ** SAVE_PRECISION,
     );
     for (const key of env.store.keys())
       expect(key.startsWith('climb')).toBe(true);

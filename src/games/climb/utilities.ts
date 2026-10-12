@@ -114,7 +114,11 @@ export function loadScores(group: Group, seed: number): GroupScores {
 }
 
 export function saveScores(group: Group, scores = group.scores): void {
-  localStorage.setItem(scoreKey(group), JSON.stringify(scores));
+  try {
+    localStorage.setItem(scoreKey(group), JSON.stringify(scores));
+  } catch (err) {
+    console.warn(`Could not save ${scoreKey(group)}, storage is full`, err);
+  }
 }
 
 /** Remove race records without touching any saved neural networks. */

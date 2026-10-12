@@ -18,6 +18,15 @@ export const CTRL_COLORS = [
 export const PLAYER_COLOR = '#ddffbb';
 
 /**
+ * Persisted weights keep this many decimals. Full float64 text is ~18 chars
+ *  per weight and the hall of fame of every layer together overflows the
+ *  ~5 MB localStorage budget, while 3 decimals still resolves 1000 steps per
+ *  weight, far finer than any mutation factor the games use.
+ */
+export const SAVE_PRECISION = 3;
+const SAVE_SCALE = 10 ** SAVE_PRECISION;
+
+/**
  * index is the layer amount
  * value is a list of sorted NeuralNetwork by score
  */
@@ -123,12 +132,75 @@ export function fileUtilities(game = '') {
     saveBestModels,
     saveModelList,
     loadAllModelLayers,
+    compactSaves,
     discardModels,
     discardModel,
     discardGameModels,
     exportModels,
     importModels,
   };
+  /** Strips inputs/outputs and quantizes weights on write. */
+  function compactModel(model: unknown) {
+    const { levels, ...rest } = model as NeuralNetwork;
+    return {
+      ...rest,
+      levels: (levels || []).map((l) => ({
+        weights: (l.weights || []).map((row) =>
+          row.map((weight) => Math.round(weight * SAVE_SCALE) / SAVE_SCALE),
+        ),
+      })),
+    };
+  }
+  /** Writes a list with quota-safe degradation. */
+  function writeModels(namespace: string, models: unknown[]): boolean {
+    for (let keep = models.length; keep >= 1; keep--) {
+      try {
+        localStorage.setItem(
+          namespace,
+          JSON.stringify(models.slice(0, keep).map(compactModel)),
+        );
+        return true;
+      } catch (err) {
+        if (keep === 1)
+          console.warn(`Could not save ${namespace}, storage is full`, err);
+      }
+    }
+    return false;
+  }
+  /**
+   * Rewrites this game's model saves in the compact format. Saves written
+   *  before the format change carried full float text and the per-level
+   *  scratch arrays, which together overflow the storage budget; this
+   *  reclaims that space at boot instead of waiting for every layer to
+   *  promote again.
+   */
+  function compactSaves() {
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith(`${game}_`)) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      let models: unknown;
+      try {
+        models = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (!isSavedModelList(models)) continue;
+      const compact = JSON.stringify(models.map(compactModel));
+      if (compact.length >= raw.length) continue;
+      writeModels(key, models);
+    }
+  }
+
+  function isSavedModelList(value: unknown): value is NeuralNetwork[] {
+    return (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every(
+        (model) => !!model && Array.isArray((model as NeuralNetwork).levels),
+      )
+    );
+  }
   function saveModels(
     layers: number,
     models: NeuralNetwork[],
@@ -143,14 +215,15 @@ export function fileUtilities(game = '') {
       'mutationFactor',
       'score',
     ];
-    const name = `${models.length}x ${kind} ${layers}-${models[0]?.version}`;
+    const label = `${models.length}x ${kind} ${layers}-${models[0]?.version}`;
     const diff = olds[0] ? models[0].score - olds[0].score : models[0].score;
     const score = `${models[0].score.toFixed(4)} ${diff.toFixed(10)}`;
     if (diff < 0) {
-      const save = olds.map((m) => ({ ...m, diff, date: new Date() }));
-      const data = JSON.stringify(save);
-      localStorage.setItem(namespace, data);
-    } else if (isSameObject(models, olds, exclude)) {
+      writeModels(
+        namespace,
+        olds.map((m) => ({ ...m, diff, date: new Date() })),
+      );
+    } else if (isSameObject(models.map(compactModel), olds, exclude)) {
       // No save occurred, so keep the console quiet.
     } else {
       const save = models.map((m) => ({
@@ -159,16 +232,15 @@ export function fileUtilities(game = '') {
         diff,
         date: new Date(),
       }));
-      const data = JSON.stringify(save);
-      console.info(`👍 ${name} scores ${score}`);
-      localStorage.setItem(namespace, data);
+      console.info(`👍 ${label} scores ${score}`);
+      writeModels(namespace, save);
     }
   }
 
   /**
-   * Writes the given list straight into the layer namespace. saveBestModels
-   * keeps only the top one per complexity; the circuit's hall of fame keeps
-   * several recent lines per layer, so it stores the window on its own.
+   * Writes the given list into the layer namespace in compact form.
+   * saveBestModels keeps only the top one per complexity; the circuit's hall
+   * of fame keeps several recent lines per layer, so it stores that window.
    */
   function saveModelList(
     layers: number,
@@ -176,7 +248,7 @@ export function fileUtilities(game = '') {
     kind: string = DEFAULT_KIND,
     namespace = name(layers, kind),
   ) {
-    localStorage.setItem(namespace, JSON.stringify(models));
+    writeModels(namespace, models);
   }
 
   function loadModels(
@@ -287,8 +359,7 @@ export function fileUtilities(game = '') {
         console.warn(`Skipping incompatible model entry ${key}`);
         return;
       }
-      localStorage.setItem(key, JSON.stringify(data));
-      written.push(key);
+      if (writeModels(key, data)) written.push(key);
     });
     return written;
   }
