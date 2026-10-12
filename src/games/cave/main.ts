@@ -13,7 +13,7 @@ import { CaveRace } from './classes/CaveRace';
 import { ChaseCamera } from './classes/ChaseCamera';
 import { config, isDemo } from './classes/Config';
 import { SensorViz } from './classes/SensorViz';
-import { clearScoreRecords, type defaultState } from './utilities';
+import { clearScoreRecords, type defaultState, type Group } from './utilities';
 
 type CaveState = typeof defaultState;
 
@@ -97,34 +97,39 @@ export default async (state: CaveState) => {
   const race = new CaveRace(state, io, seed, scene, {
     onSeedChanged: (nextSeed) => {
       location.hash = `cave=${nextSeed}`;
-      title.textContent = `CAVE // seed ${nextSeed}`;
       state.cave?.setWireframe(wireframe);
     },
   });
 
-  const title = document.createElement('div');
-  title.textContent = `CAVE // seed ${seed}`;
-  title.style.position = 'fixed';
-  title.style.top = '14px';
-  title.style.left = '14px';
-  title.style.zIndex = '2';
-  title.style.color = '#e8edf4';
-  title.style.font = '700 16px monospace';
-  title.style.textShadow = '0 1px 3px #000';
-  document.body.appendChild(title);
+  // Top-left board: each brain group's best (highest) score, replacing the
+  // old seed readout. It refreshes on the throttled HUD tick.
+  const scoreBoard = document.createElement('div');
+  scoreBoard.style.position = 'fixed';
+  scoreBoard.style.top = '14px';
+  scoreBoard.style.left = '14px';
+  scoreBoard.style.zIndex = '2';
+  scoreBoard.style.color = '#e8edf4';
+  scoreBoard.style.font = '700 13px/1.5 monospace';
+  scoreBoard.style.textShadow = '0 1px 3px #000';
+  scoreBoard.style.whiteSpace = 'pre';
+  scoreBoard.style.pointerEvents = 'none';
+  scoreBoard.title = 'best score per brain group';
+  scoreBoard.setAttribute('aria-label', 'Best score per brain group');
+  document.body.appendChild(scoreBoard);
 
   const hint = document.createElement('div');
   hint.textContent =
     'WASD / left stick to roll\nSpace / primary button to jump · R to regenerate\n` to toggle wireframe\nAI focus draws its sensor cone';
   hint.style.position = 'fixed';
-  hint.style.top = '38px';
-  hint.style.left = '14px';
+  hint.style.bottom = '12px';
+  hint.style.right = '24px';
   hint.style.zIndex = '2';
   hint.style.color = '#e8edf4';
   hint.style.font = '600 12px monospace';
   hint.style.textShadow = '0 1px 3px #000';
   hint.style.whiteSpace = 'pre-line';
-  hint.style.maxWidth = 'calc(100vw - 130px)';
+  hint.style.textAlign = 'right';
+  hint.style.pointerEvents = 'none';
   document.body.appendChild(hint);
 
   // ---- side panel: model actions, brain follow keys and the live network
@@ -641,6 +646,38 @@ export default async (state: CaveState) => {
     });
   }
 
+  /** A group's best score: the highest of its current-cave live high and every
+   *  frozen per-seed record, so the board is a stable all-time record. */
+  function groupBestScore(group: Group): number {
+    let best = group.scores.seed;
+    for (const key of Object.keys(group.scores.history)) {
+      const value = group.scores.history[key];
+      if (typeof value === 'number' && value > best) best = value;
+    }
+    return best;
+  }
+
+  /** Redraw the top-left board with each group's best score, in a stable order
+   *  (layers 1..9, then mixed); only rewrites the DOM when a value changes. */
+  let lastBoardText = '';
+  function updateScoreBoard() {
+    const ordered = [...race.groups].sort((a, b) =>
+      a.isMixed === b.isMixed ? a.layer - b.layer : a.isMixed ? 1 : -1,
+    );
+    const lines = ['best'];
+    for (const group of ordered) {
+      const best = groupBestScore(group);
+      const label = group.isMixed ? 'mixed' : String(group.layer);
+      const score = best > 0 ? String(Math.round(best)) : '—';
+      lines.push(`${label.padStart(6)}${score.padStart(8)}`);
+    }
+    const text = lines.join('\n');
+    if (text !== lastBoardText) {
+      lastBoardText = text;
+      scoreBoard.textContent = text;
+    }
+  }
+
   /** The 3D viewport and the network canvas split the window while the panel
    *  is open, exactly like the circuit game. */
   let viewWidth = window.innerWidth;
@@ -785,6 +822,7 @@ export default async (state: CaveState) => {
         'aria-label',
         `Position ${rank} of ${balls.length}`,
       );
+      updateScoreBoard();
       if (!isFollowedAlive) return;
       const gateNumber = Math.min(followed.nextGate + 1, config.GATES_PER_SEED);
       gateCountEl.textContent = `gate ${gateNumber}/${config.GATES_PER_SEED}`;
