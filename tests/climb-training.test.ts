@@ -140,6 +140,20 @@ test('a new seed best promotes the brain and marks the group finished', () => {
   }
 });
 
+test('all climb layers start from the same centered ground point', () => {
+  const fx = makeRace(0);
+  try {
+    const starts = fx.race.groups.flatMap((group) =>
+      group.pool.map((player) => player.x),
+    );
+    expect(starts.length).toBeGreaterThan(0);
+    expect(starts.every((x) => x === config.TOWER_WIDTH / 2)).toBe(true);
+    expect(fx.state.human?.x).toBe(config.TOWER_WIDTH / 2);
+  } finally {
+    fx.restore();
+  }
+});
+
 test('a group respawns on the ground once every corpse has expired', () => {
   const fx = makeRace(0);
   try {

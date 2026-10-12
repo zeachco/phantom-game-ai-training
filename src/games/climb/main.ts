@@ -191,9 +191,17 @@ export default async (state: typeof defaultState) => {
     );
   followKeys.append(makeFollowBtn('mixed', '🧭', 'follow the mixed brain'));
 
+  // Match the circuit/cave panel layout: the wrapper owns the available
+  // height and the canvas is absolute, so resizing the canvas cannot enlarge
+  // its own parent on the next frame.
   const netWrap = document.createElement('div');
-  netWrap.className = 'neural-wrap';
-  netWrap.appendChild(networkCanvas);
+  netWrap.style.flex = '1';
+  netWrap.style.position = 'relative';
+  netWrap.style.minHeight = '0';
+  networkCanvas.style.position = 'absolute';
+  networkCanvas.style.left = '0';
+  networkCanvas.style.top = '0';
+  netWrap.append(networkCanvas);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -421,10 +429,7 @@ export default async (state: typeof defaultState) => {
         // camTop is the bottom edge of the viewport, so subtract the view
         // height: adding the headroom directly would place the whole camera
         // above the climber and leave it below the screen.
-        const target = Math.max(
-          0,
-          state.highestY + CAMERA_HEADROOM - viewH,
-        );
+        const target = Math.max(0, state.highestY + CAMERA_HEADROOM - viewH);
         if (!camSet) {
           camTop = 0;
           camSet = true;

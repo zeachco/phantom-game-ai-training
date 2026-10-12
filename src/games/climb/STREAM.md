@@ -24,7 +24,7 @@ highest living player, so the whole screen is the race to the top.
 - Score is height: +1 per new floor (50 units) of personal-best height on
   the current seed. Dying while falling subtracts the impact speed from the
   brain's score, and idling is punished — an AI player that fails to set a
-  new personal-best for 900 simulation frames dies to the height budget,
+  new personal-best for 450 simulation frames dies to the height budget,
   which costs a flat stall penalty on top.
 - Falling too fast kills: past a fall speed of ~14 units/frame the player
   dies, the corpse keeps falling to the ground and fades from 50% opacity

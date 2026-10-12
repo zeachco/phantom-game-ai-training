@@ -148,8 +148,8 @@ class Config {
   /** physics terminal speed, below the death speed so falls stay stable */
   public TERMINAL_VELOCITY = 20;
   /** an AI player that fails to set a new personal-best height for this many
-   *  simulation frames dies: 10 s at the 90 FPS reference */
-  public HEIGHT_BUDGET_FRAMES = 900;
+   *  simulation frames dies: 5 s at the 90 FPS reference */
+  public HEIGHT_BUDGET_FRAMES = 450;
 
   // sensors, a full 360° ring around the player
   public SENSOR_LENGTH = 300;

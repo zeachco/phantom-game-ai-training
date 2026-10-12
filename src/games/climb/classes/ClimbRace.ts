@@ -22,7 +22,7 @@ import {
   saveScores,
 } from '../utilities';
 import { config } from './Config';
-import { getClimbBrainDimensions, PLAYER_HALF_W, Player } from './Player';
+import { getClimbBrainDimensions, Player } from './Player';
 import { Tower } from './Tower';
 
 export type ClimbModelIo = ReturnType<typeof fileUtilities>;
@@ -152,8 +152,10 @@ export class ClimbRace {
   }
 
   #spawnPlayer(group: Group, slot: number) {
-    const span = config.TOWER_WIDTH - 2 * PLAYER_HALF_W;
-    const x = PLAYER_HALF_W + Math.random() * span;
+    // Every layer starts from the same centered ground position, like the
+    // human and the tower's first centered platform. Variation belongs in the
+    // brains, not in the opening position.
+    const x = config.TOWER_WIDTH / 2;
     const player = new Player(
       x,
       0,
