@@ -165,8 +165,8 @@ class Config {
 
   public CLEAR_STORAGE =
     typeof window !== 'undefined' && /clear/.test(window.location.href);
-  /** optional browser cap while a human is actively being followed, so the
-   *  reference 90 FPS rate is what the human plays at */
+  /** browser cap while the human is active, so the reference 90 FPS rate is
+   *  what the human plays at even when following an AI player */
   public HUMAN_FPS_CAP_ENABLED = true;
   public HUMAN_FPS_CAP = 90;
 }

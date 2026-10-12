@@ -202,6 +202,7 @@ describe('climb player physics', () => {
     const human = groundPlayer();
     tick(human, config.HEIGHT_BUDGET_FRAMES + 10);
     expect(human.damaged).toBe(false);
+    expect(human.stallFrames).toBe(config.HEIGHT_BUDGET_FRAMES + 10);
   });
 
   test('each new floor of personal best height banks one point', () => {

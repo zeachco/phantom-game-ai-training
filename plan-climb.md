@@ -122,8 +122,8 @@ yet), so no "Load models" button.
 - Camera: x pinned to the tower center; y lerps to the highest living
   player, biased slightly up.
 - Simulation runs every animation frame (no fixed-timestep lock); the
-  `HUMAN_FPS_CAP` (90) still applies while the human is followed, so the
-  reference rate is what the human plays at.
+  `HUMAN_FPS_CAP` (90) applies once the human takes control, even if the
+  camera later follows an AI, so the reference rate is what the human plays at.
 
 ## Graphics (cartoon geometry)
 

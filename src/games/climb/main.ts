@@ -233,7 +233,8 @@ export default async (state: typeof defaultState) => {
   controlIndicators.className = 'control-indicators';
   const budgetGauge = document.createElement('div');
   budgetGauge.className = 'gate-gauge';
-  budgetGauge.title = 'height frames remaining for the followed climber';
+  budgetGauge.title =
+    'height frames remaining for the followed climber (human gauge is informational)';
   budgetGauge.setAttribute('role', 'progressbar');
   budgetGauge.setAttribute('aria-label', 'Height budget remaining');
   budgetGauge.setAttribute('aria-valuemin', '0');
@@ -514,15 +515,18 @@ export default async (state: typeof defaultState) => {
         if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
         floorEl.textContent = `floor ${Math.round(followed.brain?.score ?? 0)}`;
         heightEl.textContent = `height ${Math.round(followed.y)}u`;
-        const budget = followed.useAI
-          ? Math.max(0, config.HEIGHT_BUDGET_FRAMES - followed.stallFrames)
-          : config.HEIGHT_BUDGET_FRAMES;
+        // Humans are exempt from the stall death, but their informational
+        // gauge still drains while they fail to set a new height record.
+        const budget = Math.max(
+          0,
+          config.HEIGHT_BUDGET_FRAMES - followed.stallFrames,
+        );
         const budgetFraction = budget / config.HEIGHT_BUDGET_FRAMES;
         budgetGaugeFill.style.height = `${budgetFraction * 100}%`;
         budgetGauge.setAttribute('aria-valuenow', String(budget));
         budgetEl.textContent = followed.useAI
           ? `budget ${budget}f`
-          : 'budget —';
+          : `budget ${budget}f (safe)`;
       }
 
       const followedBrain = followed?.brain;
@@ -531,7 +535,12 @@ export default async (state: typeof defaultState) => {
     },
     {
       maxFps: config.HUMAN_FPS_CAP,
-      shouldCap: () => config.HUMAN_FPS_CAP_ENABLED && humanFollow,
+      // Cap the simulation whenever the human has taken control, even if the
+      // camera has since been switched to an AI player.
+      shouldCap: () =>
+        config.HUMAN_FPS_CAP_ENABLED &&
+        !!state.human?.controls.playerActive &&
+        !state.human.damaged,
     },
   );
 };
