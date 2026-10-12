@@ -743,6 +743,13 @@ canvas {
   align-items: flex-start;
   gap: 2px;
 }
+.combo-indicator {
+  font-family: monospace;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--hud-color);
+}
 .laps,
 .frame-count {
   font-family: monospace;
@@ -838,8 +845,45 @@ canvas {
 .brain-stats.hidden {
   visibility: hidden;
 }
+.climb-progress {
+  position: fixed;
+  top: 18px;
+  right: 24px;
+  z-index: 500;
+  min-width: 86px;
+  color: #fff;
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.climb-progress-label {
+  font: 11px monospace;
+  letter-spacing: 0.12em;
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+.climb-platform-value {
+  font: 800 clamp(42px, 6vw, 78px) / 0.9 monospace;
+}
+.climb-group-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 8px;
+  font: 12px monospace;
+}
+.climb-group-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  opacity: 0.9;
+}
 
 @media (max-width: 760px) {
+  .climb-progress {
+    top: 12px;
+    right: 12px;
+  }
   .steer-overlay {
     gap: 12px;
     padding-left: 12px;

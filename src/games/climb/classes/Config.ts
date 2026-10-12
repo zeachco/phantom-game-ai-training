@@ -16,10 +16,10 @@ export const SLOTS = (() => {
 
 /**
  * Total brain inputs: four channels per slot (dx, dy, visible, width), then
- * seven body channels (left wall, right wall, vx, vy, grounded, current
- * platform to left wall, current platform to right wall).
+ * eight body channels (left wall, right wall, vx, vy, grounded, current
+ * platform to left wall, current platform to right wall, combo value).
  */
-export const CLIMB_INPUT_COUNT = SLOTS * 4 + 7;
+export const CLIMB_INPUT_COUNT = SLOTS * 4 + 8;
 
 export function likelyLagsOnHeavyJs(): boolean {
   if (typeof window === 'undefined') return true;
@@ -117,9 +117,17 @@ class Config {
   public DIFFICULTY_SEED_BASE = 100;
   /** rows are generated this far above the highest living player */
   public AHEAD = 800;
-  /** horizontal landing reach from one row to the next: the max-speed airtime
-   *  at the worst row spacing, minus a margin so every row is jumpable */
-  public JUMP_REACH = 55;
+  /** horizontal landing reach used to randomize the next platform's center.
+   *  The wider band makes rows wander left and right instead of clustering over
+   *  the previous row. Combo jumps are what let a player recover the larger
+   *  gaps created by removed rows. */
+  public JUMP_REACH = 150;
+  /** floor number at which one platform-removal slot is guaranteed. Below it,
+   *  the removal rate is a fractional chance; above it, the fractional part
+   *  adds another removed row half the time, for example. */
+  public PLATFORM_REMOVAL_RATE_FLOOR = 100;
+  /** never remove more than this many consecutive generated rows */
+  public MAX_REMOVED_PLATFORMS_IN_ROW = 4;
   /** one scored floor of personal-best height */
   public FLOOR_HEIGHT = 50;
   /** floors that count as a completed seed: the score target per seed */
@@ -132,10 +140,10 @@ class Config {
   // player physics, tuned per frame at the 90 FPS reference. The simulation
   // runs every animation frame, so on a faster machine the world simply runs
   // faster — every frame count below is relative to that
-  public GRAVITY = 0.75;
+  public GRAVITY = 0.375;
   /** grounded jump impulse at zero horizontal speed; the launch impulse is
    *  scaled so a player moving at MAX_SPEED gets up to 2x the jump height */
-  public JUMP_SPEED = 9;
+  public JUMP_SPEED = 6.75;
   public MAX_JUMP_HEIGHT_MULTIPLIER = 2;
   /** top horizontal speed in u/f */
   public MAX_SPEED = 7;
@@ -164,6 +172,14 @@ class Config {
   /** an AI player that fails to set a new personal-best height for this many
    *  simulation frames dies: 5 s at the 90 FPS reference */
   public HEIGHT_BUDGET_FRAMES = 450;
+  /** a jump must follow a landing within this many simulation frames to keep
+   *  the climb combo alive */
+  public COMBO_FRAME_BUDGET = 8;
+  /** combo values are displayed as x2..x10; x1 is the landing starter */
+  public MAX_COMBO = 10;
+  /** x2 is 1.5x the normal jump strength; each later step adds the same
+   *  half-strength increment, capped by MAX_COMBO */
+  public COMBO_JUMP_STRENGTH = 1.5;
 
   // sensors, object-centric: one slot per each of the SLOTS vertically
   // nearest platforms (dx, dy, visible, width, the standing platform

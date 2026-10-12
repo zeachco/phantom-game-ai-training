@@ -30,6 +30,31 @@ export class Tower {
   #landingLo = 0;
   #landingHi = 0;
 
+  /** Advance one generated row using the current height-dependent spacing. */
+  #advanceRow() {
+    this.#rowY +=
+      lerp(
+        config.ROW_SPACING_MIN,
+        config.ROW_SPACING_MAX,
+        this.difficultyAt(this.#rowY),
+      ) *
+      (0.9 + this.#rng() * 0.2);
+  }
+
+  /** Number of rows to skip before the next visible platform. A rate of 0.5
+   *  skips one row half the time; 1.5 skips one row every time and a second
+   *  row half the time. The cap prevents an unreachable blank stretch. */
+  #removedRowsAt(y: number) {
+    const floor = Math.max(0, Math.floor(y / config.FLOOR_HEIGHT));
+    const rate = floor / config.PLATFORM_REMOVAL_RATE_FLOOR;
+    const whole = Math.floor(rate);
+    const fractional = rate - whole;
+    return Math.min(
+      config.MAX_REMOVED_PLATFORMS_IN_ROW,
+      whole + (this.#rng() < fractional ? 1 : 0),
+    );
+  }
+
   constructor(seed: number) {
     this.seed = seed;
     this.#rng = mulberry32(seed + 1);
@@ -55,16 +80,7 @@ export class Tower {
 
   /** generate rows until the tower reaches at least `targetY` */
   ensureAbove(targetY: number) {
-    while (this.#rowY < targetY) {
-      this.#rowY +=
-        lerp(
-          config.ROW_SPACING_MIN,
-          config.ROW_SPACING_MAX,
-          this.difficultyAt(this.#rowY),
-        ) *
-        (0.9 + this.#rng() * 0.2);
-      this.#spawnRow();
-    }
+    while (this.#rowY < targetY) this.#spawnRow();
   }
 
   #spawnFirstRow() {
@@ -75,9 +91,13 @@ export class Tower {
     this.#bandHi = x + w + config.JUMP_REACH;
   }
 
-  /** place the next row into the band reachable from the previous one, so
-   *  every row is jumpable from the row below */
+  /** Skip height-scaled rows, then place the next visible platform into the
+   *  widened band reachable from the previous visible one. */
   #spawnRow() {
+    const nextY = this.#rowY + config.ROW_SPACING_MIN;
+    const removed = this.#removedRowsAt(nextY);
+    for (let i = 0; i <= removed; i++) this.#advanceRow();
+
     const d = this.difficultyAt(this.#rowY);
     const rng = this.#rng;
     const w = clamp(

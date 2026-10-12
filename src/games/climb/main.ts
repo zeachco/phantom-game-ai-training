@@ -9,13 +9,10 @@ import {
   resizeCanvas,
 } from '../../utilities/dom';
 import { GameLoop } from '../../utilities/three/GameLoop';
+import { CAMERA_LERP, climbCameraCenterY } from './camera';
 import { ClimbRace } from './classes/ClimbRace';
 import { config, isDemo } from './classes/Config';
 import type { Player } from './classes/Player';
-import {
-  CAMERA_LERP,
-  climbCameraCenterY,
-} from './camera';
 import {
   brainId,
   clearScoreRecords,
@@ -268,6 +265,10 @@ export default async (state: typeof defaultState) => {
   heightEl.className = 'frame-count';
   heightEl.title = 'feet height';
   heightEl.textContent = 'height 0u';
+  const comboEl = document.createElement('div');
+  comboEl.className = 'combo-indicator';
+  comboEl.title = 'landing and wall-bounce combo';
+  comboEl.hidden = true;
   const budgetEl = document.createElement('div');
   budgetEl.className = 'frame-count';
   budgetEl.title =
@@ -277,7 +278,7 @@ export default async (state: typeof defaultState) => {
   seedCountdown.className = 'finish-countdown';
   seedCountdown.style.color = 'red';
   seedCountdown.hidden = true;
-  readout.append(seedCountdown, floorEl, heightEl, budgetEl);
+  readout.append(seedCountdown, comboEl, floorEl, heightEl, budgetEl);
   steerOverlay.append(controlIndicators, budgetGauge, readout);
   document.body.appendChild(steerOverlay);
 
@@ -301,6 +302,19 @@ export default async (state: typeof defaultState) => {
   randomSeed.title = 'Random tower';
   seedControls.append(previousSeed, seedLabel, nextSeed, randomSeed);
   document.body.appendChild(seedControls);
+
+  const climbProgress = document.createElement('aside');
+  climbProgress.className = 'climb-progress';
+  const platformLabel = document.createElement('div');
+  platformLabel.className = 'climb-progress-label';
+  platformLabel.textContent = 'platform';
+  const platformValue = document.createElement('div');
+  platformValue.className = 'climb-platform-value';
+  platformValue.textContent = '0';
+  const groupProgress = document.createElement('div');
+  groupProgress.className = 'climb-group-progress';
+  climbProgress.append(platformLabel, platformValue, groupProgress);
+  document.body.appendChild(climbProgress);
 
   const loop = new GameLoop();
   const shouldUpdateDom = createUpdateLimiter(20);
@@ -433,9 +447,8 @@ export default async (state: typeof defaultState) => {
         );
 
       // camera: the whole tower width always fits and centers the followed
-      // player's body. Vertical velocity adds a smooth look-ahead: at full
-      // jump or fall speed, the player is framed a quarter of a viewport in
-      // the direction of travel.
+      // player's body. It targets location only; velocity never predicts the
+      // direction of travel.
       const scale = Math.min(
         gameCanvas.height / VIEW_HEIGHT,
         gameCanvas.width / (config.TOWER_WIDTH + 40),
@@ -448,7 +461,7 @@ export default async (state: typeof defaultState) => {
         // centre into its lower edge before applying the world-floor clamp.
         const cameraCenter = followed
           ? climbCameraCenterY(followed, viewH)
-          : climbCameraCenterY({ y: state.highestY, vy: 0 }, viewH);
+          : climbCameraCenterY({ y: state.highestY }, viewH);
         const target = Math.max(0, cameraCenter - viewH * 0.5);
         if (!camSet) {
           camTop = 0;
@@ -505,11 +518,31 @@ export default async (state: typeof defaultState) => {
           followed?.color || '#c4c4c4',
         );
         steerOverlay.classList.toggle('hidden', !followed || followed.damaged);
+        platformValue.textContent = String(followed?.bestPlatform ?? 0);
+        groupProgress.replaceChildren(
+          ...race.groups.map((group) => {
+            const row = document.createElement('div');
+            row.className = 'climb-group-row';
+            row.style.color = group.isMixed
+              ? config.MIXED_COLOR
+              : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
+            const name = document.createElement('span');
+            name.textContent = group.isMixed ? 'M' : String(group.layer);
+            const score = document.createElement('span');
+            score.textContent = String(
+              Math.max(0, Math.round(group.scores.seed)),
+            );
+            row.append(name, score);
+            return row;
+          }),
+        );
       }
       if (followed) {
         const c = followed.controls;
         if (controlCtx)
           drawControlAxis(controlCtx, c.left, c.right, followed.color);
+        comboEl.hidden = followed.comboValue < 2;
+        comboEl.textContent = `x${followed.comboValue}`;
         jumpSamples.push(followed.controls.jumpHeld ? 1 : 0);
         if (jumpSamples.length > JUMP_TIMELINE_WIDTH) jumpSamples.shift();
         if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);

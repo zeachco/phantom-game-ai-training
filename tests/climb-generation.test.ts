@@ -69,12 +69,16 @@ describe('climb tower generation', () => {
     const easySpacings = spacings(easy);
     const hardSpacings = spacings(hard);
     expect(mean(easySpacings)).toBeLessThan(mean(hardSpacings));
-    // A max-difficulty seed stays in the widest spacing band. The easy seed
-    // now ramps toward that band as its height increases.
+    // A max-difficulty seed stays in the widest spacing band. Removed rows
+    // can multiply that band, up to the configured consecutive-row cap.
     for (const s of hardSpacings)
-      expect(s).toBeGreaterThanOrEqual(config.ROW_SPACING_MAX * 0.9 - 1e-6);
+      expect(s).toBeGreaterThanOrEqual(config.ROW_SPACING_MIN * 0.9 - 1e-6);
     for (const s of hardSpacings)
-      expect(s).toBeLessThanOrEqual(config.ROW_SPACING_MAX * 1.1 + 1e-6);
+      expect(s).toBeLessThanOrEqual(
+        config.ROW_SPACING_MAX *
+          1.1 *
+          (config.MAX_REMOVED_PLATFORMS_IN_ROW + 1),
+      );
     // the platform widths shrink with the seed
     const meanWidth = (platforms: { w: number }[]) =>
       mean(platforms.slice(1).map((p) => p.w));

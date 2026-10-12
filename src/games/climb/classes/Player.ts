@@ -42,12 +42,17 @@ export class Player {
   public stallFrames = 0;
   public jumpBuffer = 0;
   public coyoteFrames = 0;
+  /** current chained landing/wall-bounce combo, capped at x10 */
+  public comboValue = 0;
+  /** highest generated platform number this player has stood on */
+  public bestPlatform = 0;
   public controls: Controls;
   public sensor?: Sensor;
   public brain?: NeuralNetwork;
 
   #prevFeet: number;
   #prevJumpHeld = false;
+  #comboFrames = 0;
   #particles: Particle[] = [];
   /** last platform the feet stood on; kept while airborne so the edge
    *  channels stay stable through the coyote window and early jumps */
@@ -95,6 +100,11 @@ export class Player {
       return;
     }
     this.controls.update();
+    if (this.#comboFrames > 0) {
+      this.#comboFrames--;
+      if (this.#comboFrames === 0) this.comboValue = 0;
+    }
+    const wasGrounded = this.grounded;
     const jumpHeld = this.controls.jumpHeld;
     const jumpPressed = jumpHeld && !this.#prevJumpHeld;
     if (jumpPressed) this.jumpBuffer = config.JUMP_BUFFER_FRAMES;
@@ -119,16 +129,29 @@ export class Player {
     if (this.vy < -config.TERMINAL_VELOCITY)
       this.vy = -config.TERMINAL_VELOCITY;
     if (this.jumpBuffer > 0 && (this.grounded || this.coyoteFrames > 0)) {
-      // Momentum buys airtime: jump height scales from 1x at rest to 4x at
-      // top speed. Since height is proportional to impulse², use the square
-      // root so the configured multiplier describes actual height.
+      const chainedJump = this.grounded && this.#comboFrames > 0;
+      if (chainedJump)
+        this.comboValue = Math.min(
+          config.MAX_COMBO,
+          Math.max(1, this.comboValue) + 1,
+        );
+      // Horizontal momentum and the landing combo both buy airtime. Combo
+      // strength is linear: x2 is 1.5x the launch strength, x3 is 2x, and
+      // so on, capped at x10. Height remains proportional to impulse².
       const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
       const heightMultiplier =
         1 + (config.MAX_JUMP_HEIGHT_MULTIPLIER - 1) * speedRatio;
-      this.vy = config.JUMP_SPEED * Math.sqrt(heightMultiplier);
+      const comboStrength =
+        this.comboValue > 1
+          ? 1 + (this.comboValue - 1) * (config.COMBO_JUMP_STRENGTH - 1)
+          : 1;
+      this.vy = config.JUMP_SPEED * Math.sqrt(heightMultiplier) * comboStrength;
       this.grounded = false;
       this.coyoteFrames = 0;
       this.jumpBuffer = 0;
+      // The combo now travels with the player until the next landing. A
+      // missed follow-up is handled by the landing window instead.
+      this.#comboFrames = 0;
     }
     if (this.jumpBuffer > 0) this.jumpBuffer--;
     this.#prevJumpHeld = jumpHeld;
@@ -137,10 +160,16 @@ export class Player {
     this.y += this.vy;
     if (this.x < PLAYER_HALF_W) {
       this.x = PLAYER_HALF_W;
-      if (this.vx < 0) this.vx = -this.vx * config.WALL_BOUNCE;
+      if (this.vx < 0) {
+        this.vx = -this.vx * config.WALL_BOUNCE;
+        this.#addComboPoint();
+      }
     } else if (this.x > config.TOWER_WIDTH - PLAYER_HALF_W) {
       this.x = config.TOWER_WIDTH - PLAYER_HALF_W;
-      if (this.vx > 0) this.vx = -this.vx * config.WALL_BOUNCE;
+      if (this.vx > 0) {
+        this.vx = -this.vx * config.WALL_BOUNCE;
+        this.#addComboPoint();
+      }
     }
     if (this.y <= 0) {
       this.y = 0;
@@ -178,6 +207,17 @@ export class Player {
       );
       this.#currentPlat = support;
       if (!support && this.y > 2) this.grounded = false;
+      if (support) {
+        const platformNumber = this.tower.platforms.indexOf(support) + 1;
+        if (platformNumber > this.bestPlatform)
+          this.bestPlatform = platformNumber;
+      }
+      if (!wasGrounded && this.grounded) {
+        // A landing starts the short window for the next jump. The first
+        // landing is x1; the jump that follows it becomes x2.
+        if (this.comboValue === 0) this.comboValue = 1;
+        this.#comboFrames = config.COMBO_FRAME_BUDGET;
+      }
       this.coyoteFrames = config.COYOTE_FRAMES;
     } else if (this.coyoteFrames > 0) this.coyoteFrames--;
     if (this.y > this.bestHeight) {
@@ -201,6 +241,7 @@ export class Player {
         this.grounded,
         this.tower,
         this.#currentPlat,
+        this.comboValue,
       );
       if (this.useAI) {
         const outputs = this.brain.process(this.sensor.readings);
@@ -210,6 +251,11 @@ export class Player {
       }
     }
     this.#updateParticles();
+  }
+
+  #addComboPoint(): void {
+    this.comboValue = Math.min(config.MAX_COMBO, this.comboValue + 1);
+    this.#comboFrames = config.COMBO_FRAME_BUDGET;
   }
 
   #die(now: number, cause: 'impact' | 'stall'): void {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { config, SENSORS } from '../src/games/climb/classes/Config';
+import { CLIMB_INPUT_COUNT, config } from '../src/games/climb/classes/Config';
 import {
   getClimbBrainDimensions,
   PLAYER_HALF_W,
@@ -25,14 +25,14 @@ function towerWith(platforms: Platform[] = []): Tower {
       }
       return top;
     },
-    hasSupport(x, halfW, feet, tolerance = 2) {
-      if (feet <= tolerance) return true;
+    supportPlatform(x, halfW, feet, tolerance = 2) {
+      if (feet <= tolerance) return null;
       for (const p of platforms) {
         if (Math.abs(p.y - feet) > tolerance) continue;
         if (x + halfW <= p.x || x - halfW >= p.x + p.w) continue;
-        return true;
+        return p;
       }
-      return false;
+      return null;
     },
   } as unknown as Tower;
 }
@@ -106,19 +106,19 @@ describe('climb player physics', () => {
   });
 
   test('a jump press just before touchdown is buffered and fires on landing', () => {
-    const player = new Player(320, 40, ControlType.DUMMY, towerWith());
+    const player = new Player(320, 20, ControlType.DUMMY, towerWith());
     tick(player, 7);
     expect(player.grounded).toBe(false);
     player.controls.jump = 1;
     player.update(7);
     player.controls.jump = 0;
-    player.update(8);
-    expect(player.grounded).toBe(false);
-    player.update(9); // touchdown
+    for (let frame = 8; frame < 30 && !player.grounded; frame++)
+      player.update(frame);
     expect(player.grounded).toBe(true);
     expect(player.y).toBe(0);
-    player.update(10); // the buffered press fires on the first grounded frame
-    expect(player.vy).toBe(config.JUMP_SPEED);
+    player.update(30); // the buffered press fires on the first grounded frame
+    expect(player.comboValue).toBe(2);
+    expect(player.vy).toBe(config.JUMP_SPEED * config.COMBO_JUMP_STRENGTH);
     expect(player.grounded).toBe(false);
   });
 
@@ -225,10 +225,10 @@ describe('climb player physics', () => {
 
   test('the brain sees the full input vector and writes the three drive outputs', () => {
     const { inputCount, outputCount } = getClimbBrainDimensions();
-    expect(inputCount).toBe(SENSORS + 3);
+    expect(inputCount).toBe(CLIMB_INPUT_COUNT);
     expect(outputCount).toBe(3);
     const ai = new Player(320, 0, ControlType.AI, towerWith(), 't', '', 1);
-    expect(ai.sensor!.rayCount).toBe(SENSORS);
+    expect(ai.sensor!.inputCount).toBe(CLIMB_INPUT_COUNT);
     const seen: number[][] = [];
     ai.brain!.process = (inputs: number[]) => {
       seen.push(inputs);

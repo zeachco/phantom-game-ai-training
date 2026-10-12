@@ -15,8 +15,9 @@ import type { Platform, Tower } from './Tower';
  *
  * Body channels (in order): distance to the left wall and to the right wall
  * (scaled by TOWER_WIDTH), horizontal and vertical velocity, ground contact
- * (1/0), and the standing platform's distances to the left and right walls
- * (0 when standing on the ground or not standing at all).
+ * (1/0), the standing platform's distances to the left and right walls
+ * (0 when standing on the ground or not standing at all), and the normalized
+ * combo value.
  *
  * Slots fill deterministically: the tower's rows are sorted by y, so a
  * two-pointer walk from the player's row outward always puts the closest
@@ -24,7 +25,7 @@ import type { Platform, Tower } from './Tower';
  */
 export class Sensor {
   readonly slotCount: number;
-  /** total brain inputs, `slotCount * 4 + 7` */
+  /** total brain inputs, `slotCount * 4 + 8` */
   readonly inputCount: number;
   /** normalized inputs, refreshed in place */
   readonly readings: number[];
@@ -33,7 +34,7 @@ export class Sensor {
 
   constructor(slotCount = SLOTS) {
     this.slotCount = slotCount;
-    this.inputCount = slotCount * 4 + 7;
+    this.inputCount = slotCount * 4 + 8;
     this.readings = new Array(this.inputCount).fill(0);
     this.#slots = new Array(slotCount).fill(null);
   }
@@ -51,6 +52,7 @@ export class Sensor {
     grounded: boolean,
     tower: Tower,
     current: Platform | null,
+    comboValue = 0,
   ) {
     const platforms = tower.platforms;
     const n = platforms.length;
@@ -123,6 +125,7 @@ export class Sensor {
     readings[o + 6] = current
       ? clamp(0, 1, (W - current.x - current.w) / W)
       : 0;
+    readings[o + 7] = clamp(0, 1, comboValue / config.MAX_COMBO);
   }
 
   /** draw the tracked platforms, only ever used for the followed player */
