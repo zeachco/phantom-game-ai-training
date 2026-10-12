@@ -115,16 +115,21 @@ export class Tower {
     return top;
   }
 
-  /** support query: is there a surface within `tolerance` under the feet? */
-  hasSupport(x: number, halfW: number, feet: number, tolerance = 2) {
-    if (feet <= tolerance) return true;
+  /** support query: the platform whose top surface sits within `tolerance`
+   *  under the feet, or null when on the ground or over a gap */
+  supportPlatform(
+    x: number,
+    halfW: number,
+    feet: number,
+    tolerance = 2,
+  ): Platform | null {
     for (let i = 0; i < this.platforms.length; i++) {
       const p = this.platforms[i];
       if (Math.abs(p.y - feet) > tolerance) continue;
       if (x + halfW <= p.x || x - halfW >= p.x + p.w) continue;
-      return true;
+      return p;
     }
-    return false;
+    return null;
   }
 
   /** the visible window in world y, for culling the draw */

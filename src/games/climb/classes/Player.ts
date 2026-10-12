@@ -2,22 +2,22 @@ import { NeuralNetwork } from '../../../ai/Network';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import { ControlType } from '../types';
-import { config, SENSORS } from './Config';
+import { CLIMB_INPUT_COUNT, config } from './Config';
 import { Controls } from './Controls';
 import { Sensor } from './Sensor';
-import type { Tower } from './Tower';
+import type { Platform, Tower } from './Tower';
 
 /** physics half-width of the body, also how far the walls keep the spawn */
 export const PLAYER_HALF_W = 11;
 /** visual and camera height of a climber's body */
 export const PLAYER_HEIGHT = 30;
 
-export function getClimbBrainDimensions(rayCount = SENSORS): {
+export function getClimbBrainDimensions(): {
   inputCount: number;
   outputCount: number;
 } {
   return {
-    inputCount: rayCount + 3,
+    inputCount: CLIMB_INPUT_COUNT,
     outputCount: Object.keys(new Controls(ControlType.AI)).length,
   };
 }
@@ -49,6 +49,9 @@ export class Player {
   #prevFeet: number;
   #prevJumpHeld = false;
   #particles: Particle[] = [];
+  /** last platform the feet stood on; kept while airborne so the edge
+   *  channels stay stable through the coyote window and early jumps */
+  #currentPlat: Platform | null = null;
 
   constructor(
     public x: number,
@@ -165,12 +168,17 @@ export class Player {
       }
     }
     if (this.grounded) {
-      if (!this.tower.hasSupport(this.x, PLAYER_HALF_W, this.y, 2)) {
-        this.grounded = false;
-        this.coyoteFrames = config.COYOTE_FRAMES;
-      } else {
-        this.coyoteFrames = config.COYOTE_FRAMES;
-      }
+      // hasSupport's ground shortcut (feet <= tolerance) inlined: on the
+      // ground supportPlatform returns null but the player stays grounded
+      const support = this.tower.supportPlatform(
+        this.x,
+        PLAYER_HALF_W,
+        this.y,
+        2,
+      );
+      this.#currentPlat = support;
+      if (!support && this.y > 2) this.grounded = false;
+      this.coyoteFrames = config.COYOTE_FRAMES;
     } else if (this.coyoteFrames > 0) this.coyoteFrames--;
     if (this.y > this.bestHeight) {
       const prevFloors = Math.floor(this.bestHeight / config.FLOOR_HEIGHT);
@@ -185,16 +193,17 @@ export class Player {
     if (this.useAI && this.stallFrames >= config.HEIGHT_BUDGET_FRAMES)
       this.#die(now, 'stall');
     if (this.sensor && this.brain) {
-      this.sensor.update(this.x, this.y + PLAYER_HEIGHT * 0.5, this.tower);
+      this.sensor.update(
+        this.x,
+        this.y + PLAYER_HEIGHT * 0.5,
+        this.vx,
+        this.vy,
+        this.grounded,
+        this.tower,
+        this.#currentPlat,
+      );
       if (this.useAI) {
-        const inputs = new Array<number>(this.sensor.rayCount + 3);
-        for (let i = 0; i < this.sensor.rayCount; i++)
-          inputs[i] = this.sensor.readings[i];
-        const r = this.sensor.rayCount;
-        inputs[r] = clamp(-1, 1, this.vx / config.MAX_SPEED);
-        inputs[r + 1] = clamp(-1, 1, this.vy / config.JUMP_SPEED);
-        inputs[r + 2] = this.grounded ? 1 : 0;
-        const outputs = this.brain.process(inputs);
+        const outputs = this.brain.process(this.sensor.readings);
         this.controls.left = clamp(0, 1, outputs[0]);
         this.controls.right = clamp(0, 1, outputs[1]);
         this.controls.writeJump(outputs[2]);

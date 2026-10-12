@@ -5,14 +5,21 @@ import { CTRL_COLORS } from '../../../ai/utils';
 export const isDemo =
   typeof window !== 'undefined' && location.href.includes('demo=true');
 
-/** `?sensors=N` overrides the 360° ray count, e.g. ?sensors=45 halves it. */
-export const SENSORS = (() => {
-  if (typeof window === 'undefined') return 90;
-  const match = location.search.match(/[?&]sensors=(\d+)/);
-  if (!match) return 90;
+/** `?slots=N` overrides the per-platform sensor slot count, e.g. ?slots=15. */
+export const SLOTS = (() => {
+  if (typeof window === 'undefined') return 10;
+  const match = location.search.match(/[?&]slots=(\d+)/);
+  if (!match) return 10;
   const parsed = parseInt(match[1], 10);
-  return Number.isFinite(parsed) ? Math.max(8, Math.min(180, parsed)) : 90;
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(30, parsed)) : 10;
 })();
+
+/**
+ * Total brain inputs: four channels per slot (dx, dy, visible, width), then
+ * seven body channels (left wall, right wall, vx, vy, grounded, current
+ * platform to left wall, current platform to right wall).
+ */
+export const CLIMB_INPUT_COUNT = SLOTS * 4 + 7;
 
 export function likelyLagsOnHeavyJs(): boolean {
   if (typeof window === 'undefined') return true;
@@ -158,9 +165,10 @@ class Config {
    *  simulation frames dies: 5 s at the 90 FPS reference */
   public HEIGHT_BUDGET_FRAMES = 450;
 
-  // sensors, a full 360° ring around the player. Odd rays report the nearest
-  // obstacle; even rays pass through it to the next. Horizontal rays report
-  // side walls only and ignore platforms.
+  // sensors, object-centric: one slot per each of the SLOTS vertically
+  // nearest platforms (dx, dy, visible, width, the standing platform
+  // excluded), then the body channels. SENSOR_LENGTH scales the slot
+  // dx/dy; wall and platform-edge distances scale by TOWER_WIDTH.
   public SENSOR_LENGTH = 300;
 
   public CLEAR_STORAGE =
