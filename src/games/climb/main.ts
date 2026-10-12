@@ -229,6 +229,19 @@ export default async (state: typeof defaultState) => {
   steerOverlay.className = 'steer-overlay hidden';
   const controlIndicators = document.createElement('div');
   controlIndicators.className = 'control-indicators';
+  const budgetGauge = document.createElement('div');
+  budgetGauge.className = 'gate-gauge';
+  budgetGauge.title = 'height frames remaining for the followed climber';
+  budgetGauge.setAttribute('role', 'progressbar');
+  budgetGauge.setAttribute('aria-label', 'Height budget remaining');
+  budgetGauge.setAttribute('aria-valuemin', '0');
+  budgetGauge.setAttribute(
+    'aria-valuemax',
+    String(config.HEIGHT_BUDGET_FRAMES),
+  );
+  const budgetGaugeFill = document.createElement('div');
+  budgetGaugeFill.className = 'gate-gauge-fill';
+  budgetGauge.append(budgetGaugeFill);
   const controlCanvas = document.createElement('canvas');
   controlCanvas.className = 'control-axis';
   controlCanvas.width = 110;
@@ -262,7 +275,7 @@ export default async (state: typeof defaultState) => {
   seedCountdown.style.color = 'red';
   seedCountdown.hidden = true;
   readout.append(seedCountdown, floorEl, heightEl, budgetEl);
-  steerOverlay.append(controlIndicators, readout);
+  steerOverlay.append(controlIndicators, budgetGauge, readout);
   document.body.appendChild(steerOverlay);
 
   // The map selector stays in the top-left HUD so it remains available while
@@ -429,7 +442,8 @@ export default async (state: typeof defaultState) => {
         // camTop is the bottom edge of the viewport, so subtract the view
         // height: adding the headroom directly would place the whole camera
         // above the climber and leave it below the screen.
-        const target = Math.max(0, state.highestY + CAMERA_HEADROOM - viewH);
+        const cameraY = humanFollow && followed ? followed.y : state.highestY;
+        const target = Math.max(0, cameraY + CAMERA_HEADROOM - viewH);
         if (!camSet) {
           camTop = 0;
           camSet = true;
@@ -479,8 +493,13 @@ export default async (state: typeof defaultState) => {
       drawScores(state, gameCtx);
 
       // the cockpit mimics the followed climber, hidden while it is dead
-      if (domUpdateDue)
+      if (domUpdateDue) {
+        steerOverlay.style.setProperty(
+          '--hud-color',
+          followed?.color || '#c4c4c4',
+        );
         steerOverlay.classList.toggle('hidden', !followed || followed.damaged);
+      }
       if (followed) {
         const c = followed.controls;
         if (controlCtx)
@@ -490,8 +509,14 @@ export default async (state: typeof defaultState) => {
         if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
         floorEl.textContent = `floor ${Math.round(followed.brain?.score ?? 0)}`;
         heightEl.textContent = `height ${Math.round(followed.y)}u`;
+        const budget = followed.useAI
+          ? Math.max(0, config.HEIGHT_BUDGET_FRAMES - followed.stallFrames)
+          : config.HEIGHT_BUDGET_FRAMES;
+        const budgetFraction = budget / config.HEIGHT_BUDGET_FRAMES;
+        budgetGaugeFill.style.height = `${budgetFraction * 100}%`;
+        budgetGauge.setAttribute('aria-valuenow', String(budget));
         budgetEl.textContent = followed.useAI
-          ? `budget ${Math.max(0, config.HEIGHT_BUDGET_FRAMES - followed.stallFrames)}f`
+          ? `budget ${budget}f`
           : 'budget —';
       }
 
