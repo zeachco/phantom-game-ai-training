@@ -28,10 +28,11 @@ highest living player, so the whole screen is the race to the top.
   brain's score, and idling is punished — an AI player that fails to set a
   new personal-best for 450 simulation frames dies to the height budget,
   which costs a flat stall penalty on top.
-- Falling too fast kills: past a fall speed of ~20 units/frame the player
-  dies, corresponding to roughly 260 units of free fall. The corpse keeps
-  falling to the ground and fades from 50% opacity to 0 over 3 s. A missed
-  row that lands you on the one below is cheap; a long fall is not.
+- Falling too far kills: the fall is measured from the last surface the feet
+  stood on, so a jump's own rise never counts against it; 260 units below
+  that platform the player dies. The corpse keeps falling to the ground and
+  fades from 50% opacity to 0 over 3 s. A missed row that lands you on the
+  one below is cheap; a long fall is not.
 - There are no generations: a brain category waits until every player in
   its pool is dead and the corpses are gone, then respawns the whole pool
   together — slot 0 clones the group's best brain, the higher slots carry
@@ -82,5 +83,6 @@ uses the browser's standard Gamepad API mapping and its stick has a small
 deadzone. The camera follows the best-scoring player until the first
 driving input, then sticks to the human; dying hands the camera back. It
 is a watcher, not a participant in training: its score competes in the
-live list, but it is exempt from the height budget and never writes into
-the AI pipeline. Dying respawns a fresh human player on the ground.
+live list, but it never writes into the AI pipeline. Like the AIs, it dies
+when its height budget runs out; dying respawns a fresh human player on
+the ground.

@@ -74,7 +74,7 @@ class Config {
   /** corpses linger that long after the death, fading from 0.5 to 0 opacity;
    *  a whole group respawns together once every member's corpse has expired */
   public DEAD_LIFETIME = 3000;
-  /** score lost when an AI player dies of the height budget; steeper than the
+  /** score lost when a player dies of the height budget; steeper than the
    *  worst impact-speed debt so idling is never the cheaper way out */
   public STALL_PENALTY = 9;
 
@@ -109,7 +109,9 @@ class Config {
   public GROUND_THICKNESS = 40;
   public PLATFORM_THICKNESS = 14;
   public PLATFORM_MIN_WIDTH = 60;
-  public PLATFORM_MAX_WIDTH = 140;
+  /** widest platforms, at the foot of the tower; rows narrow toward
+   *  PLATFORM_MIN_WIDTH as the tower climbs */
+  public PLATFORM_MAX_WIDTH = 180;
   /** vertical gap between rows, widening with tower difficulty */
   public ROW_SPACING_MIN = 32;
   public ROW_SPACING_MAX = 42;
@@ -118,10 +120,11 @@ class Config {
   /** rows are generated this far above the highest living player */
   public AHEAD = 800;
   /** horizontal landing reach used to randomize the next platform's center.
-   *  The wider band makes rows wander left and right instead of clustering over
-   *  the previous row. Combo jumps are what let a player recover the larger
-   *  gaps created by removed rows. */
-  public JUMP_REACH = 150;
+   *  The band spans nearly the full tower width, so rows spread left and
+   *  right across the tower instead of clustering over the previous row.
+   *  Combo jumps are what let a player recover the larger gaps created by
+   *  removed rows. */
+  public JUMP_REACH = 240;
   /** floor number at which one platform-removal slot is guaranteed. Below it,
    *  the removal rate is a fractional chance; above it, the fractional part
    *  adds another removed row half the time, for example. */
@@ -140,7 +143,7 @@ class Config {
   // player physics, tuned per frame at the 90 FPS reference. The simulation
   // runs every animation frame, so on a faster machine the world simply runs
   // faster — every frame count below is relative to that
-  public GRAVITY = 0.375;
+  public GRAVITY = 0.1875;
   /** grounded jump impulse at zero horizontal speed; the launch impulse is
    *  scaled so a player moving at MAX_SPEED gets up to 2x the jump height */
   public JUMP_SPEED = 6.75;
@@ -162,17 +165,17 @@ class Config {
   public COYOTE_FRAMES = 6;
   /** frames a jump press is remembered before landing */
   public JUMP_BUFFER_FRAMES = 6;
-  /** safe fall distance is about twice the old 130u threshold */
+  /** falling this far below the last surface the feet stood on kills; the
+   *  reference is the last touched platform, so a jump's own rise is never
+   *  counted against the fall. About twice the old 130u threshold. */
   public DEATH_HEIGHT = 260;
-  /** falling at or below the speed reached after DEATH_HEIGHT of free fall */
-  public DEATH_VELOCITY = Math.sqrt(2 * this.GRAVITY * this.DEATH_HEIGHT);
-  /** physics terminal speed, just above the death speed so the threshold is
-   *  reachable while keeping corpses' falls numerically stable */
+  /** physics terminal speed for long falls; kept well above the death speed
+   *  so the lethal threshold stays reachable while keeping corpse falls
+   *  numerically stable */
   public TERMINAL_VELOCITY = 20;
-  /** an AI player that fails to set a new personal-best height for this many
-   *  simulation frames dies: ~0.2 s at the 90 FPS reference, a 23x faster
-   *  idle gauge than the old 5 s budget */
-  public HEIGHT_BUDGET_FRAMES = 20;
+  /** a player that fails to set a new personal-best height for this many
+   *  simulation frames dies: ~5.6 s at the 90 FPS reference */
+  public HEIGHT_BUDGET_FRAMES = 500;
   /** a jump must follow a landing within this many simulation frames to keep
    *  the climb combo alive */
   public COMBO_FRAME_BUDGET = 8;

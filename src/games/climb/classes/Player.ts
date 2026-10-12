@@ -57,6 +57,9 @@ export class Player {
   /** last platform the feet stood on; kept while airborne so the edge
    *  channels stay stable through the coyote window and early jumps */
   #currentPlat: Platform | null = null;
+  /** y of the last surface the feet stood on: the fall-damage reference, so
+   *  a jump's own rise never counts against the lethal drop */
+  #lastTouchY: number;
 
   constructor(
     public x: number,
@@ -83,6 +86,7 @@ export class Player {
     }
     this.bestHeight = y;
     this.#prevFeet = y;
+    this.#lastTouchY = y;
   }
 
   update(now: number): void {
@@ -177,8 +181,9 @@ export class Player {
       this.grounded = true;
     }
     // One-way surfaces only catch feet crossing from above. A fall that
-    // nothing catches past the death speed is lethal: the corpse then keeps
-    // falling to the ground on later frames.
+    // nothing catches, deeper than DEATH_HEIGHT below the last surface the
+    // feet stood on, is lethal: the corpse then keeps falling to the ground
+    // on later frames.
     if (this.vy < 0) {
       const impactVy = this.vy;
       const top = this.tower.crossedSurface(
@@ -192,7 +197,7 @@ export class Player {
         this.vy = 0;
         this.grounded = true;
         if (impactVy <= -6) this.#spawnPoof(impactVy);
-      } else if (impactVy <= -config.DEATH_VELOCITY) {
+      } else if (this.#lastTouchY - this.y >= config.DEATH_HEIGHT) {
         this.#die(now, 'impact');
       }
     }
@@ -207,6 +212,7 @@ export class Player {
       );
       this.#currentPlat = support;
       if (!support && this.y > 2) this.grounded = false;
+      if (this.grounded) this.#lastTouchY = this.y;
       if (support) {
         const platformNumber = this.tower.platforms.indexOf(support) + 1;
         if (platformNumber > this.bestPlatform)
@@ -230,8 +236,7 @@ export class Player {
     } else {
       this.stallFrames++;
     }
-    if (this.useAI && this.stallFrames >= config.HEIGHT_BUDGET_FRAMES)
-      this.#die(now, 'stall');
+    if (this.stallFrames >= config.HEIGHT_BUDGET_FRAMES) this.#die(now, 'stall');
     if (this.sensor && this.brain) {
       this.sensor.update(
         this.x,

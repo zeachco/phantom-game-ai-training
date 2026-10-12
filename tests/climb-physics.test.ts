@@ -62,7 +62,7 @@ describe('climb player physics', () => {
     expect(player.grounded).toBe(false);
     player.controls.jump = 0;
     let maxY = player.y;
-    for (let i = 1; i < 60 && !player.grounded; i++) {
+    for (let i = 1; i < 90 && !player.grounded; i++) {
       player.update(i);
       if (player.y > maxY) maxY = player.y;
     }
@@ -106,7 +106,7 @@ describe('climb player physics', () => {
   });
 
   test('a jump press just before touchdown is buffered and fires on landing', () => {
-    const player = new Player(320, 20, ControlType.DUMMY, towerWith());
+    const player = new Player(320, 10, ControlType.DUMMY, towerWith());
     tick(player, 7);
     expect(player.grounded).toBe(false);
     player.controls.jump = 1;
@@ -176,23 +176,21 @@ describe('climb player physics', () => {
     );
   });
 
-  test('a fall past the death speed kills, a shorter drop onto the ground does not', () => {
-    const killer = groundPlayer();
-    killer.y = 400;
-    killer.update(0);
-    tick(killer, 60);
+  test('a fall past DEATH_HEIGHT below the last touched platform kills, a shorter drop onto the ground does not', () => {
+    // spawned standing on their reference surface, then left to fall
+    const killer = new Player(320, 400, ControlType.DUMMY, towerWith());
+    tick(killer, 100);
     expect(killer.damaged).toBe(true);
     expect(killer.y).toBe(0); // the corpse kept falling to the ground
 
-    const survivor = groundPlayer();
-    survivor.y = 100;
+    const survivor = new Player(320, 100, ControlType.DUMMY, towerWith());
     tick(survivor, 60);
     expect(survivor.damaged).toBe(false);
     expect(survivor.y).toBe(0);
     expect(survivor.grounded).toBe(true);
   });
 
-  test('an AI that never improves dies of the height budget, a human never does', () => {
+  test('any climber that never improves dies of the height budget', () => {
     const ai = new Player(320, 0, ControlType.AI, towerWith(), 't', '', 1);
     ai.brain!.process = () => [0, 0, 0];
     tick(ai, config.HEIGHT_BUDGET_FRAMES + 10);
@@ -201,8 +199,7 @@ describe('climb player physics', () => {
 
     const human = groundPlayer();
     tick(human, config.HEIGHT_BUDGET_FRAMES + 10);
-    expect(human.damaged).toBe(false);
-    expect(human.stallFrames).toBe(config.HEIGHT_BUDGET_FRAMES + 10);
+    expect(human.damaged).toBe(true);
   });
 
   test('each new floor of personal best height banks one point', () => {

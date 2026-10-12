@@ -231,7 +231,7 @@ export default async (state: typeof defaultState) => {
   const budgetGauge = document.createElement('div');
   budgetGauge.className = 'gate-gauge';
   budgetGauge.title =
-    'height frames remaining for the followed climber (human gauge is informational)';
+    'height frames remaining before the height budget kills the followed climber';
   budgetGauge.setAttribute('role', 'progressbar');
   budgetGauge.setAttribute('aria-label', 'Height budget remaining');
   budgetGauge.setAttribute('aria-valuemin', '0');
@@ -272,7 +272,7 @@ export default async (state: typeof defaultState) => {
   const budgetEl = document.createElement('div');
   budgetEl.className = 'frame-count';
   budgetEl.title =
-    'simulation frames left before the height budget dies this climber (AI only)';
+    'simulation frames left before the height budget kills this climber';
   budgetEl.textContent = 'budget —';
   const seedCountdown = document.createElement('div');
   seedCountdown.className = 'finish-countdown';
@@ -548,8 +548,8 @@ export default async (state: typeof defaultState) => {
         if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
         floorEl.textContent = `floor ${Math.round(followed.brain?.score ?? 0)}`;
         heightEl.textContent = `height ${Math.round(followed.y)}u`;
-        // Humans are exempt from the stall death, but their informational
-        // gauge still drains while they fail to set a new height record.
+        // The gauge drains while the followed climber fails to set a new
+        // height record; at zero the stall death hits humans and AIs alike.
         const budget = Math.max(
           0,
           config.HEIGHT_BUDGET_FRAMES - followed.stallFrames,
@@ -557,9 +557,7 @@ export default async (state: typeof defaultState) => {
         const budgetFraction = budget / config.HEIGHT_BUDGET_FRAMES;
         budgetGaugeFill.style.height = `${budgetFraction * 100}%`;
         budgetGauge.setAttribute('aria-valuenow', String(budget));
-        budgetEl.textContent = followed.useAI
-          ? `budget ${budget}f`
-          : `budget ${budget}f (safe)`;
+        budgetEl.textContent = `budget ${budget}f`;
       }
 
       const followedBrain = followed?.brain;
