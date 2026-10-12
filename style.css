@@ -1,3 +1,17 @@
+:root {
+  color-scheme: dark;
+  --ui-background: #101216;
+  --ui-surface: #191d24;
+  --ui-border: #343a45;
+  --ui-text: #edf0f5;
+  --ui-muted: #a0a9b8;
+  --ui-accent: #56dcf5;
+  --ui-font: "Segoe UI", Arial, sans-serif;
+  --arcade-font:
+    Impact, Haettenschweiler, "Arial Narrow", "Nimbus Sans Narrow", sans-serif;
+  --ui-motion: 180ms ease;
+}
+
 * {
   padding: 0;
   margin: 0;
@@ -5,59 +19,224 @@
 
 body {
   margin: 0;
-  background: darkgray;
+  background: var(--ui-background);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
   overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
+/* The home screen needs no extra markup: the four games are the main action. */
+body:has(.game-menu.big) {
+  min-height: 100vh;
+  min-height: 100svh;
+  background-image:
+    radial-gradient(ellipse at 25% 40%, #56dcf509, transparent 50%),
+    radial-gradient(ellipse at 75% 65%, #b99bfa09, transparent 50%);
+}
+
 canvas {
   max-width: 100%;
 }
 
-ul {
+.game-menu {
   z-index: 999;
   display: flex;
-  align-content: space-around;
+  align-items: stretch;
   position: fixed;
   top: 0;
-  left: 0;
-  right: 0;
-  transform: translateY(-0.5em);
-  transition: all 0.1s;
-  opacity: 0.5;
-  padding-bottom: 2em;
+  left: 50%;
+  width: min(520px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 0 4px 4px;
+  border: 1px solid #343a4540;
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: #191d2420;
+  box-shadow: none;
+  list-style: none;
+  transform: translate(-50%, -12px);
+  opacity: 0.32;
+  transition:
+    transform var(--ui-motion),
+    opacity var(--ui-motion),
+    background-color var(--ui-motion),
+    border-color var(--ui-motion),
+    box-shadow var(--ui-motion);
 }
 
-li {
-  margin: auto;
-  display: inline-block;
+/* Keep a visible, reachable tab; reveal the dock on hover or keyboard focus. */
+.game-menu:not(.big):hover,
+.game-menu:not(.big):focus-within {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+  box-shadow: 0 6px 16px #0003;
 }
 
-ul li a {
-  display: inline-block;
-  padding: 0.1em 0.5em;
-  border-radius: 0 0 0.5em 0.5em;
-  margin: auto;
-  color: rgba(25, 52, 94, 0.2);
+.game-menu li {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-menu li + li {
+  border-left: 1px solid #343a4540;
+  transition: border-color var(--ui-motion);
+}
+
+.game-menu:not(.big):hover li + li,
+.game-menu:not(.big):focus-within li + li {
+  border-left-color: var(--ui-border);
+}
+
+.game-menu a {
+  --game-accent: var(--ui-accent);
+  --game-tint: 86, 220, 245;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 7px;
+  color: var(--game-accent);
+  font: 700 15px / 1 var(--arcade-font);
+  letter-spacing: 0.06em;
   text-decoration: none;
-  text-shadow: 0 0 1px #fff8;
   text-transform: uppercase;
-  background: rgba(25, 52, 94, 0.4);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--ui-motion),
+    border-color var(--ui-motion),
+    box-shadow var(--ui-motion),
+    transform var(--ui-motion);
 }
 
-ul li a:hover {
-  opacity: 1;
-  transform: translateY(0);
-  color: rgba(255, 52, 94, 1);
-  background: rgba(25, 52, 94, 0.8);
-  text-shadow: 0 0 1px #000;
+.game-menu a[href="?game=circuit"] {
+  --game-accent: #f5d576;
+  --game-tint: 245, 213, 118;
 }
 
-ul:hover {
+.game-menu a[href="?game=cave"] {
+  --game-accent: #b99bfa;
+  --game-tint: 185, 155, 250;
+}
+
+.game-menu a[href="?game=climb"] {
+  --game-accent: #ff8d86;
+  --game-tint: 255, 141, 134;
+}
+
+.game-menu a:hover,
+.game-menu a:focus-visible {
+  background-color: rgba(var(--game-tint), 0.1);
+  box-shadow: inset 0 -2px var(--game-accent);
+}
+
+.game-menu a:focus-visible {
+  outline: 2px solid var(--game-accent);
+  outline-offset: -3px;
+}
+
+/* Home: four generous game tiles, using the same colors as the in-game dock. */
+.game-menu.big {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  top: 50%;
+  width: min(840px, calc(100% - 64px));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  transform: translate(-50%, -50%);
   opacity: 1;
-  transform: translateY(0);
+}
+
+.game-menu.big li + li {
+  border: 0;
+}
+
+.game-menu.big a {
+  justify-content: flex-start;
+  align-items: flex-end;
+  min-height: clamp(140px, 24svh, 200px);
+  padding: 28px 32px;
+  border: 1px solid #626d7b;
+  border-left: 10px solid var(--game-accent);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(var(--game-tint), 0.045), transparent 70%),
+    linear-gradient(135deg, #1e232b, #13171c);
+  box-shadow:
+    -12px 8px 48px rgba(var(--game-tint), 0.06),
+    0 12px 28px #0003;
+  font-size: clamp(32px, 4vw, 48px);
+  letter-spacing: 0.025em;
+}
+
+.game-menu.big a:hover,
+.game-menu.big a:focus-visible {
+  border-color: var(--game-accent);
+  background-color: rgba(var(--game-tint), 0.08);
+  box-shadow:
+    0 0 32px rgba(var(--game-tint), 0.13),
+    0 16px 32px #0005;
+  transform: translateY(-4px);
+}
+
+.game-menu.big a:focus-visible {
+  outline-offset: 5px;
+}
+
+.game-menu.big a:active {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 560px) {
+  .game-menu {
+    width: calc(100% - 24px);
+  }
+
+  .game-menu a {
+    min-height: 44px;
+    padding-inline: 6px;
+    font-size: 13px;
+  }
+
+  .game-menu.big {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: calc(100% - 48px);
+  }
+
+  .game-menu.big a {
+    min-height: clamp(84px, 15svh, 112px);
+    padding: 20px 24px;
+    border-left-width: 6px;
+    font-size: 34px;
+  }
+}
+
+@media (max-height: 520px) {
+  .game-menu.big {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: min(720px, calc(100% - 40px));
+  }
+
+  .game-menu.big a {
+    min-height: clamp(72px, 30svh, 140px);
+    padding: 16px 20px;
+    border-left-width: 6px;
+    font-size: clamp(26px, 4vw, 36px);
+  }
 }
 
 .side-panel {
@@ -68,13 +247,16 @@ ul:hover {
   width: 240px;
   z-index: 999;
   transform: translateX(100%);
-  transition: transform 0.25s ease;
-  background: rgba(25, 52, 94, 0.85);
-  color: #fff;
+  box-sizing: border-box;
+  border-left: 1px solid var(--ui-border);
+  transition: transform 240ms ease;
+  background: #161a21f5;
+  color: var(--ui-text);
 }
 
 .side-panel.open {
   transform: translateX(0);
+  box-shadow: -16px 0 48px #0005;
 }
 
 .side-panel-toggle {
@@ -84,16 +266,29 @@ ul:hover {
   transform: translateY(-50%);
   width: 2.4em;
   height: 4.5em;
-  border: none;
+  border: 1px solid var(--ui-border);
+  border-right: 0;
   border-radius: 0.6em 0 0 0.6em;
-  background: rgba(25, 52, 94, 0.85);
-  color: #fff;
+  background: #191d24f5;
+  color: var(--ui-accent);
   font-size: 1.1em;
   cursor: pointer;
+  transition:
+    background-color var(--ui-motion),
+    color var(--ui-motion);
 }
 
 .side-panel-toggle:hover {
-  background: rgba(25, 52, 94, 1);
+  background: #28313d;
+  color: #fff;
+}
+
+.side-panel-toggle:focus-visible,
+.model-btn:focus-visible,
+.follow-keys button:focus-visible,
+.seed-controls button:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
 }
 
 .side-panel-content {
@@ -106,18 +301,24 @@ ul:hover {
 }
 
 .model-btn {
-  border: none;
+  min-height: 32px;
+  border: 1px solid var(--ui-border);
   border-radius: 0.5em;
   padding: 0.25em 0.75em;
-  font: bold 0.8em Arial, sans-serif;
+  font: 600 0.75rem / 1.25 var(--ui-font);
+  letter-spacing: 0.035em;
   text-transform: uppercase;
-  color: #fff;
-  background: rgba(25, 52, 94, 0.6);
+  color: var(--ui-text);
+  background: #222832;
   cursor: pointer;
+  transition:
+    background-color var(--ui-motion),
+    border-color var(--ui-motion);
 }
 
-.model-btn:hover {
-  background: rgba(25, 52, 94, 0.9);
+.model-btn:hover:not(:disabled) {
+  border-color: #687587;
+  background: #303a48;
 }
 
 .model-btn:disabled {
@@ -126,7 +327,9 @@ ul:hover {
 }
 
 .model-btn.active {
-  background: hsl(180, 100%, 45%);
+  border-color: var(--ui-accent);
+  background: #56dcf51a;
+  color: var(--ui-accent);
 }
 
 /* the load / save / clear / stats buttons share a compact 2-column grid */
@@ -151,17 +354,22 @@ ul:hover {
 
 .follow-keys span {
   grid-column: 1 / -1;
-  font: bold 0.7em Arial, sans-serif;
+  font:
+    bold 0.7em Arial,
+    sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.6);
 }
 
 .follow-keys button {
+  min-height: 32px;
   border: 2px solid transparent;
   border-radius: 0.4em;
   padding: 0.25em 0;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
   color: #fff;
   background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
@@ -205,8 +413,10 @@ ul:hover {
   overflow-y: auto;
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
-  background: rgba(255, 255, 255, 0.08);
-  font: 0.72em Arial, sans-serif;
+  background: #ffffff05;
+  font:
+    0.72em Arial,
+    sans-serif;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
 }
@@ -219,8 +429,10 @@ ul:hover {
   gap: 0.15em;
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
-  background: rgba(255, 255, 255, 0.08);
-  font: 0.72em Arial, sans-serif;
+  background: #ffffff05;
+  font:
+    0.72em Arial,
+    sans-serif;
   color: rgba(255, 255, 255, 0.85);
 }
 
@@ -233,7 +445,9 @@ ul:hover {
 
 .side-panel-footer {
   margin-top: auto;
-  font: 0.7em Arial, sans-serif;
+  font:
+    0.7em Arial,
+    sans-serif;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
 }
@@ -245,7 +459,9 @@ ul:hover {
   gap: 0.35em;
   margin-left: auto;
   color: #fff;
-  font: bold 0.8em Arial, sans-serif;
+  font:
+    bold 0.8em Arial,
+    sans-serif;
 }
 .seed-controls button {
   width: 1.8em;
@@ -628,5 +844,22 @@ ul:hover {
     gap: 12px;
     padding-left: 12px;
     padding-right: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-menu,
+  .game-menu li,
+  .game-menu a,
+  .side-panel,
+  .side-panel-toggle,
+  .model-btn {
+    transition: none;
+  }
+
+  .game-menu.big a:hover,
+  .game-menu.big a:focus-visible,
+  .game-menu.big a:active {
+    transform: none;
   }
 }

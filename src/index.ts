@@ -11,6 +11,7 @@ const apps = new Map<string, () => Promise<unknown>>([
 ]);
 
 const ul = document.createElement('ul');
+ul.classList.add('game-menu');
 document.body.appendChild(ul);
 
 apps.forEach((_game, key) => {
@@ -26,5 +27,5 @@ if (app) {
   const state = {};
   app().then((mod) => (mod as GameModule).default(state));
 } else {
-  console.log(apps);
+  ul.classList.add('big');
 }
