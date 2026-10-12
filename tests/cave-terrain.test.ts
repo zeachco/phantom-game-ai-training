@@ -19,6 +19,16 @@ function cave(seed: number, scene = new Scene()) {
   }
 }
 
+test('the spawn remains valid after streaming trims old cave controls', () => {
+  const terrain = cave(3);
+  terrain.update(4000, 6000);
+
+  const spawn = terrain.getSpawn();
+  expect(Number.isFinite(spawn.x)).toBe(true);
+  expect(Number.isFinite(spawn.y)).toBe(true);
+  expect(Number.isFinite(spawn.z)).toBe(true);
+});
+
 test('floor climbs gradually along the road but retains sharp drops and lateral relief', () => {
   for (const seed of [0, 2, 40, 100]) {
     const terrain = cave(seed);

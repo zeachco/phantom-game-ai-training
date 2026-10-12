@@ -30,6 +30,8 @@ const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
 /** world height visible on screen at the reference scale */
 const VIEW_HEIGHT = 420;
+/** keep the highest climber this far below the top edge of the viewport */
+const CAMERA_HEADROOM = 120;
 /** one captured jump sample per pixel column of the jump timeline */
 const JUMP_TIMELINE_WIDTH = 110;
 
@@ -406,7 +408,8 @@ export default async (state: typeof defaultState) => {
           netWrap.clientHeight,
         );
 
-      // camera: the whole tower width always fits, the view only climbs
+      // camera: the whole tower width always fits and follows the highest
+      // living climber, including when the current leader falls.
       const scale = Math.min(
         gameCanvas.height / VIEW_HEIGHT,
         gameCanvas.width / (config.TOWER_WIDTH + 40),
@@ -415,7 +418,13 @@ export default async (state: typeof defaultState) => {
       const viewW = gameCanvas.width / scale;
       const followed = followedPlayer();
       if (state.playing) {
-        const target = Math.max(state.highestY + 120, camSet ? camTop : 0);
+        // camTop is the bottom edge of the viewport, so subtract the view
+        // height: adding the headroom directly would place the whole camera
+        // above the climber and leave it below the screen.
+        const target = Math.max(
+          0,
+          state.highestY + CAMERA_HEADROOM - viewH,
+        );
         if (!camSet) {
           camTop = 0;
           camSet = true;

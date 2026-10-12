@@ -4,7 +4,7 @@ import caveWallTextureUrl from '../assets/cave-wall.jpg';
 import obstacleRockTextureUrl from '../assets/obstacle-rock.jpg';
 import { config } from './Config';
 import { ensureDrivablePath } from './PathCheck';
-import { WallSolid, type WallContact } from './WallSolid';
+import { type WallContact, WallSolid } from './WallSolid';
 
 /** plain 3D point, no allocation churn in the query hot paths */
 interface Pt {
@@ -170,6 +170,8 @@ export class Cave {
   #chunks = new Map<number, ChunkData>();
   /** centerline control points, grown one per chunk and trimmed on removal */
   #control: { p: Pt; d: Pt }[] = [];
+  /** The spawn lies in chunk 0, whose controls stay available after streaming. */
+  #spawnControls: { p: Pt; d: Pt }[] = [];
   /** chunk index of #control[0], the array is trimmed as chunks are removed */
   #controlOffset = 0;
   /** long radius waves, seeded from the cave seed only so they are
@@ -335,7 +337,9 @@ export class Cave {
         z: prev.p.z + prev.d.z * LEN,
       };
     }
-    this.#control.push({ p, d });
+    const control = { p, d };
+    this.#control.push(control);
+    if (index < 2) this.#spawnControls[index] = control;
   }
 
   #ensureControl(index: number) {
@@ -344,7 +348,9 @@ export class Cave {
   }
 
   #controlAt(i: number) {
-    return this.#control[i - this.#controlOffset];
+    return i < this.#controlOffset
+      ? this.#spawnControls[i]
+      : this.#control[i - this.#controlOffset];
   }
 
   /** Hermite centerline point of chunk i at normalized t, into out */
@@ -1973,6 +1979,7 @@ export class Cave {
     for (const chunk of [...this.#chunks.values()]) this.#removeChunk(chunk);
     this.#chunks.clear();
     this.#control.length = 0;
+    this.#spawnControls.length = 0;
     this.#controlOffset = 0;
     this.#featureCells.clear();
     this.#wallFaces.clear();
