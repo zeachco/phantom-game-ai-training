@@ -7,6 +7,7 @@ const apps = new Map<string, () => Promise<unknown>>([
   ['highway', () => import(`./games/highway/main.js`)],
   ['circuit', () => import(`./games/circuit/main.js`)],
   ['cave', () => import(`./games/cave/main.js`)],
+  ['climb', () => import(`./games/climb/main.js`)],
 ]);
 
 const ul = document.createElement('ul');
