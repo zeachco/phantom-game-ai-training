@@ -9,7 +9,8 @@ import type { Tower } from './Tower';
 
 /** physics half-width of the body, also how far the walls keep the spawn */
 export const PLAYER_HALF_W = 11;
-const BODY_HEIGHT = 30;
+/** visual and camera height of a climber's body */
+export const PLAYER_HEIGHT = 30;
 
 export function getClimbBrainDimensions(rayCount = SENSORS): {
   inputCount: number;
@@ -184,7 +185,7 @@ export class Player {
     if (this.useAI && this.stallFrames >= config.HEIGHT_BUDGET_FRAMES)
       this.#die(now, 'stall');
     if (this.sensor && this.brain) {
-      this.sensor.update(this.x, this.y + BODY_HEIGHT * 0.5, this.tower);
+      this.sensor.update(this.x, this.y + PLAYER_HEIGHT * 0.5, this.tower);
       if (this.useAI) {
         const inputs = new Array<number>(this.sensor.rayCount + 3);
         for (let i = 0; i < this.sensor.rayCount; i++)
@@ -239,7 +240,7 @@ export class Player {
 
   draw(ctx: CanvasRenderingContext2D, now: number, focused: boolean): void {
     if (focused && this.sensor && !this.damaged)
-      this.sensor.draw(ctx, this.x, this.y + BODY_HEIGHT * 0.5, this.color);
+      this.sensor.draw(ctx, this.x, this.y + PLAYER_HEIGHT * 0.5, this.color);
     const alpha = this.damaged
       ? clamp(0, 1, 0.5 * (1 - (now - this.deathTime) / config.DEAD_LIFETIME))
       : focused
@@ -260,14 +261,14 @@ export class Player {
     const sx = 1 / Math.sqrt(stretch);
     const sy = stretch;
     ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y + BODY_HEIGHT * 0.5);
+    ctx.translate(this.x, this.y + PLAYER_HEIGHT * 0.5);
     ctx.scale(sx, sy);
     ctx.beginPath();
     ctx.roundRect(
       -PLAYER_HALF_W,
-      -BODY_HEIGHT * 0.5,
+      -PLAYER_HEIGHT * 0.5,
       PLAYER_HALF_W * 2,
-      BODY_HEIGHT,
+      PLAYER_HEIGHT,
       8,
     );
     ctx.fillStyle = this.color;
@@ -275,7 +276,7 @@ export class Player {
     ctx.strokeStyle = 'rgba(0,0,0,0.35)';
     ctx.lineWidth = 2;
     ctx.stroke();
-    const eyeY = BODY_HEIGHT * 0.2;
+    const eyeY = PLAYER_HEIGHT * 0.2;
     for (const offset of [-4, 4]) {
       const eyeX = this.facing * 4 + offset;
       ctx.fillStyle = 'white';

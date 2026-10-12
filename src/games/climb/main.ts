@@ -13,6 +13,10 @@ import { ClimbRace } from './classes/ClimbRace';
 import { config, isDemo } from './classes/Config';
 import type { Player } from './classes/Player';
 import {
+  CAMERA_LERP,
+  climbCameraCenterY,
+} from './camera';
+import {
   brainId,
   clearScoreRecords,
   type defaultState,
@@ -30,8 +34,6 @@ const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
 /** world height visible on screen at the reference scale */
 const VIEW_HEIGHT = 420;
-/** keep the highest climber this far below the top edge of the viewport */
-const CAMERA_HEADROOM = 120;
 /** one captured jump sample per pixel column of the jump timeline */
 const JUMP_TIMELINE_WIDTH = 110;
 
@@ -429,8 +431,10 @@ export default async (state: typeof defaultState) => {
           netWrap.clientHeight,
         );
 
-      // camera: the whole tower width always fits and follows the highest
-      // living climber, including when the current leader falls.
+      // camera: the whole tower width always fits and centers the followed
+      // player's body. Vertical velocity adds a smooth look-ahead: at full
+      // jump or fall speed, the player is framed a quarter of a viewport in
+      // the direction of travel.
       const scale = Math.min(
         gameCanvas.height / VIEW_HEIGHT,
         gameCanvas.width / (config.TOWER_WIDTH + 40),
@@ -439,16 +443,17 @@ export default async (state: typeof defaultState) => {
       const viewW = gameCanvas.width / scale;
       const followed = followedPlayer();
       if (state.playing) {
-        // camTop is the bottom edge of the viewport, so subtract the view
-        // height: adding the headroom directly would place the whole camera
-        // above the climber and leave it below the screen.
-        const cameraY = humanFollow && followed ? followed.y : state.highestY;
-        const target = Math.max(0, cameraY + CAMERA_HEADROOM - viewH);
+        // camTop is the bottom edge of the viewport, so convert the desired
+        // centre into its lower edge before applying the world-floor clamp.
+        const cameraCenter = followed
+          ? climbCameraCenterY(followed, viewH)
+          : climbCameraCenterY({ y: state.highestY, vy: 0 }, viewH);
+        const target = Math.max(0, cameraCenter - viewH * 0.5);
         if (!camSet) {
           camTop = 0;
           camSet = true;
         }
-        camTop += (target - camTop) * 0.12;
+        camTop += (target - camTop) * CAMERA_LERP;
       }
       state.camY = camTop;
 
