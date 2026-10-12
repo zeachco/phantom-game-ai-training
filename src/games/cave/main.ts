@@ -106,13 +106,18 @@ export default async (state: CaveState) => {
   // old seed readout. It refreshes on the throttled HUD tick.
   const scoreBoard = document.createElement('div');
   scoreBoard.style.position = 'fixed';
-  scoreBoard.style.top = '14px';
-  scoreBoard.style.left = '14px';
+  scoreBoard.style.top = '2px';
+  scoreBoard.style.left = '2px';
   scoreBoard.style.zIndex = '2';
-  scoreBoard.style.color = '#e8edf4';
+  scoreBoard.style.boxSizing = 'border-box';
+  scoreBoard.style.minWidth = '158px';
+  scoreBoard.style.padding = '14px 18px 14px 16px';
+  scoreBoard.style.color = '#f4f6f8';
   scoreBoard.style.font = '700 13px/1.5 monospace';
   scoreBoard.style.textShadow = '0 1px 3px #000';
   scoreBoard.style.whiteSpace = 'pre';
+  scoreBoard.style.background =
+    'linear-gradient(90deg, rgba(51, 51, 51, 0.82), rgba(51, 51, 51, 0.48) 68%, transparent)';
   scoreBoard.style.pointerEvents = 'none';
   scoreBoard.title = 'best score per brain group';
   scoreBoard.setAttribute('aria-label', 'Best score per brain group');
