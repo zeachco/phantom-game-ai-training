@@ -37,8 +37,6 @@ export interface Group {
   mutationOnly: boolean;
   /** snapshot of the champion brain + the score that promoted it */
   best: { brain: NeuralNetwork; score: number } | null;
-  /** the brain that set the current map's high score, kept for progress */
-  seedBest: { brain: NeuralNetwork; score: number } | null;
   /** score frozen when the record holder died, shown for this group's ghost */
   ghostScore: number;
   scores: GroupScores;
@@ -55,9 +53,6 @@ export const defaultState = {
   living: 0,
   /** live cars at the start of the map, the cap the board reports */
   population: 0,
-  /** world x/y at the follow point, exposed for debugging the camera */
-  camX: 0,
-  camY: 0,
   obstacles: [] as Obstacle[],
   circuit: undefined as Circuit | undefined,
   /** the human driven car, exists only while the toggle is on */

@@ -21,6 +21,8 @@ export class Sensor {
   #sinOff: number[] = [];
   /** each ray's reach, a smooth profile over the fan angle */
   #lengths: number[] = [];
+  /** one reusable hit point per ray, so update never allocates a Reading */
+  #readingPool: Reading[] = [];
 
   constructor(car: Car) {
     this.car = car;
@@ -28,6 +30,7 @@ export class Sensor {
 
     this.rays = [];
     this.readings = new Array(this.rayCount);
+    this.#readingPool = new Array(this.rayCount);
     const halfAngle = config.SENSOR_ANGLE / 2;
     for (let i = 0; i < this.rayCount; i++) {
       // u runs -1 (left edge) .. 1 (right edge); the power warp keeps the
@@ -37,6 +40,7 @@ export class Sensor {
       const offset = -warped * halfAngle;
       this.#cosOff.push(Math.cos(offset));
       this.#sinOff.push(Math.sin(offset));
+      this.#readingPool[i] = { x: 0, y: 0, offset: 0 };
       // cosine bell over the real angle: 1 straight ahead, 0 at the edges
       this.#lengths.push(
         lerp(
@@ -55,7 +59,12 @@ export class Sensor {
   update(obstacles: Obstacle[], segments: Segment[]) {
     this.#castRays();
     for (let i = 0; i < this.rays.length; i++) {
-      this.readings[i] = this.#getReading(this.rays[i], obstacles, segments);
+      this.readings[i] = this.#getReading(
+        this.rays[i],
+        this.#readingPool[i],
+        obstacles,
+        segments,
+      );
     }
   }
 
@@ -106,6 +115,7 @@ export class Sensor {
 
   #getReading(
     ray: Vector[],
+    out: Reading,
     obstacles: Obstacle[],
     segments: Segment[],
   ): Reading | null {
@@ -194,13 +204,11 @@ export class Sensor {
       if (offset >= 0 && offset < bestOffset) bestOffset = offset;
     }
 
-    return bestOffset === Infinity
-      ? null
-      : {
-          x: ax + (bx - ax) * bestOffset,
-          y: ay + (by - ay) * bestOffset,
-          offset: bestOffset,
-        };
+    if (bestOffset === Infinity) return null;
+    out.x = ax + (bx - ax) * bestOffset;
+    out.y = ay + (by - ay) * bestOffset;
+    out.offset = bestOffset;
+    return out;
   }
 
   #castRays() {

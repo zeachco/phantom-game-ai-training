@@ -46,21 +46,13 @@ export interface Group {
 export const defaultState = {
   /** alive balls and the corpses still on the cave, both draw and score */
   balls: [] as Ball[],
-  sortedBalls: [] as Ball[],
   /** live car count: dips while a group's corpses linger, climbs back when
    *  that whole group respawns */
   living: 0,
-  /** live cars at the start of the cave, the cap the board reports */
-  population: 0,
-  /** world x/y/z at the follow point, exposed for debugging the camera */
-  camX: 0,
-  camY: 0,
-  camZ: 0,
   cave: undefined as Cave | undefined,
   human: undefined as Ball | undefined,
   sortedModels: [] as ModelsByLayerCount[],
   sortedMixed: [] as ModelsByLayerCount[],
-  playing: false,
   /** the live groups (pools + bests + scores), rebuilt on every cave change */
   groups: [] as Group[],
 };

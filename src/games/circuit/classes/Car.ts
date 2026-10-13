@@ -43,7 +43,6 @@ export function getCircuitBrainDimensions(rayCount = config.SENSORS) {
 }
 
 export class Car {
-  public speed: number;
   public vx: number;
   public vy: number;
   public drifting: boolean;
@@ -159,7 +158,6 @@ export class Car {
     this.prevX = x;
     this.prevY = y;
 
-    this.speed = 0;
     this.vx = 0;
     this.vy = 0;
     this.drifting = false;
@@ -576,7 +574,6 @@ export class Car {
     // 7. recompose and store
     this.vx = hx * vf + px * vl;
     this.vy = hy * vf + py * vl;
-    this.speed = vf;
     this.x += this.vx;
     this.y += this.vy;
   }

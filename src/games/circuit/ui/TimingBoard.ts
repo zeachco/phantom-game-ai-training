@@ -70,11 +70,17 @@ export class TimingBoard {
   update() {
     const ranked: TimingEntry[] = this.#groups
       .map((group): TimingEntry | null => {
-        const car = group.pool
-          .filter((candidate) => candidate.laps > 0)
-          .sort(
-            (a, b) => b.laps - a.laps || a.totalRaceFrames - b.totalRaceFrames,
-          )[0];
+        let car: Car | undefined;
+        for (const candidate of group.pool) {
+          if (candidate.laps <= 0) continue;
+          if (
+            !car ||
+            candidate.laps > car.laps ||
+            (candidate.laps === car.laps &&
+              candidate.totalRaceFrames < car.totalRaceFrames)
+          )
+            car = candidate;
+        }
         const finish = this.#completedFinishes.get(group.key);
         if (!car && !finish) return null;
         if (finish)
@@ -84,6 +90,7 @@ export class TimingBoard {
             laps: config.LAPS_PER_SEED,
             totalFrames: finish.totalFrames,
           };
+        if (!car) return null;
         return {
           group,
           color: group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)',

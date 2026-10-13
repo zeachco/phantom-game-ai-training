@@ -32,6 +32,8 @@ export class Car {
   ];
   /** bounding box of the polygon, refreshed with it */
   public aabb: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  /** reused each frame for the sensor inputs, so update never allocates */
+  #brainInputs: number[] = [];
   public width = 30;
   public height = 50;
   private img: HTMLImageElement;
@@ -122,11 +124,15 @@ export class Car {
     this.damaged = this.#assessDamage(roadBorders, traffic);
     if (this.sensor) {
       this.sensor.update(roadBorders, traffic, deathRays);
-      const offsets = this.sensor.readings.map((s) =>
-        s == null ? 0 : 1 - s.offset,
-      );
-      offsets.push(this.speed / this.maxSpeed);
-      const outputs = this.brain.process(offsets);
+      const inputs = this.#brainInputs;
+      const readings = this.sensor.readings;
+      inputs.length = 0;
+      for (let i = 0; i < readings.length; i++) {
+        const s = readings[i];
+        inputs.push(s == null ? 0 : 1 - s.offset);
+      }
+      inputs.push(this.speed / this.maxSpeed);
+      const outputs = this.brain.process(inputs);
 
       if (this.useAI) {
         const [forward, left, right, reverse] = outputs;

@@ -1,9 +1,4 @@
-import {
-  getIntersection,
-  lerp,
-  segmentHitsAABB,
-  type Vector,
-} from '../../../utilities/math';
+import { lerp, segmentHitsAABB, type Vector } from '../../../utilities/math';
 import type { Car } from './Car';
 import { config } from './Config';
 import type { DeathRay } from './DeathRay';
@@ -24,8 +19,13 @@ export class Sensor {
   /** one [start, end] pair per ray, the points are updated in place */
   rays: Vector[][];
   readings: (Reading | null)[];
-  /** touched by the current ray, reused across rays and frames */
-  #touches: Reading[] = [];
+  /** one reusable hit point per ray, so update never allocates a Reading */
+  #readingPool: Reading[] = [];
+  /** the current ray's endpoints, read by #rayHit to keep it argument-light */
+  #rayAx = 0;
+  #rayAy = 0;
+  #rayBx = 0;
+  #rayBy = 0;
   /** each ray's fixed offset from the car angle, with its sin/cos precomputed */
   #cosOff: number[] = [];
   #sinOff: number[] = [];
@@ -36,7 +36,9 @@ export class Sensor {
 
     this.rays = [];
     this.readings = new Array(this.rayCount);
+    this.#readingPool = new Array(this.rayCount);
     for (let i = 0; i < this.rayCount; i++) {
+      this.#readingPool[i] = { x: 0, y: 0, offset: 0 };
       const offset = lerp(
         config.SENSOR_ANGLE / 2,
         -config.SENSOR_ANGLE / 2,
@@ -56,6 +58,7 @@ export class Sensor {
     for (let i = 0; i < this.rays.length; i++) {
       this.readings[i] = this.#getReading(
         this.rays[i],
+        this.#readingPool[i],
         roadBorders,
         traffic,
         deathRays,
@@ -65,26 +68,32 @@ export class Sensor {
 
   #getReading(
     ray: Vector[],
+    out: Reading,
     roadBorders: Vector[][],
     traffic: Car[],
     deathRays: DeathRay[],
   ): Reading | null {
-    const touches = this.#touches;
-    touches.length = 0;
     const ax = ray[0].x;
     const ay = ray[0].y;
     const bx = ray[1].x;
     const by = ray[1].y;
+    this.#rayAx = ax;
+    this.#rayAy = ay;
+    this.#rayBx = bx;
+    this.#rayBy = by;
+    // track the closest touch along the ray; no per-hit object is allocated
+    let bestX = 0;
+    let bestY = 0;
+    let bestOffset = Infinity;
 
     for (let i = 0; i < roadBorders.length; i++) {
-      const touch = getIntersection(
-        ray[0],
-        ray[1],
-        roadBorders[i][0],
-        roadBorders[i][1],
-      );
-      if (touch) {
-        touches.push(touch);
+      const c = roadBorders[i][0];
+      const d = roadBorders[i][1];
+      const t = this.#rayHit(c.x, c.y, d.x, d.y);
+      if (t >= 0 && t < bestOffset) {
+        bestOffset = t;
+        bestX = ax + (bx - ax) * t;
+        bestY = ay + (by - ay) * t;
       }
     }
 
@@ -94,14 +103,13 @@ export class Sensor {
       if (!segmentHitsAABB(ax, ay, bx, by, car.aabb)) continue;
       const poly = car.polygon;
       for (let j = 0; j < poly.length; j++) {
-        const value = getIntersection(
-          ray[0],
-          ray[1],
-          poly[j],
-          poly[(j + 1) % poly.length],
-        );
-        if (value) {
-          touches.push(value);
+        const e = poly[j];
+        const f = poly[(j + 1) % poly.length];
+        const t = this.#rayHit(e.x, e.y, f.x, f.y);
+        if (t >= 0 && t < bestOffset) {
+          bestOffset = t;
+          bestX = ax + (bx - ax) * t;
+          bestY = ay + (by - ay) * t;
         }
       }
     }
@@ -109,22 +117,34 @@ export class Sensor {
     for (let i = 0; i < deathRays.length; i++) {
       RAY_A.y = deathRays[i].y;
       RAY_B.y = RAY_A.y;
-      const touch = getIntersection(ray[0], ray[1], RAY_A, RAY_B);
-      if (touch) {
-        touches.push(touch);
+      const t = this.#rayHit(RAY_A.x, RAY_A.y, RAY_B.x, RAY_B.y);
+      if (t >= 0 && t < bestOffset) {
+        bestOffset = t;
+        bestX = ax + (bx - ax) * t;
+        bestY = ay + (by - ay) * t;
       }
     }
 
-    if (touches.length === 0) {
-      return null;
-    }
-    let best = touches[0];
-    for (let i = 1; i < touches.length; i++) {
-      if (touches[i].offset < best.offset) {
-        best = touches[i];
-      }
-    }
-    return best;
+    if (bestOffset === Infinity) return null;
+    out.x = bestX;
+    out.y = bestY;
+    out.offset = bestOffset;
+    return out;
+  }
+
+  /** parametric t in [0,1] where the current ray meets (cx,cy)-(dx,dy) */
+  #rayHit(cx: number, cy: number, dx: number, dy: number): number {
+    const ax = this.#rayAx;
+    const ay = this.#rayAy;
+    const bx = this.#rayBx;
+    const by = this.#rayBy;
+    const tTop = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
+    const uTop = (cy - ay) * (ax - bx) - (cx - ax) * (ay - by);
+    const bottom = (dy - cy) * (bx - ax) - (dx - cx) * (by - ay);
+    if (bottom === 0) return -1;
+    const t = tTop / bottom;
+    const u = uTop / bottom;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
   }
 
   #castRays() {

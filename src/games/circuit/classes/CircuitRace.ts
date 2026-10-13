@@ -253,7 +253,6 @@ export class CircuitRace {
               score: this.state.sortedMixed[MIXED_LEVELS][0].score || 0,
             }
           : null,
-        seedBest: null,
         ghostScore: 0,
         scores: {
           current: this.seed,
@@ -280,7 +279,6 @@ export class CircuitRace {
               score: this.state.sortedModels[layer][0].score || 0,
             }
           : null,
-        seedBest: null,
         ghostScore: 0,
         scores: {
           current: this.seed,
@@ -373,10 +371,6 @@ export class CircuitRace {
   #settle(group: Group, car: Car) {
     if (!car.useAI || car.brain.score <= group.scores.seed) return;
     group.scores.seed = car.brain.score;
-    group.seedBest = {
-      brain: JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork,
-      score: car.brain.score,
-    };
     this.#promote(group, car);
   }
 
@@ -422,7 +416,6 @@ export class CircuitRace {
       pool: [],
       mutationOnly: false,
       best: null,
-      seedBest: null,
       lapTimes: {},
     };
     this.groups[groupIndex] = group;
@@ -518,7 +511,6 @@ export class CircuitRace {
     this.#buildPools();
 
     for (const group of this.groups) {
-      group.seedBest = null;
       saveScores(group);
     }
     this.state.cars = this.groups.flatMap((group) => group.pool);

@@ -39,7 +39,6 @@ export class MixedNetwork extends NeuralNetwork {
 
   /** shared and never mutated, they are saved on their own namespace already */
   #experts: NeuralNetwork[] = [];
-  #selectorOutputs: number[] = [];
   #lastInputs: number[] = [];
   /** controls the experts drive with, the selector outputs are experts instead */
   #outputNb = 0;
@@ -83,11 +82,6 @@ export class MixedNetwork extends NeuralNetwork {
 
   get experts() {
     return this.#experts;
-  }
-
-  /** raw selector scores of the last pass, one per expert */
-  get selectorOutputs() {
-    return this.#selectorOutputs;
   }
 
   get activeExpert(): NeuralNetwork | undefined {
@@ -154,7 +148,6 @@ export class MixedNetwork extends NeuralNetwork {
   /** first pass picks the expert, second pass replays the original inputs into it */
   #forward(inputs: number[]) {
     const selection = NeuralNetwork.feedForward(inputs, this);
-    this.#selectorOutputs = [...selection];
 
     let index = 0;
     for (let i = 1; i < selection.length; i++) {

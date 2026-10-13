@@ -519,23 +519,36 @@ export default async (state: typeof defaultState) => {
         );
         steerOverlay.classList.toggle('hidden', !followed || followed.damaged);
         platformValue.textContent = String(followed?.bestPlatform ?? 0);
-        groupProgress.replaceChildren(
-          ...race.groups.map((group) => {
-            const row = document.createElement('div');
-            row.className = 'climb-group-row';
-            row.style.color = group.isMixed
-              ? config.MIXED_COLOR
-              : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-            const name = document.createElement('span');
-            name.textContent = group.isMixed ? 'M' : String(group.layer);
-            const score = document.createElement('span');
-            score.textContent = String(
-              Math.max(0, Math.round(group.scores.seed)),
-            );
-            row.append(name, score);
-            return row;
-          }),
-        );
+        // group rows are built once and only their text and color refresh each
+        // tick, so the 20 Hz board never realigns its DOM nodes
+        let groupRows = groupProgress.children;
+        if (groupRows.length !== race.groups.length) {
+          groupProgress.replaceChildren(
+            ...race.groups.map(() => {
+              const row = document.createElement('div');
+              row.className = 'climb-group-row';
+              row.append(
+                document.createElement('span'),
+                document.createElement('span'),
+              );
+              return row;
+            }),
+          );
+          groupRows = groupProgress.children;
+        }
+        for (let i = 0; i < race.groups.length; i++) {
+          const group = race.groups[i];
+          const row = groupRows[i] as HTMLElement;
+          row.style.color = group.isMixed
+            ? config.MIXED_COLOR
+            : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
+          row.children[0].textContent = group.isMixed
+            ? 'M'
+            : String(group.layer);
+          row.children[1].textContent = String(
+            Math.max(0, Math.round(group.scores.seed)),
+          );
+        }
       }
       if (followed) {
         const c = followed.controls;

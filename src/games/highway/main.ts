@@ -510,7 +510,6 @@ export default async (state: typeof defaultState) => {
         (camTarget.y - 2 * camTarget.speed * Math.cos(camTarget.angle) - camY) *
         0.1;
     }
-    state.camY = camY;
     carCtx.save();
     carCtx.translate(0, -camY + carCanvas.height * 0.7);
 
@@ -520,11 +519,24 @@ export default async (state: typeof defaultState) => {
       carRay.y = state.player.y + state.player.height * 10;
       carRay.draw(carCtx);
     }
+    // the camera shows world Y in [camY - 0.7h, camY + 0.3h]; cars fully
+    // outside it cost a transform and a blit for nothing
+    const cullMargin = 60;
+    const carViewMinY = camY - carCanvas.height * 0.7 - cullMargin;
+    const carViewMaxY = camY + carCanvas.height * 0.3 + cullMargin;
     for (let i = 0; i < state.traffic.length; i++) {
-      state.traffic[i].draw(carCtx);
+      const traffic = state.traffic[i];
+      if (traffic.aabb.maxY < carViewMinY || traffic.aabb.minY > carViewMaxY)
+        continue;
+      traffic.draw(carCtx);
     }
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
+      if (
+        i !== 0 &&
+        (car.aabb.maxY < carViewMinY || car.aabb.minY > carViewMaxY)
+      )
+        continue;
       carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
       car.draw(carCtx, i === 0);
     }

@@ -28,8 +28,10 @@ const PANEL_MAX_WIDTH = 800;
 const JUMP_TIMELINE_WIDTH = 110;
 
 /** Screen resolution divisor: 1 keeps the native device pixel ratio, 2 draws
- *  half of it, 4 a quarter. Zero, negatives and garbage fall back to this. */
-const DEFAULT_SCREEN_SCALE = 2;
+ *  half of it, 4 a quarter. Zero, negatives and garbage fall back to this.
+ *  The demo defaults to the lightest quarter so a hosted showcase never
+ *  grinds a weak GPU; `?scale=` still overrides either way. */
+const DEFAULT_SCREEN_SCALE = isDemo ? 4 : 2;
 
 /** The `?scale=` override, e.g. 1 for native or 4 for the lightest draw. */
 function screenScale(scale = DEFAULT_SCREEN_SCALE) {

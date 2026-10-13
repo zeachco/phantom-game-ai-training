@@ -263,8 +263,16 @@ export class Player {
    *  rows at full horizontal speed */
   #eyeTarget(): Platform | null {
     const platforms = this.tower.platforms;
-    let next = 0;
-    while (next < platforms.length && platforms[next].y <= this.y) next++;
+    // rows are y-ascending, so binary search finds the first row above the
+    // feet in O(log n) instead of walking up from the ground each frame
+    let lo = 0;
+    let hi = platforms.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (platforms[mid].y <= this.y) lo = mid + 1;
+      else hi = mid;
+    }
+    const next = lo;
     if (next >= platforms.length) return null;
     const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
     const index = next + Math.round(3 * speedRatio);

@@ -183,7 +183,9 @@ export class Cave {
   #rockTexture: THREE.Texture;
   #obstacleTexture: THREE.Texture;
   #gateMaterial: THREE.MeshBasicMaterial;
-  #gateNextMaterial: THREE.MeshBasicMaterial;
+  /** scratch origin/direction for wallRayDistance, reused so a ray never allocates */
+  #rayOrigin = new THREE.Vector3();
+  #rayDirection = new THREE.Vector3();
   #coinGeometry: THREE.CylinderGeometry;
   #coinMaterial: THREE.MeshBasicMaterial;
   #wallMaterial: THREE.MeshStandardMaterial;
@@ -231,11 +233,6 @@ export class Cave {
       color: new THREE.Color(config.GATE_COLORS[0]),
       transparent: true,
       opacity: 0.28,
-    });
-    this.#gateNextMaterial = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(config.GATE_NEXT_COLOR),
-      transparent: true,
-      opacity: 0.85,
     });
     this.#coinGeometry = new THREE.CylinderGeometry(
       config.CAVE_COIN_RADIUS,
@@ -887,8 +884,8 @@ export class Cave {
     maxLen: number,
     sHint: number,
   ): number {
-    const origin = new THREE.Vector3(ox, oy, oz);
-    const direction = new THREE.Vector3(dx, dy, dz).normalize();
+    const origin = this.#rayOrigin.set(ox, oy, oz);
+    const direction = this.#rayDirection.set(dx, dy, dz).normalize();
     const first =
       Math.floor(Math.max(0, sHint - maxLen * 2) / config.CAVE_FEATURE_CELL) -
       1;
@@ -1640,7 +1637,6 @@ export class Cave {
     for (const material of [
       this.#material,
       this.#gateMaterial,
-      this.#gateNextMaterial,
       this.#coinMaterial,
       this.#wallMaterial,
     ]) {
@@ -1991,7 +1987,6 @@ export class Cave {
     this.#rockTexture.dispose();
     this.#obstacleTexture.dispose();
     this.#gateMaterial.dispose();
-    this.#gateNextMaterial.dispose();
     this.#coinGeometry.dispose();
     this.#coinMaterial.dispose();
     this.#wallMaterial.dispose();

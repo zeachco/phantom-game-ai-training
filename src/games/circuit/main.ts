@@ -790,8 +790,6 @@ export default async (state: typeof defaultState) => {
         }
       }
       lastFollowed = camTarget;
-      state.camX = camX;
-      state.camY = camY;
       carCtx.save();
       // Paint the screen-space background before rotating the world, otherwise
       // the corners of a rotated viewport can expose the old frame.
@@ -805,14 +803,43 @@ export default async (state: typeof defaultState) => {
       const nextCheckpoint = camTarget
         ? race.circuit.checkpoints[camTarget.nextCheckpoint]
         : undefined;
+      // Compute the world view box once up front: checkpoints and obstacles
+      // are culled against it, and the car loop below reuses the same bounds.
+      // A rotated screen rectangle has a larger axis-aligned world bounding
+      // box, so keep the margin conservative so geometry never pops at corners.
+      const viewMargin = 50;
+      const sinCamera = Math.abs(Math.sin(cameraAngle));
+      const cosCamera = Math.abs(Math.cos(cameraAngle));
+      const viewHalfWidth =
+        (carCanvas.width * cosCamera + carCanvas.height * sinCamera) / 2;
+      const viewHalfHeight =
+        (carCanvas.width * sinCamera + carCanvas.height * cosCamera) / 2;
+      const viewMinX = camX - viewHalfWidth - viewMargin;
+      const viewMaxX = camX + viewHalfWidth + viewMargin;
+      const viewMinY = camY - viewHalfHeight - viewMargin;
+      const viewMaxY = camY + viewHalfHeight + viewMargin;
       for (let i = 0; i < race.circuit.checkpoints.length; i++) {
-        race.circuit.checkpoints[i].draw(
-          carCtx,
-          race.circuit.checkpoints[i] === nextCheckpoint,
-        );
+        const checkpoint = race.circuit.checkpoints[i];
+        if (
+          checkpoint.maxX < viewMinX ||
+          checkpoint.minX > viewMaxX ||
+          checkpoint.maxY < viewMinY ||
+          checkpoint.minY > viewMaxY
+        )
+          continue;
+        checkpoint.draw(carCtx, checkpoint === nextCheckpoint);
       }
       for (let i = 0; i < race.circuit.obstacles.length; i++) {
-        race.circuit.obstacles[i].draw(carCtx);
+        const obstacle = race.circuit.obstacles[i];
+        const aabb = obstacle.aabb;
+        if (
+          aabb.maxX < viewMinX ||
+          aabb.minX > viewMaxX ||
+          aabb.maxY < viewMinY ||
+          aabb.minY > viewMaxY
+        )
+          continue;
+        obstacle.draw(carCtx);
       }
       // Show the predictive collision radius only when the followed car's
       // current sensor fan can see the moving obstacle.
@@ -835,19 +862,6 @@ export default async (state: typeof defaultState) => {
       // the human car draws last, above every other car, no sensor fan
       const corpseNow = performance.now();
       // off-screen cars cost a transform and two blits for nothing
-      const viewMargin = 50;
-      // A rotated screen rectangle has a larger axis-aligned world bounding
-      // box. Keep this culling conservative so cars never pop in at corners.
-      const sinCamera = Math.abs(Math.sin(cameraAngle));
-      const cosCamera = Math.abs(Math.cos(cameraAngle));
-      const viewHalfWidth =
-        (carCanvas.width * cosCamera + carCanvas.height * sinCamera) / 2;
-      const viewHalfHeight =
-        (carCanvas.width * sinCamera + carCanvas.height * cosCamera) / 2;
-      const viewMinX = camX - viewHalfWidth - viewMargin;
-      const viewMaxX = camX + viewHalfWidth + viewMargin;
-      const viewMinY = camY - viewHalfHeight - viewMargin;
-      const viewMaxY = camY + viewHalfHeight + viewMargin;
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         if (car === state.human) continue;

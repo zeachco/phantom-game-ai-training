@@ -51,6 +51,8 @@ export class CaveRace {
   #bestGateFrames: number[] = [];
   /** fastest finish on the current cave */
   #bestFinishFrames = Infinity;
+  /** scratch ranking buffer, repopulated each step so update never allocates */
+  #ranked: Ball[] = [];
   #humanFinishCelebrated = false;
   #pendingSaves = new Set<Group>();
   #onHumanCrash?: () => void;
@@ -76,10 +78,6 @@ export class CaveRace {
     this.#onHumanFinish = options.onHumanFinish;
     this.#onSeedChanged = options.onSeedChanged;
     this.#onReset = options.onReset;
-  }
-
-  get completedFinishes() {
-    return this.#completedFinishes;
   }
 
   /** the human ball has no brain, group, or saved weights */
@@ -410,7 +408,6 @@ export class CaveRace {
       group.pool[slot] = this.#spawnBall(group, slot);
     this.state.balls.push(...group.pool);
     this.state.living += group.pool.length - oldLiving;
-    this.state.sortedBalls = this.state.balls.slice();
   }
 
   #spawnSlots(group: Group) {
@@ -496,7 +493,6 @@ export class CaveRace {
       this.state.human = undefined;
     }
     this.spawnHuman();
-    this.state.population = this.state.balls.length;
     this.state.living = this.state.balls.filter((ball) => !ball.damaged).length;
   }
 
@@ -517,7 +513,6 @@ export class CaveRace {
     this.#bestFinishFrames = Infinity;
     this.#humanFinishCelebrated = false;
     Object.assign(this.state, defaultState);
-    this.state.playing = true;
     const { inputCount, outputCount } = getCaveBrainDimensions();
     this.state.sortedModels = this.io.loadAllModelLayers(
       config.MAX_NETWORK_LAYERS,
@@ -547,7 +542,6 @@ export class CaveRace {
     this.#buildPools();
     this.state.balls = this.groups.flatMap((group) => group.pool);
     this.spawnHuman();
-    this.state.population = this.state.balls.length;
     this.state.living = this.state.balls.length;
     this.#onReset?.();
   }
@@ -575,8 +569,12 @@ export class CaveRace {
     // Race position pays a small per-frame premium: 1st place earns
     // POSITION_SCORE_SCALE each frame, 2nd half as much, and so on. The same
     // position scales the section bonus a ball banks when it advances.
-    const living = this.state.balls.filter((ball) => !ball.damaged);
-    const ranked = living.slice().sort((a, b) => b.s - a.s);
+    const ranked = this.#ranked;
+    ranked.length = 0;
+    for (const ball of this.state.balls) {
+      if (!ball.damaged) ranked.push(ball);
+    }
+    ranked.sort((a, b) => b.s - a.s);
     for (let i = 0; i < ranked.length; i++) {
       ranked[i].racePosition = i + 1;
       ranked[i].brain.score += config.POSITION_SCORE_SCALE / (i + 1);
@@ -639,7 +637,7 @@ export class CaveRace {
     if (
       human?.finished &&
       !this.#humanFinishCelebrated &&
-      !Array.from(this.#completedFinishes.keys()).some((key) => key !== 'human')
+      this.#completedFinishes.size === 0
     ) {
       this.#humanFinishCelebrated = true;
       this.#onHumanFinish?.();
@@ -658,11 +656,5 @@ export class CaveRace {
       this.#persistGroup(group);
       saveScores(group);
     }
-  }
-
-  /** Reorders the live ball list by score; only the throttled HUD reads it. */
-  public refreshLeaderboard() {
-    this.state.balls.sort((a, b) => b.brain.score - a.brain.score);
-    this.state.sortedBalls = this.state.balls;
   }
 }

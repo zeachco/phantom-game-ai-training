@@ -28,13 +28,17 @@ export class WallSolid {
   private insideRay = new THREE.Ray();
   private insideHit = new THREE.Vector3();
   private insideDirection = new THREE.Vector3(0.423, 0.721, 0.547).normalize();
+  /** scratch for the closest-point delta, reused so a contact never allocates */
+  private delta = new THREE.Vector3();
+  /** scratch crossing distances for containsPoint, reused across calls */
+  private crossings: number[] = [];
 
   /** A nearest face's plane cannot classify a point in a concave solid.
    * Count crossings of the complete closed mesh instead. */
   private containsPoint(point: THREE.Vector3) {
     if (!this.bounds.containsPoint(point)) return false;
     this.insideRay.set(point, this.insideDirection);
-    const crossings: number[] = [];
+    this.crossings.length = 0;
     for (const patch of this.patches) {
       if (!this.insideRay.intersectsBox(patch.bounds)) continue;
       for (const { shape } of patch.triangles) {
@@ -50,13 +54,13 @@ export class WallSolid {
           continue;
         const distance = point.distanceTo(this.insideHit);
         if (distance < 1e-7) return false;
-        crossings.push(distance);
+        this.crossings.push(distance);
       }
     }
-    crossings.sort((a, b) => a - b);
+    this.crossings.sort((a, b) => a - b);
     let count = 0;
     let previous = -Infinity;
-    for (const distance of crossings) {
+    for (const distance of this.crossings) {
       // Both triangles of a quad can report the same edge intersection.
       if (distance - previous < 1e-6) continue;
       count++;
@@ -179,7 +183,7 @@ export class WallSolid {
         if (!Number.isFinite(distanceSquared) || distanceSquared >= best)
           continue;
         best = distanceSquared;
-        const delta = this.point.clone().sub(this.closest);
+        const delta = this.delta.subVectors(this.point, this.closest);
         const inside = contained ?? delta.dot(triangle.normal) < -1e-7;
         const distance = Math.sqrt(distanceSquared);
         const normal =

@@ -107,10 +107,7 @@ export class Ball {
   public lastGateDelta: number | null = null;
   /** gate the ball is currently inside, -1 in none, charges out-of-order entries */
   public insideGate = -1;
-  /** position of the next gate and the signed delta, refreshed for the viz */
-  public gateX = 0;
-  public gateY = 0;
-  public gateZ = 0;
+  /** the ball's progress toward the next gate, the brain's gate bearing input */
   public gateDelta = 0;
   /** signed angle from the velocity heading to the ball→gate vector, in
    *  [-1, 1]; 0 means the ball is driving straight at the next gate */
@@ -175,6 +172,8 @@ export class Ball {
   private frameT: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private frameN: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private frameB: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  /** scratch out-param for the next-gate center, reused so scoring never allocates */
+  private gatePt: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
 
   constructor(
     spawn: {
@@ -548,14 +547,7 @@ export class Ball {
 
     // the viz line reads these, the brain reads the same delta as an input
     if (this.nextGate < n) {
-      const gp = cave.centerAt(cave.gatePositions[this.nextGate], {
-        x: 0,
-        y: 0,
-        z: 0,
-      });
-      this.gateX = gp.x;
-      this.gateY = gp.y;
-      this.gateZ = gp.z;
+      const gp = cave.centerAt(cave.gatePositions[this.nextGate], this.gatePt);
       const dx = gp.x - this.x;
       const dy = gp.y - this.y;
       const dz = gp.z - this.z;
