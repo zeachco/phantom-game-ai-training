@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Temporary model capture server.
  *
@@ -13,6 +13,8 @@
  *
  *   saved-models/<game>/<storage-key>.json     one file per storage key
  *   saved-models/manifest.jsonl                one line per saved key
+ *   src/games/<game>/presets/<game>_models_default.json
+ *                                              bundled default-models archive
  *
  * Ctrl-C when done.
  */
@@ -29,9 +31,29 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const PATH_TO_SNIPPET = join(
+  dirname(fileURLToPath(import.meta.url)),
+  './capture-snippet.js',
+);
+
+const file = Bun.file(PATH_TO_SNIPPET);
+const SNIPPET_TEXT = await file.text();
+
+console.log(SNIPPET_TEXT);
+
 const PORT = Number(process.env.PORT || 4545);
 const HOST = '127.0.0.1';
-const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'saved-models');
+const OUT_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'saved-models',
+);
+const GAMES_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'src',
+  'games',
+);
 const GAMES = ['circuit', 'cave', 'highway', 'climb'];
 const MAX_BODY = 64 * 1024 * 1024; // 64 MB: localStorage payloads are ~5 MB
 
@@ -81,12 +103,16 @@ function handleCapture(body, res) {
     return;
   }
   if (!models || typeof models !== 'object' || Array.isArray(models)) {
-    send(res, 400, { ok: false, error: 'models must be a Record<key, model[]>' });
+    send(res, 400, {
+      ok: false,
+      error: 'models must be a Record<key, model[]>',
+    });
     return;
   }
   const gameDir = join(OUT_DIR, game);
   mkdirSync(gameDir, { recursive: true });
   const files = [];
+  const writtenModels = {};
   console.log(`\n📥 ${game}  (savedAt ${savedAt ?? 'unknown'})`);
   for (const [key, list] of Object.entries(models)) {
     if (!SAFE_KEY.test(key)) {
@@ -95,13 +121,35 @@ function handleCapture(body, res) {
     }
     const file = join(gameDir, `${key}.json`);
     writeFileSync(file, JSON.stringify(list, null, 2));
+    writtenModels[key] = list;
     const count = Array.isArray(list) ? list.length : null;
     appendFileSync(
       join(OUT_DIR, 'manifest.jsonl'),
-      JSON.stringify({ game, key, savedAt, count, at: new Date().toISOString() }) + '\n',
+      JSON.stringify({
+        game,
+        key,
+        savedAt,
+        count,
+        at: new Date().toISOString(),
+      }) + '\n',
     );
     files.push(`${game}/${key}.json`);
-    console.log(`  ${key}.json  ${count ?? '?'} models  ${statSync(file).size} bytes`);
+    console.log(
+      `  ${key}.json  ${count ?? '?'} models  ${statSync(file).size} bytes`,
+    );
+  }
+  if (Object.keys(writtenModels).length > 0) {
+    // Bundled default-models archive, same shape the games fetch at runtime
+    // (e.g. circuit's loadDefaultModels reads { game, savedAt, models }).
+    const presetDir = join(GAMES_DIR, game, 'presets');
+    mkdirSync(presetDir, { recursive: true });
+    const presetFile = join(presetDir, `${game}_models_default.json`);
+    writeFileSync(
+      presetFile,
+      JSON.stringify({ game, savedAt, models: writtenModels }),
+    );
+    files.push(`src/games/${game}/presets/${game}_models_default.json`);
+    console.log(`  preset  ${statSync(presetFile).size} bytes`);
   }
   send(res, 200, { ok: true, files });
 }

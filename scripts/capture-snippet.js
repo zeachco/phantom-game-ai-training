@@ -42,5 +42,5 @@
     const json = await res.json().catch(() => ({}));
     console[json.ok ? 'info' : 'warn'](`capture ${game}:`, json);
   }
-  console.log('done — check saved-models/ on disk');
+  console.log('done — check saved-models/ and src/games/*/presets/ on disk');
 })();
