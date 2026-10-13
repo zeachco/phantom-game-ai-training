@@ -3,3 +3,4 @@ dist
 .parcel-cache
 ./src/**.js
 saved-models/
+.env
