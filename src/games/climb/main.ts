@@ -1,5 +1,6 @@
-import { MIXED_LEVELS } from '../../ai/Mixed';
+import { MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
+import type { NeuralNetwork } from '../../ai/Network';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -261,25 +262,22 @@ export default async (state: typeof defaultState) => {
   floorEl.className = 'laps';
   floorEl.title = 'floors of personal-best height on this seed';
   floorEl.textContent = 'floor 0';
-  const heightEl = document.createElement('div');
-  heightEl.className = 'frame-count';
-  heightEl.title = 'feet height';
-  heightEl.textContent = 'height 0u';
   const comboEl = document.createElement('div');
   comboEl.className = 'combo-indicator';
   comboEl.title = 'landing and wall-bounce combo';
   comboEl.hidden = true;
-  const budgetEl = document.createElement('div');
-  budgetEl.className = 'frame-count';
-  budgetEl.title =
-    'simulation frames left before the height budget kills this climber';
-  budgetEl.textContent = 'budget —';
   const seedCountdown = document.createElement('div');
   seedCountdown.className = 'finish-countdown';
   seedCountdown.style.color = 'red';
   seedCountdown.hidden = true;
-  readout.append(seedCountdown, comboEl, floorEl, heightEl, budgetEl);
-  steerOverlay.append(controlIndicators, budgetGauge, readout);
+  readout.append(seedCountdown, comboEl, floorEl);
+  // The network stays in the sidebar, but its stats travel with the in-game
+  // cockpit as inline text after the readout, visible when the panel is
+  // closed.
+  const brainStats = document.createElement('div');
+  brainStats.className = 'brain-stats';
+  brainStats.title = 'followed brain stats';
+  steerOverlay.append(controlIndicators, budgetGauge, readout, brainStats);
   document.body.appendChild(steerOverlay);
 
   // The map selector stays in the top-left HUD so it remains available while
@@ -319,6 +317,7 @@ export default async (state: typeof defaultState) => {
   const loop = new GameLoop();
   const shouldUpdateDom = createUpdateLimiter(20);
   let lastCountdownTenths = -1;
+  let lastStatsHtml = '';
 
   function writeSeed(seed: number) {
     history.replaceState(
@@ -518,6 +517,10 @@ export default async (state: typeof defaultState) => {
           followed?.color || '#c4c4c4',
         );
         steerOverlay.classList.toggle('hidden', !followed || followed.damaged);
+        brainStats.classList.toggle(
+          'hidden',
+          !neuralVisualizer.renderStats || !followed?.brain,
+        );
         platformValue.textContent = String(followed?.bestPlatform ?? 0);
         // group rows are built once and only their text and color refresh each
         // tick, so the 20 Hz board never realigns its DOM nodes
@@ -560,7 +563,8 @@ export default async (state: typeof defaultState) => {
         if (jumpSamples.length > JUMP_TIMELINE_WIDTH) jumpSamples.shift();
         if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
         floorEl.textContent = `floor ${Math.round(followed.brain?.score ?? 0)}`;
-        heightEl.textContent = `height ${Math.round(followed.y)}u`;
+        if (followed.brain && neuralVisualizer.renderStats)
+          updateBrainStats(followed.brain, followed);
         // The gauge drains while the followed climber fails to set a new
         // height record; at zero the stall death hits humans and AIs alike.
         const budget = Math.max(
@@ -570,7 +574,6 @@ export default async (state: typeof defaultState) => {
         const budgetFraction = budget / config.HEIGHT_BUDGET_FRAMES;
         budgetGaugeFill.style.height = `${budgetFraction * 100}%`;
         budgetGauge.setAttribute('aria-valuenow', String(budget));
-        budgetEl.textContent = `budget ${budget}f`;
       }
 
       const followedBrain = followed?.brain;
@@ -587,6 +590,34 @@ export default async (state: typeof defaultState) => {
         !state.human.damaged,
     },
   );
+
+  /** Rebuild the inline stats block of the followed brain; the DOM is only
+   *  touched when the rendered text changes, so a steady frame is cheap. */
+  function updateBrainStats(network: NeuralNetwork, player: Player) {
+    const groupKey =
+      network instanceof MixedNetwork ? 'mixed' : String(player.brainLayers);
+    const group = race.groups.find((candidate) => candidate.key === groupKey);
+    const previousBest = group?.scores.history[String(race.seed)];
+    const best =
+      typeof previousBest === 'number' && previousBest > 0
+        ? Math.round(previousBest)
+        : '—';
+    const mutation =
+      network.mutationIndex === 0
+        ? 'Original model'
+        : `Mut ${(network.mutationFactor * 100).toFixed(4)}%`;
+    const lines = [
+      `Net ${network.id}`,
+      mutation,
+      `Score ${Math.round(network.score)}`,
+      `Best ${best}`,
+    ];
+    const html = lines.map((line) => `<span>${line}</span>`).join('');
+    if (html !== lastStatsHtml) {
+      lastStatsHtml = html;
+      brainStats.innerHTML = html;
+    }
+  }
 };
 
 /** two parallax layers of soft ellipses, positioned from a stable hash so the
