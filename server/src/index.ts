@@ -124,10 +124,13 @@ async function handleModels(req: Request, url: URL, body: Record<string, unknown
     if (game) filter.game = game;
     if (group) filter.group = group;
     const db = await getDb();
+    // Best first: with a capped limit, the read window must always contain
+    // the top-scoring docs (training improves over time, so the best doc is
+    // usually the oldest). Missing scores sort last in a descending sort.
     const models = await db
       .collection<ModelDoc>("models")
       .find(filter)
-      .sort({ submittedAt: -1 })
+      .sort({ score: -1, submittedAt: -1 })
       .limit(limit)
       .toArray();
     return { count: models.length, models };
