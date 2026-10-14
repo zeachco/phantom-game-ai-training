@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { MongoError } from "mongodb";
 import { PORT, VERIFY_TOLERANCE } from "./config.ts";
+
+// instanceof is unreliable here: Bun can load two copies of the mongodb
+// package, so the thrown driver error does not match the imported classes.
+// Driver errors all carry a Mongo* name (MongoParseError, MongoServerError,
+// MongoServerSelectionError, ...).
+function isMongoError(err: unknown): boolean {
+  return (
+    err instanceof Error && typeof err.name === "string" && err.name.startsWith("Mongo")
+  );
+}
 import {
   getDb,
   mongoState,
@@ -336,7 +345,7 @@ const server = Bun.serve({
       if (err instanceof MongoNotReadyError) {
         return json({ error: err.message }, 503);
       }
-      if (err instanceof MongoError) {
+      if (isMongoError(err)) {
         return json({ error: `mongo unavailable: ${err.message}` }, 503);
       }
       console.error(err);
