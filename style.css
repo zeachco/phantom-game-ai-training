@@ -874,8 +874,7 @@ canvas {
 }
 .climb-group-row {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-end;
   opacity: 0.9;
 }
 

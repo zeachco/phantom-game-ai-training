@@ -537,25 +537,28 @@ export default async (state: typeof defaultState) => {
             ...race.groups.map(() => {
               const row = document.createElement('div');
               row.className = 'climb-group-row';
-              row.append(
-                document.createElement('span'),
-                document.createElement('span'),
-              );
+              row.append(document.createElement('span'));
               return row;
             }),
           );
           groupRows = groupProgress.children;
         }
-        for (let i = 0; i < race.groups.length; i++) {
-          const group = race.groups[i];
+        // ranked by live score, not group number; a stable tie-break keeps
+        // equal scores from swapping rows between ticks. The row color
+        // identifies the group, so only the score is written
+        const ranked = [...race.groups].sort(
+          (a, b) =>
+            b.scores.seed - a.scores.seed ||
+            Number(a.isMixed) - Number(b.isMixed) ||
+            a.layer - b.layer,
+        );
+        for (let i = 0; i < ranked.length; i++) {
+          const group = ranked[i];
           const row = groupRows[i] as HTMLElement;
           row.style.color = group.isMixed
             ? config.MIXED_COLOR
             : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-          row.children[0].textContent = group.isMixed
-            ? 'M'
-            : String(group.layer);
-          row.children[1].textContent = String(
+          row.children[0].textContent = String(
             Math.max(0, Math.round(group.scores.seed)),
           );
         }
