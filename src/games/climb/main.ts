@@ -4,6 +4,7 @@ import type { NeuralNetwork } from '../../ai/Network';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
+import { contrastText } from '../../utilities/colors';
 import {
   createCanvas,
   createUpdateLimiter,
@@ -153,10 +154,22 @@ export default async (state: typeof defaultState) => {
     race.resetBrainGroup(value);
   };
 
-  const followBtns: HTMLButtonElement[] = [];
+  const followBtns = new Map<
+    HTMLButtonElement,
+    { key: string; running?: boolean }
+  >();
   const makeFollowBtn = (key: string, label: string, title: string) => {
     const btn = document.createElement('button');
     btn.className = 'follow-btn';
+    const color =
+      key === '0'
+        ? '#c4c4c4'
+        : key === 'mixed'
+          ? config.MIXED_COLOR
+          : layerColor(Number(key), config.MAX_NETWORK_LAYERS);
+    // the button wears its group's color, like the board rows
+    btn.style.setProperty('--btn-color', color);
+    btn.style.setProperty('--btn-text', contrastText(color));
     btn.textContent = label;
     btn.title = `${title} (hold to reset its saves)`;
     btn.dataset.follow = key;
@@ -178,7 +191,7 @@ export default async (state: typeof defaultState) => {
     btn.addEventListener('pointerdown', start);
     btn.addEventListener('pointerup', () => stop(true));
     btn.addEventListener('pointerleave', () => stop(false));
-    followBtns.push(btn);
+    followBtns.set(btn, { key });
     return btn;
   };
   followKeys.append(
@@ -415,6 +428,7 @@ export default async (state: typeof defaultState) => {
       const domUpdateDue = shouldUpdateDom(now);
       if (domUpdateDue) {
         race.refreshLeaderboard();
+        updateFollowButtons();
         seedLabel.textContent = `seed ${race.seed}`;
         if (race.seedChangeAt) {
           const remaining = Math.max(0, race.seedChangeAt - now);
@@ -627,6 +641,25 @@ export default async (state: typeof defaultState) => {
       lastStatsHtml = html;
       brainStats.innerHTML = html;
     }
+  }
+
+  /** Fill the follow buttons with their running/dead state once per HUD tick. */
+  function updateFollowButtons() {
+    const running = new Set<string>();
+    for (const p of state.players) {
+      if (p.damaged || !p.useAI) continue;
+      running.add(
+        p.brain instanceof MixedNetwork ? 'mixed' : String(p.brainLayers),
+      );
+    }
+    followBtns.forEach((info, btn) => {
+      const isRunning =
+        info.key === '0' ? state.living > 0 : running.has(info.key);
+      if (isRunning === info.running) return;
+      info.running = isRunning;
+      btn.classList.toggle('running', isRunning);
+      btn.classList.toggle('dead', !isRunning);
+    });
   }
 };
 
