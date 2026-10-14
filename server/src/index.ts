@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { MongoError } from "mongodb";
 import { PORT, VERIFY_TOLERANCE } from "./config.ts";
 import {
   getDb,
@@ -334,6 +335,9 @@ const server = Bun.serve({
       }
       if (err instanceof MongoNotReadyError) {
         return json({ error: err.message }, 503);
+      }
+      if (err instanceof MongoError) {
+        return json({ error: `mongo unavailable: ${err.message}` }, 503);
       }
       console.error(err);
       return json({ error: "internal server error" }, 500);

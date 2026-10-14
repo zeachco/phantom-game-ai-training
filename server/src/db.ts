@@ -71,7 +71,10 @@ export function getDb(): Promise<Db> {
       return db;
     })();
     pending.catch((err) => {
+      // Reset so the next request retries the connection (e.g. after a
+      // MONGO_URL fix or Mongo coming back up).
       state = "error";
+      pending = null;
       console.error("mongo connection failed:", err instanceof Error ? err.message : err);
     });
   }
