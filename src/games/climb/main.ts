@@ -1,6 +1,7 @@
 import { MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import type { NeuralNetwork } from '../../ai/Network';
+import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -24,7 +25,7 @@ import {
 
 const neuralVisualizer = new Visualizer(config);
 
-const io = fileUtilities('climb');
+const io = fileUtilities('climb', makeSubmitChecker('climb'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
@@ -66,6 +67,11 @@ export default async (state: typeof defaultState) => {
   const importBtn = document.createElement('button');
   importBtn.className = 'model-btn';
   importBtn.textContent = 'Import archive';
+  const baseBtn = document.createElement('button');
+  baseBtn.className = 'model-btn';
+  baseBtn.textContent = 'Load base models';
+  baseBtn.title =
+    'Load the base climb models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
@@ -94,6 +100,21 @@ export default async (state: typeof defaultState) => {
       if (err && err.message !== 'No file selected') {
         alert(err?.message || 'Unable to load models');
       }
+    }
+  };
+  baseBtn.onclick = async () => {
+    try {
+      const { source, written } = await loadBaseModels(
+        'climb',
+        io,
+        new URL('./presets/climb_models_default.json', import.meta.url),
+      );
+      if (!written.length)
+        throw new Error('No compatible model in the base archive');
+      console.info(`Loaded base models (${source}): ${written.join(', ')}`);
+      race.initialize();
+    } catch (err) {
+      alert(err?.message || 'Unable to load base models');
     }
   };
   saveBtn.onclick = () => downloadModelArchive('climb');
@@ -227,7 +248,7 @@ export default async (state: typeof defaultState) => {
 
   const actions = document.createElement('div');
   actions.className = 'model-actions';
-  actions.append(importBtn, saveBtn, clearBtn, clearScoresBtn);
+  actions.append(importBtn, baseBtn, saveBtn, clearBtn, clearScoresBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
@@ -391,6 +412,25 @@ export default async (state: typeof defaultState) => {
   /** world-space y at the bottom of the view; the camera only ever climbs */
   let camTop = 0;
 
+  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // visitor's own training is never overwritten; imported brains are picked
+  // up by the re-initialize.
+  void (async () => {
+    try {
+      const { written } = await loadBaseModels(
+        'climb',
+        io,
+        new URL('./presets/climb_models_default.json', import.meta.url),
+        true,
+      );
+      if (written.length) {
+        console.info(`Loaded base models: ${written.join(', ')}`);
+        race.initialize();
+      }
+    } catch (err) {
+      console.warn('Unable to load base climb models', err);
+    }
+  })();
   race.initialize();
   setFollow(0);
 

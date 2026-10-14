@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
+import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -38,7 +39,7 @@ function screenScale(scale = DEFAULT_SCREEN_SCALE) {
   return Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_SCREEN_SCALE;
 }
 
-const io = fileUtilities('cave');
+const io = fileUtilities('cave', makeSubmitChecker('cave'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
@@ -192,6 +193,25 @@ export default async (state: CaveState) => {
           alert(message || 'Unable to load models');
       }
     }),
+    addModelButton(
+      'Load base models',
+      'Load the base cave models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.',
+      async () => {
+        try {
+          const { source, written } = await loadBaseModels(
+            'cave',
+            io,
+            new URL('./presets/cave_models_default.json', import.meta.url),
+          );
+          if (!written.length)
+            throw new Error('No compatible model in the base archive');
+          console.info(`Loaded base models (${source}): ${written.join(', ')}`);
+          race.initialize();
+        } catch (err) {
+          alert(err?.message || 'Unable to load base models');
+        }
+      },
+    ),
     addModelButton('Clear training', 'Delete every saved cave brain', () => {
       if (
         !confirm(
@@ -492,6 +512,25 @@ export default async (state: CaveState) => {
 
   let lastStatsText = '';
 
+  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // visitor's own training is never overwritten; imported brains are picked
+  // up by the re-initialize.
+  void (async () => {
+    try {
+      const { written } = await loadBaseModels(
+        'cave',
+        io,
+        new URL('./presets/cave_models_default.json', import.meta.url),
+        true,
+      );
+      if (written.length) {
+        console.info(`Loaded base models: ${written.join(', ')}`);
+        race.initialize();
+      }
+    } catch (err) {
+      console.warn('Unable to load base cave models', err);
+    }
+  })();
   // Build the training pools from the saved `cave_` models.
   race.initialize();
   state.cave?.setWireframe(wireframe);
@@ -589,8 +628,8 @@ export default async (state: CaveState) => {
       (follow === 'mixed'
         ? ball.brain instanceof MixedNetwork
         : follow > 0
-        ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
-        : true);
+          ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
+          : true);
     let leader: Ball | undefined;
     for (const ball of state.balls) {
       if (

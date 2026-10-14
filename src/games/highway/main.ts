@@ -6,6 +6,7 @@ import {
   MixedNetwork,
 } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
+import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -27,7 +28,7 @@ import { defaultState, drawScores, mixedColor } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
-const io = fileUtilities('highway');
+const io = fileUtilities('highway', makeSubmitChecker('highway'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
@@ -96,20 +97,13 @@ export default async (state: typeof defaultState) => {
     try {
       presetBtn.disabled = true;
       presetBtn.textContent = 'Loading preset…';
-      const res = await fetch(
+      const { written } = await loadBaseModels(
+        'highway',
+        io,
         new URL('./presets/highway_models_2026091612022.json', import.meta.url),
       );
-      if (!res.ok) throw new Error(`Preset not found (${res.status})`);
-      const archive = await res.json();
-      if (archive.game && archive.game !== 'highway') {
-        alert(`This preset is for "${archive.game}", not "highway"`);
-        return;
-      }
-      const written = io.importModels(archive.models);
-      if (!written.length) {
-        alert('No compatible model in this preset');
-        return;
-      }
+      if (!written.length)
+        throw new Error('No compatible model in the base archive');
       console.info(`Loaded pre-trained models: ${written.join(', ')}`);
       initialize();
     } catch (err) {
@@ -454,6 +448,25 @@ export default async (state: typeof defaultState) => {
       cars.push(car);
     }
   }
+  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // visitor's own training is never overwritten; imported brains are picked
+  // up by the re-initialize.
+  void (async () => {
+    try {
+      const { written } = await loadBaseModels(
+        'highway',
+        io,
+        new URL('./presets/highway_models_2026091612022.json', import.meta.url),
+        true,
+      );
+      if (written.length) {
+        console.info(`Loaded base models: ${written.join(', ')}`);
+        initialize();
+      }
+    } catch (err) {
+      console.warn('Unable to load base highway models', err);
+    }
+  })();
   initialize();
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();

@@ -123,7 +123,10 @@ export function isModelShapeValid(
   });
 }
 
-export function fileUtilities(game = '') {
+export function fileUtilities(
+  game = '',
+  onSaved?: (namespace: string, models: ModelsByLayerCount[number][]) => void,
+) {
   /** regular brains keep their historical namespace, other kinds get their own */
   const name = (layer: number, kind: string = DEFAULT_KIND) =>
     kind === DEFAULT_KIND ? `${game}_${layer}` : `${game}_${kind}_${layer}`;
@@ -233,7 +236,7 @@ export function fileUtilities(game = '') {
         date: new Date(),
       }));
       console.info(`👍 ${label} scores ${score}`);
-      writeModels(namespace, save);
+      if (writeModels(namespace, save)) onSaved?.(namespace, save);
     }
   }
 
@@ -248,7 +251,7 @@ export function fileUtilities(game = '') {
     kind: string = DEFAULT_KIND,
     namespace = name(layers, kind),
   ) {
-    writeModels(namespace, models);
+    if (writeModels(namespace, models)) onSaved?.(namespace, models);
   }
 
   function loadModels(

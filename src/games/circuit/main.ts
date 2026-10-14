@@ -1,6 +1,7 @@
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import type { NeuralNetwork } from '../../ai/Network';
+import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -27,28 +28,20 @@ import {
 
 const neuralVisualizer = new Visualizer(config);
 
-const io = fileUtilities('circuit');
+const io = fileUtilities('circuit', makeSubmitChecker('circuit'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
+/** Base models: the server first (community submissions), the bundled
+ * preset file as fallback. */
 async function loadDefaultModels(onlyMissing = false): Promise<string[]> {
-  const response = await fetch(
+  const { written } = await loadBaseModels(
+    'circuit',
+    io,
     new URL('./presets/circuit_models_default.json', import.meta.url),
+    onlyMissing,
   );
-  if (!response.ok)
-    throw new Error(`Default models not found (${response.status})`);
-  const archive = await response.json();
-  if (archive.game !== 'circuit' || !archive.models) {
-    throw new Error('Invalid circuit default models');
-  }
-  const models = onlyMissing
-    ? Object.fromEntries(
-        Object.entries(archive.models).filter(
-          ([key]) => !localStorage.getItem(key),
-        ),
-      )
-    : archive.models;
-  return io.importModels(models);
+  return written;
 }
 
 /** the panel takes that share of the screen while open, capped in width,
@@ -97,7 +90,8 @@ export default async (state: typeof defaultState) => {
   const loadBtn = document.createElement('button');
   loadBtn.className = 'model-btn';
   loadBtn.textContent = 'Load models';
-  loadBtn.title = 'Load the bundled circuit models';
+  loadBtn.title =
+    'Load the base circuit models (server first, bundled preset fallback)';
   const importBtn = document.createElement('button');
   importBtn.className = 'model-btn';
   importBtn.textContent = 'Import archive';
@@ -603,6 +597,27 @@ export default async (state: typeof defaultState) => {
     } catch (err) {
       console.warn('Unable to load default circuit models', err);
     }
+  }
+  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // visitor's own training is never overwritten; imported brains are picked
+  // up by the re-initialize. (The ?demo=true block above already loads them.)
+  if (new URLSearchParams(window.location.search).get('demo') !== 'true') {
+    void (async () => {
+      try {
+        const { written } = await loadBaseModels(
+          'circuit',
+          io,
+          new URL('./presets/circuit_models_default.json', import.meta.url),
+          true,
+        );
+        if (written.length) {
+          console.info(`Loaded base models: ${written.join(', ')}`);
+          race.initialize();
+        }
+      } catch (err) {
+        console.warn('Unable to load base circuit models', err);
+      }
+    })();
   }
   race.initialize();
   timingBoard.update();
