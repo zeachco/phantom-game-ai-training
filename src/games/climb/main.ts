@@ -481,7 +481,14 @@ export default async (state: typeof defaultState) => {
       gameCtx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
 
       // parallax clouds, deterministic per screen position
-      drawClouds(gameCtx, gameCanvas.width, gameCanvas.height, camTop, scale);
+      drawClouds(
+        gameCtx,
+        gameCanvas.width,
+        gameCanvas.height,
+        camTop,
+        scale,
+        now,
+      );
 
       gameCtx.save();
       gameCtx.setTransform(scale, 0, 0, -scale, offsetX, offsetY);
@@ -621,24 +628,31 @@ export default async (state: typeof defaultState) => {
 };
 
 /** two parallax layers of soft ellipses, positioned from a stable hash so the
- *  sky never flickers between frames */
+ *  sky never flickers between frames. Clouds also drift sideways at a
+ *  per-layer speed and wrap around once fully offscreen */
 function drawClouds(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   camTop: number,
   scale: number,
+  now: number,
 ) {
   ctx.fillStyle = config.CLOUD_COLOR;
+  // half the horizontal wrap slack, wider than a whole cloud so it is fully
+  // offscreen before it comes back around
+  const margin = 100;
   for (let layer = 0; layer < 2; layer++) {
     const parallax = layer === 0 ? 0.2 : 0.4;
     const drift = camTop * parallax * scale;
     const count = layer === 0 ? 4 : 6;
+    const wrapW = width + margin * 2;
+    const driftX = (now * 0.001 * (layer === 0 ? 6 : 14)) % wrapW;
     for (let i = 0; i < count; i++) {
       const seedX = (i * 173 + layer * 97) % 1000;
       const seedY = (i * 331 + layer * 61) % 1000;
-      const x =
-        ((seedX / 1000) * width + (layer === 0 ? 0 : width * 0.3)) % width;
+      const baseX = (seedX / 1000) * width + (layer === 0 ? 0 : width * 0.3);
+      const x = ((baseX + driftX) % wrapW) - margin;
       const y =
         ((height - (seedY / 1000) * height * 1.5 + drift) % (height + 120)) -
         60;
