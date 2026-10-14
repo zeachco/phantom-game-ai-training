@@ -46,13 +46,16 @@ test('a jump within the landing budget advances the combo and boosts strength', 
   expect(player.vy).toBe(config.JUMP_SPEED * config.COMBO_JUMP_STRENGTH);
 });
 
-test('wall bounces add combo points and cap at x10', () => {
+test('mid-air wall bounces add combo points and cap at x10', () => {
+  // spawned off the ground, grounded cleared so every bounce is mid-air
+  // (real spawns start on the ground, where the initial flag is correct)
   const player = new Player(
     PLAYER_HALF_W + 1,
-    0,
+    40,
     ControlType.DUMMY,
     towerWith(),
   );
+  player.grounded = false;
   player.vx = -4;
   player.update(0);
   expect(player.comboValue).toBe(1);
@@ -62,6 +65,18 @@ test('wall bounces add combo points and cap at x10', () => {
     player.update(i + 1);
   }
   expect(player.comboValue).toBe(config.MAX_COMBO);
+});
+
+test('a wall bounce while touching the ground does not build the combo', () => {
+  const player = new Player(
+    PLAYER_HALF_W + 1,
+    0,
+    ControlType.DUMMY,
+    towerWith(),
+  );
+  player.vx = -4;
+  player.update(0);
+  expect(player.comboValue).toBe(0);
 });
 
 test('the combo is the final normalized neural input', () => {

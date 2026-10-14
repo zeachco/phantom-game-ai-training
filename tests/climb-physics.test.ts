@@ -165,15 +165,12 @@ describe('climb player physics', () => {
     );
   });
 
-  test('side walls bounce horizontal velocity at the configured multiplier', () => {
+  test('side walls bounce horizontal velocity unchanged in magnitude', () => {
     const player = groundPlayer(PLAYER_HALF_W + 1);
     player.vx = -4;
     player.update(0);
     expect(player.x).toBe(PLAYER_HALF_W);
-    expect(player.vx).toBeCloseTo(
-      4 * config.GROUND_FRICTION * config.WALL_BOUNCE,
-      6,
-    );
+    expect(player.vx).toBeCloseTo(4 * config.GROUND_FRICTION, 6);
   });
 
   test('a fall past DEATH_HEIGHT below the last touched platform kills, a shorter drop onto the ground does not', () => {

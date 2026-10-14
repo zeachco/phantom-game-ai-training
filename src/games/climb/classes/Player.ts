@@ -162,17 +162,19 @@ export class Player {
     this.#prevFeet = this.y;
     this.x += this.vx;
     this.y += this.vy;
+    // plain x1 bounces: the walls trade no horizontal speed, and a bounce
+    // only feeds the combo mid-air, never off the ground
     if (this.x < PLAYER_HALF_W) {
       this.x = PLAYER_HALF_W;
       if (this.vx < 0) {
-        this.vx = -this.vx * config.WALL_BOUNCE;
-        this.#addComboPoint();
+        this.vx = -this.vx;
+        if (!this.grounded) this.#addComboPoint();
       }
     } else if (this.x > config.TOWER_WIDTH - PLAYER_HALF_W) {
       this.x = config.TOWER_WIDTH - PLAYER_HALF_W;
       if (this.vx > 0) {
-        this.vx = -this.vx * config.WALL_BOUNCE;
-        this.#addComboPoint();
+        this.vx = -this.vx;
+        if (!this.grounded) this.#addComboPoint();
       }
     }
     if (this.y <= 0) {
@@ -236,7 +238,8 @@ export class Player {
     } else {
       this.stallFrames++;
     }
-    if (this.stallFrames >= config.HEIGHT_BUDGET_FRAMES) this.#die(now, 'stall');
+    if (this.stallFrames >= config.HEIGHT_BUDGET_FRAMES)
+      this.#die(now, 'stall');
     if (this.sensor && this.brain) {
       this.sensor.update(
         this.x,
@@ -377,7 +380,13 @@ export class Player {
       ctx.fill();
       ctx.fillStyle = '#222';
       ctx.beginPath();
-      ctx.arc(eyeX + (aimX / aimLen) * 1.4, eyeY + (aimY / aimLen) * 1.4, 1.4, 0, Math.PI * 2);
+      ctx.arc(
+        eyeX + (aimX / aimLen) * 1.4,
+        eyeY + (aimY / aimLen) * 1.4,
+        1.4,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
     ctx.restore();

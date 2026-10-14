@@ -150,8 +150,6 @@ class Config {
   public MAX_JUMP_HEIGHT_MULTIPLIER = 2;
   /** top horizontal speed in u/f */
   public MAX_SPEED = 7;
-  /** horizontal speed multiplier when bouncing off a side wall */
-  public WALL_BOUNCE = 1.1;
   /** ground horizontal acceleration per frame, deliberately gentle for the
    *  doubled top speed */
   public ACCEL = 0.3;
