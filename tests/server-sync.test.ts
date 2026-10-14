@@ -7,7 +7,9 @@ import {
   loadBaseModels,
   makeSubmitChecker,
   recordBaseScores,
+  resetSubmitStateForTests,
   SERVER_URL,
+  setPaceForTests,
 } from '../src/ai/serverSync';
 import { fileUtilities } from '../src/ai/utils';
 
@@ -81,7 +83,14 @@ const json = (data: unknown): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
-const flush = () => new Promise((r) => setTimeout(r, 0));
+const flush = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+
+/** Submit tests run with tiny paces and a clean slate, so no test leaves a
+ * pending retry timer or a 60s cooldown that would leak into the next one. */
+function quickPace(): void {
+  resetSubmitStateForTests();
+  setPaceForTests({ cooldownMs: 0, backoffStartMs: 0, backoffCapMs: 0 });
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -282,6 +291,7 @@ test('makeSubmitChecker submits a beating group once, with the client id', async
         return json({ created: 1, ids: ['x'] });
       },
       async () => {
+        quickPace();
         recordBaseScores('cave', { cave_5: 100 });
         const checker = makeSubmitChecker('cave');
 
@@ -311,7 +321,27 @@ test('makeSubmitChecker submits a beating group once, with the client id', async
   });
 });
 
-test('makeSubmitChecker retries a failed submit and stays quiet without a base', async () => {
+test('makeSubmitChecker stays quiet without a base', async () => {
+  const { storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    let calls = 0;
+    await withFetch(
+      () => {
+        calls += 1;
+        return json({ created: 1, ids: [] });
+      },
+      async () => {
+        quickPace();
+        const checker = makeSubmitChecker('cave');
+        checker('cave_9', [brain(150)]); // no base recorded at all
+        await flush();
+        expect(calls).toBe(0);
+      },
+    );
+  });
+});
+
+test('makeSubmitChecker backoffs on failure and retries automatically', async () => {
   const { storage } = makeStorage();
   await withStorage(storage as Storage, async () => {
     let ok = false;
@@ -322,25 +352,93 @@ test('makeSubmitChecker retries a failed submit and stays quiet without a base',
         return new Response('ok', { status: ok ? 200 : 500 });
       },
       async () => {
+        resetSubmitStateForTests();
+        setPaceForTests({
+          cooldownMs: 0,
+          backoffStartMs: 30,
+          backoffCapMs: 100,
+        });
         recordBaseScores('cave', { cave_5: 100 });
         const checker = makeSubmitChecker('cave');
 
-        checker('cave_9', [brain(150)]); // no base recorded for cave_9
-        await flush();
-        expect(calls).toBe(0);
-
         checker('cave_5', [brain(150)]);
-        await flush();
+        await flush(20);
+        expect(calls).toBe(1); // the first attempt failed
+        // during the backoff window, saves of the same model are skipped
+        checker('cave_5', [brain(150)]);
+        await flush(5);
         expect(calls).toBe(1);
-        // the failed submit was not recorded: the same model retries
-        checker('cave_5', [brain(150)]);
-        await flush();
-        expect(calls).toBe(2);
 
         ok = true;
-        checker('cave_5', [brain(150)]);
-        await flush();
-        expect(calls).toBe(3);
+        await flush(60); // the retry timer fires at ~30ms
+        expect(calls).toBe(2);
+      },
+    );
+  });
+});
+
+test('makeSubmitChecker serializes submits one at a time', async () => {
+  const { storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    let active = 0;
+    let maxActive = 0;
+    let calls = 0;
+    await withFetch(
+      () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        calls += 1;
+        return new Promise<Response>((resolve) =>
+          setTimeout(() => {
+            active -= 1;
+            resolve(json({ created: 1, ids: [] }));
+          }, 25),
+        );
+      },
+      async () => {
+        quickPace();
+        recordBaseScores('cave', { cave_7: 100, cave_8: 100 });
+        const checker = makeSubmitChecker('cave');
+        checker('cave_7', [brain(150)]);
+        checker('cave_8', [brain(160)]); // enqueued behind the first
+        await flush(100);
+        expect(calls).toBe(2);
+        expect(maxActive).toBe(1);
+      },
+    );
+  });
+});
+
+test('makeSubmitChecker throttles per group and re-checks at the boundary', async () => {
+  const { storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    let calls = 0;
+    let lastScore = 0;
+    await withFetch(
+      (_url, init) => {
+        calls += 1;
+        lastScore = Number(JSON.parse(String(init?.body)).score);
+        return json({ created: 1, ids: [] });
+      },
+      async () => {
+        resetSubmitStateForTests();
+        setPaceForTests({ cooldownMs: 40, backoffStartMs: 0, backoffCapMs: 0 });
+        recordBaseScores('cave', { cave_9: 100 });
+        const checker = makeSubmitChecker('cave');
+
+        checker('cave_9', [brain(150)]);
+        await flush(5);
+        expect(calls).toBe(1);
+        expect(lastScore).toBe(150);
+
+        // a better model during the cooldown is throttled...
+        checker('cave_9', [brain(150), brain(160)]);
+        await flush(5);
+        expect(calls).toBe(1);
+        // ...but the boundary re-check sends the current champion
+        await flush(60);
+        expect(calls).toBe(2);
+        expect(lastScore).toBe(160);
       },
     );
   });
@@ -359,6 +457,7 @@ test('fileUtilities onSaved submits a promoted model that beats the base', async
         return new Response('ok', { status: 200 });
       },
       async () => {
+        quickPace();
         recordBaseScores('cave', { cave_5: 100 });
         const io = fileUtilities('cave', makeSubmitChecker('cave'));
 

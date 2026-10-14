@@ -19,6 +19,29 @@ const LOAD_TIMEOUT_MS = 5000;
 const SUBMIT_TIMEOUT_MS = 30000;
 const SUBMITTED_CAP = 500;
 
+/** Submit pacing: one POST in flight at a time, at most one per group per
+ * cooldown, and exponential backoff (30s..5min) while the server fails. */
+const PACE = {
+  cooldownMs: 60_000,
+  backoffStartMs: 30_000,
+  backoffCapMs: 5 * 60_000,
+};
+export function setPaceForTests(p: Partial<typeof PACE>): void {
+  Object.assign(PACE, p);
+}
+
+/** Clears all submit-machinery state (timers, queue, backoff) between tests. */
+export function resetSubmitStateForTests(): void {
+  chain = Promise.resolve();
+  backoffUntil = 0;
+  backoffStep = 0;
+  lastSubmitAt.clear();
+  inFlightSigs.clear();
+  latestPending.clear();
+  for (const t of retryTimers.values()) clearTimeout(t);
+  retryTimers.clear();
+}
+
 /** Stable browser identity for this visitor, per the server's client protocol. */
 export function clientId(): string {
   let id = localStorage.getItem(CLIENT_ID_KEY);
@@ -212,11 +235,129 @@ function signature(
   return `${group}@${model.version ?? 0}:${model.mutationIndex ?? 0}:${score.toFixed(4)}`;
 }
 
+interface Pending {
+  game: string;
+  group: string;
+  model: ModelsByLayerCount[number];
+  score: number;
+  sig: string;
+}
+
+const pairKey = (game: string, group: string): string => `${game}:${group}`;
+
+function readSubmittedSigs(game: string): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(submittedKey(game)) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordSubmittedSig(game: string, sig: string): void {
+  const sigs = readSubmittedSigs(game);
+  if (sigs.includes(sig)) return;
+  localStorage.setItem(
+    submittedKey(game),
+    JSON.stringify([...sigs, sig].slice(-SUBMITTED_CAP)),
+  );
+}
+
+/** The submit machinery: a single FIFO chain (one POST in flight at a
+ * time), a per-group cooldown, and a global backoff after failures. */
+let chain: Promise<void> = Promise.resolve();
+let backoffUntil = 0;
+let backoffStep = 0;
+const lastSubmitAt = new Map<string, number>();
+const inFlightSigs = new Set<string>();
+const latestPending = new Map<string, Pending>();
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleRetry(k: string, delayMs: number): void {
+  const existing = retryTimers.get(k);
+  if (existing) clearTimeout(existing);
+  retryTimers.set(
+    k,
+    setTimeout(() => {
+      retryTimers.delete(k);
+      const item = latestPending.get(k);
+      if (!item) return;
+      consider(item.game, item.group, item);
+    }, delayMs),
+  );
+}
+
+function enqueue(item: Pending): void {
+  inFlightSigs.add(item.sig);
+  const k = pairKey(item.game, item.group);
+  chain = chain
+    .then(async () => {
+      try {
+        const ok = await submitModel(
+          item.game,
+          item.group,
+          item.model,
+          item.score,
+        );
+        if (ok) {
+          backoffUntil = 0;
+          backoffStep = 0;
+          recordSubmittedSig(item.game, item.sig);
+          console.info(
+            `☁️ submitted ${item.group} score ${item.score.toFixed(4)} to the server`,
+          );
+        } else {
+          backoffStep = Math.min(backoffStep + 1, 16);
+          const wait = Math.min(
+            PACE.backoffCapMs,
+            PACE.backoffStartMs * 2 ** (backoffStep - 1),
+          );
+          backoffUntil = Date.now() + wait;
+          console.warn(
+            `⚠️ submit of ${item.group} failed, retrying in ${Math.round(wait / 1000)}s`,
+          );
+          scheduleRetry(k, wait);
+        }
+      } finally {
+        // The sig is out of flight before the next item starts, so a newer
+        // model for the same group can be enqueued in the meantime.
+        inFlightSigs.delete(item.sig);
+      }
+    })
+    .catch(() => undefined);
+}
+
+function consider(game: string, group: string, item: Pending): void {
+  // Re-validate on the way in: the base may have moved, or the signature
+  // may have been recorded in the meantime.
+  const base = finiteScore(baseScores(game)[group]);
+  if (base === undefined || item.score <= base) return;
+  if (readSubmittedSigs(game).includes(item.sig)) return;
+  if (inFlightSigs.has(item.sig)) return;
+  const k = pairKey(game, group);
+  latestPending.set(k, item);
+  const now = Date.now();
+  if (now < backoffUntil) {
+    scheduleRetry(k, backoffUntil - now);
+    return;
+  }
+  const last = lastSubmitAt.get(k) ?? 0;
+  if (now - last < PACE.cooldownMs) {
+    // Throttled: the current champion is re-checked at the boundary, so the
+    // best model still makes it to the server.
+    scheduleRetry(k, PACE.cooldownMs - (now - last));
+    return;
+  }
+  lastSubmitAt.set(k, now);
+  enqueue(item);
+}
+
 /**
  * onSaved hook for fileUtilities: when a group's top model beats the base
  * reference score for that group, it is submitted to the server once per
- * (group, version, mutation, score). A failed submit simply retries on the
- * next save of the same model.
+ * (group, version, mutation, score). Submits are serialized (one in flight
+ * at a time), rate-limited per group, and back off exponentially on failure;
+ * a failed signature is retried, so nothing is lost.
  */
 export function makeSubmitChecker(
   game: string,
@@ -228,28 +369,12 @@ export function makeSubmitChecker(
     );
     const topScore = finiteScore(top.score);
     if (topScore === undefined) return;
-    const base = finiteScore(baseScores(game)[group]);
-    if (base === undefined || topScore <= base) return;
-    let submitted: string[] = [];
-    try {
-      const parsed = JSON.parse(
-        localStorage.getItem(submittedKey(game)) || '[]',
-      );
-      if (Array.isArray(parsed)) submitted = parsed;
-    } catch {
-      submitted = [];
-    }
-    const sig = signature(group, top);
-    if (submitted.includes(sig)) return;
-    void submitModel(game, group, top, topScore).then((ok) => {
-      if (!ok) return; // signature stays out so the next save retries
-      localStorage.setItem(
-        submittedKey(game),
-        JSON.stringify([...submitted, sig].slice(-SUBMITTED_CAP)),
-      );
-      console.info(
-        `☁️ submitted ${group} score ${topScore.toFixed(4)} to the server`,
-      );
+    consider(game, group, {
+      game,
+      group,
+      model: top,
+      score: topScore,
+      sig: signature(group, top),
     });
   };
 }
