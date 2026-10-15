@@ -12,7 +12,9 @@ import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
 import {
+  bindSidePanelToggle,
   createCanvas,
+  createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
@@ -68,6 +70,7 @@ export default async (state: typeof defaultState) => {
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
   toggleBtn.textContent = '❮';
+  toggleBtn.setAttribute('title', 'F12 to toggle');
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
   const loadBtn = document.createElement('button');
@@ -239,8 +242,8 @@ export default async (state: typeof defaultState) => {
       value === 'mixed'
         ? config.MIXED_COLOR
         : value === 0
-          ? undefined
-          : layerColor(value, config.MAX_NETWORK_LAYERS);
+        ? undefined
+        : layerColor(value, config.MAX_NETWORK_LAYERS);
     if (color) {
       btn.style.setProperty('--btn-color', color);
       // black or white, whichever keeps the higher contrast on the car color
@@ -291,21 +294,33 @@ export default async (state: typeof defaultState) => {
   footer.className = 'side-panel-footer';
   footer.textContent = 'Long press for reset (right-click also works)';
 
+  const frameMeter = createFrameMeter();
+
   const actions = document.createElement('div');
   actions.className = 'model-actions';
   actions.append(loadBtn, saveBtn, importBtn, clearBtn, statsBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(actions, followKeys, netWrap, legend, footer);
+  panelContent.append(
+    actions,
+    followKeys,
+    netWrap,
+    legend,
+    frameMeter.el,
+    footer,
+  );
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
 
-  toggleBtn.onclick = () => {
+  const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
   };
+  toggleBtn.onclick = togglePanel;
+  // F12 or L open the panel like the tab button does
+  bindSidePanelToggle(togglePanel);
 
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
@@ -495,6 +510,7 @@ export default async (state: typeof defaultState) => {
 
   loop.play((_es, _dt) => {
     const now = performance.now();
+    frameMeter.tick(now);
     if (followPad.once('Space')) setFollow(0);
     for (let digit = 0; digit <= 9; digit++) {
       if (followPad.once(`Digit${digit}`))
@@ -723,8 +739,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)

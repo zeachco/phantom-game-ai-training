@@ -6,7 +6,12 @@ import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
-import { createCanvas, resizeCanvas } from '../../utilities/dom';
+import {
+  bindSidePanelToggle,
+  createCanvas,
+  createFrameMeter,
+  resizeCanvas,
+} from '../../utilities/dom';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Ball } from './classes/Ball';
@@ -154,10 +159,14 @@ export default async (state: CaveState) => {
   toggleBtn.className = 'side-panel-toggle';
   toggleBtn.textContent = '❮';
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
-  toggleBtn.onclick = () => {
+  toggleBtn.setAttribute('title', 'F12 to toggle');
+  const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
   };
+  toggleBtn.onclick = togglePanel;
+  // F12 or L open the panel like the tab button does
+  bindSidePanelToggle(togglePanel);
 
   const addModelButton = (text: string, title: string, onClick: () => void) => {
     const button = document.createElement('button');
@@ -384,13 +393,22 @@ export default async (state: CaveState) => {
   footer.className = 'side-panel-footer';
   footer.textContent = 'Long press for reset (right-click also works)';
 
+  const frameMeter = createFrameMeter();
+
   const info = document.createElement('div');
   info.className = 'side-panel-info';
   info.append(about, legend);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(modelActions, followKeys, netWrap, info, footer);
+  panelContent.append(
+    modelActions,
+    followKeys,
+    netWrap,
+    info,
+    frameMeter.el,
+    footer,
+  );
 
   panel.append(toggleBtn, panelContent);
   // the demo profile hides the whole panel instead of starting it collapsed
@@ -628,8 +646,8 @@ export default async (state: CaveState) => {
       (follow === 'mixed'
         ? ball.brain instanceof MixedNetwork
         : follow > 0
-          ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
-          : true);
+        ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
+        : true);
     let leader: Ball | undefined;
     for (const ball of state.balls) {
       if (
@@ -717,12 +735,12 @@ export default async (state: CaveState) => {
       const emoji = isHistorical
         ? '👻'
         : leader?.damaged
-          ? isCurrentLeader
-            ? '🏆'
-            : '💀'
-          : isCurrentLeader
-            ? '💚'
-            : '💜';
+        ? isCurrentLeader
+          ? '🏆'
+          : '💀'
+        : isCurrentLeader
+        ? '💚'
+        : '💜';
       const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
       const score = best > 0 ? String(Math.round(best)) : '—';
       const color = group.isMixed
@@ -789,6 +807,8 @@ export default async (state: CaveState) => {
     while (accumulator >= 1 / 60) {
       accumulator -= 1 / 60;
       race.update(now);
+      // one sim frame per fixed step, not per display refresh
+      frameMeter.tick(now);
     }
 
     const balls = state.balls;

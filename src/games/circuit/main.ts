@@ -7,7 +7,9 @@ import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
 import {
+  bindSidePanelToggle,
   createCanvas,
+  createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
@@ -86,6 +88,7 @@ export default async (state: typeof defaultState) => {
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
   toggleBtn.textContent = '❮';
+  toggleBtn.setAttribute('title', 'F12 to toggle');
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
   const loadBtn = document.createElement('button');
@@ -346,6 +349,8 @@ export default async (state: typeof defaultState) => {
   footer.className = 'side-panel-footer';
   footer.textContent = 'Long press for reset (right-click also works)';
 
+  const frameMeter = createFrameMeter();
+
   const actions = document.createElement('div');
   actions.className = 'model-actions';
   actions.append(loadBtn, saveBtn, importBtn, clearBtn, clearScoresBtn);
@@ -356,7 +361,14 @@ export default async (state: typeof defaultState) => {
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(actions, followKeys, netWrap, info, footer);
+  panelContent.append(
+    actions,
+    followKeys,
+    netWrap,
+    info,
+    frameMeter.el,
+    footer,
+  );
 
   panel.append(toggleBtn, panelContent);
   // the demo profile hides the whole panel instead of starting it collapsed
@@ -491,10 +503,13 @@ export default async (state: typeof defaultState) => {
   let lastStatsHtml = '';
   const shouldUpdateDom = createUpdateLimiter(20);
 
-  toggleBtn.onclick = () => {
+  const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
   };
+  toggleBtn.onclick = togglePanel;
+  // F12 or L open the panel like the tab button does
+  bindSidePanelToggle(togglePanel);
 
   const loop = new GameLoop();
 
@@ -629,6 +644,7 @@ export default async (state: typeof defaultState) => {
   loop.play(
     (_es, _dt) => {
       const now = performance.now();
+      frameMeter.tick(now);
       if (followPad.once('Space')) setFollow(0, false);
       for (let digit = 0; digit <= 9; digit++) {
         if (followPad.once(`Digit${digit}`))
@@ -974,8 +990,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     // the leaderboard sort runs on HUD ticks only, so the camera target
     // resolves the leader with a single max-score scan
     let leader: Car | undefined;
@@ -1028,10 +1044,10 @@ export default async (state: typeof defaultState) => {
       delta === null
         ? ''
         : delta < 0
-          ? '#70e08a'
-          : delta > 0
-            ? '#ff7070'
-            : 'rgba(255, 255, 255, 0.55)';
+        ? '#70e08a'
+        : delta > 0
+        ? '#ff7070'
+        : 'rgba(255, 255, 255, 0.55)';
   }
 
   function updateFocusedTiming(car: Car) {

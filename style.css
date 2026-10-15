@@ -475,6 +475,20 @@ canvas {
   text-align: center;
 }
 
+.side-panel-frames {
+  margin-top: 0.6em;
+  font:
+    0.72em / 1.2 ui-monospace,
+    "Cascadia Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--ui-accent);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
 /* race selector embedded in the current-race board header */
 .seed-controls {
   display: flex;

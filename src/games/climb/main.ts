@@ -7,7 +7,9 @@ import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
 import {
+  bindSidePanelToggle,
   createCanvas,
+  createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
@@ -58,12 +60,16 @@ export default async (state: typeof defaultState) => {
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
   toggleBtn.textContent = '❮';
+  toggleBtn.setAttribute('title', 'F12 to toggle');
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
   let panelOpen = false;
-  toggleBtn.onclick = () => {
+  const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
   };
+  toggleBtn.onclick = togglePanel;
+  // F12 or L open the panel like the tab button does
+  bindSidePanelToggle(togglePanel);
 
   const importBtn = document.createElement('button');
   importBtn.className = 'model-btn';
@@ -249,13 +255,22 @@ export default async (state: typeof defaultState) => {
   footer.className = 'side-panel-footer';
   footer.textContent = 'Long press for reset (right-click also works)';
 
+  const frameMeter = createFrameMeter();
+
   const actions = document.createElement('div');
   actions.className = 'model-actions';
   actions.append(baseBtn, saveBtn, importBtn, clearBtn, clearScoresBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(actions, followKeys, netWrap, about, footer);
+  panelContent.append(
+    actions,
+    followKeys,
+    netWrap,
+    about,
+    frameMeter.el,
+    footer,
+  );
 
   panel.append(toggleBtn, panelContent);
   // the demo profile hides the whole panel instead of starting it collapsed
@@ -464,6 +479,7 @@ export default async (state: typeof defaultState) => {
   loop.play(
     (_es, _dt) => {
       const now = performance.now();
+      frameMeter.tick(now);
       if (state.playing) {
         race.update(now);
         // the first drive input takes the camera to the human player
