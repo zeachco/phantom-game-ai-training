@@ -4,6 +4,19 @@ export function createCanvas() {
   return can;
 }
 
+/**
+ * The stage overlays the rendered game canvas. The canvas and every HTML HUD
+ * element live inside it, so they track the canvas edges instead of the
+ * viewport: an open side panel or a letterboxed window no longer leaves HUDs
+ * floating over the wrong pixels. See .game-stage in style.css.
+ */
+export function createStage() {
+  const stage = document.createElement('div');
+  stage.className = 'game-stage';
+  document.body.appendChild(stage);
+  return stage;
+}
+
 /** Returns true only when an update is due, limiting callers to the given FPS. */
 export function createUpdateLimiter(fps: number) {
   const interval = 1000 / fps;

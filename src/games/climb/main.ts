@@ -38,10 +38,11 @@ const VIEW_HEIGHT = 420;
 const JUMP_TIMELINE_WIDTH = 110;
 
 export default async (state: typeof defaultState) => {
+  // the stage overlays the canvas; the canvas and every HUD element live in
+  // it, so they track the canvas edges instead of the viewport
+  const stage = document.querySelector<HTMLDivElement>('.game-stage')!;
   const gameCanvas = createCanvas();
-  gameCanvas.style.position = 'fixed';
-  gameCanvas.style.left = '0';
-  gameCanvas.style.top = '0';
+  stage.appendChild(gameCanvas);
 
   const networkCanvas = createCanvas();
   networkCanvas.className = 'neural-canvas';
@@ -56,7 +57,7 @@ export default async (state: typeof defaultState) => {
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❯';
+  toggleBtn.textContent = '❮';
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
   let panelOpen = false;
   toggleBtn.onclick = () => {
@@ -80,7 +81,7 @@ export default async (state: typeof defaultState) => {
   clearBtn.textContent = 'Clear training';
   const clearScoresBtn = document.createElement('button');
   clearScoresBtn.className = 'model-btn';
-  clearScoresBtn.textContent = 'Clear climb records';
+  clearScoresBtn.textContent = 'Clear records';
 
   importBtn.onclick = async () => {
     try {
@@ -215,15 +216,13 @@ export default async (state: typeof defaultState) => {
     followBtns.set(btn, { key });
     return btn;
   };
-  followKeys.append(
-    followLabel,
-    makeFollowBtn('0', 'all', 'follow the best climber'),
-  );
+  followKeys.append(followLabel);
   for (let layer = 1; layer <= config.MAX_NETWORK_LAYERS; layer++)
     followKeys.append(
-      makeFollowBtn(String(layer), String(layer), `follow brain ${layer}`),
+      makeFollowBtn(String(layer), `brain ${layer}`, `follow brain ${layer}`),
     );
-  followKeys.append(makeFollowBtn('mixed', '🧭', 'follow the mixed brain'));
+  followKeys.append(makeFollowBtn('0', 'all', 'follow the best climber'));
+  followKeys.append(makeFollowBtn('mixed', 'mixed', 'follow the mixed brain'));
 
   // Match the circuit/cave panel layout: the wrapper owns the available
   // height and the canvas is absolute, so resizing the canvas cannot enlarge
@@ -237,22 +236,26 @@ export default async (state: typeof defaultState) => {
   networkCanvas.style.top = '0';
   netWrap.append(networkCanvas);
 
-  const info = document.createElement('div');
-  info.className = 'side-panel-info';
-  info.textContent =
+  const about = document.createElement('div');
+  about.className = 'side-panel-about';
+  about.textContent =
     'Climb: a seeded Icy Tower-style tower. Every brain line climbs the same ' +
     'tower at once; a line that banks floors saves its brain, and when enough ' +
     'lines hold the seed target the tower gets harder. Arrows / WASD move, ' +
     'Space or the gamepad primary button jumps. 0-9 and M follow a line, R ' +
     'jumps to a random seed, < and > step the seed.';
 
+  const footer = document.createElement('div');
+  footer.className = 'side-panel-footer';
+  footer.textContent = 'Long press for reset (right-click also works)';
+
   const actions = document.createElement('div');
   actions.className = 'model-actions';
-  actions.append(importBtn, baseBtn, saveBtn, clearBtn, clearScoresBtn);
+  actions.append(baseBtn, saveBtn, importBtn, clearBtn, clearScoresBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(actions, followKeys, netWrap, info);
+  panelContent.append(actions, followKeys, netWrap, about, footer);
 
   panel.append(toggleBtn, panelContent);
   // the demo profile hides the whole panel instead of starting it collapsed
@@ -312,12 +315,15 @@ export default async (state: typeof defaultState) => {
   brainStats.className = 'brain-stats';
   brainStats.title = 'followed brain stats';
   steerOverlay.append(controlIndicators, budgetGauge, readout, brainStats);
-  document.body.appendChild(steerOverlay);
+  stage.appendChild(steerOverlay);
 
   // The map selector stays in the top-left HUD so it remains available while
   // the model panel is closed.
   const seedControls = document.createElement('div');
   seedControls.className = 'seed-controls';
+  // standalone: positioned at the stage's top-left corner instead of being
+  // embedded in a board header
+  seedControls.classList.add('standalone');
   const seedLabel = document.createElement('span');
   seedLabel.className = 'seed-label';
   const previousSeed = document.createElement('button');
@@ -333,7 +339,7 @@ export default async (state: typeof defaultState) => {
   randomSeed.textContent = 'R';
   randomSeed.title = 'Random tower';
   seedControls.append(previousSeed, seedLabel, nextSeed, randomSeed);
-  document.body.appendChild(seedControls);
+  stage.appendChild(seedControls);
 
   const climbProgress = document.createElement('aside');
   climbProgress.className = 'climb-progress';
@@ -346,7 +352,7 @@ export default async (state: typeof defaultState) => {
   const groupProgress = document.createElement('div');
   groupProgress.className = 'climb-group-progress';
   climbProgress.append(platformLabel, platformValue, groupProgress);
-  document.body.appendChild(climbProgress);
+  stage.appendChild(climbProgress);
 
   const loop = new GameLoop();
   const shouldUpdateDom = createUpdateLimiter(20);

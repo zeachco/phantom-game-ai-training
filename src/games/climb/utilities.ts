@@ -146,6 +146,8 @@ export function foldScores(scores: GroupScores, newSeed: number): void {
 
 const FH = 12;
 const TL = 0;
+/** the DOM seed selector owns the top-left corner, the board starts below it */
+const BOARD_TOP = 44;
 let gradient: CanvasGradient | undefined;
 
 /** the board rows are rebuilt in place every tick, no new array per frame */
@@ -193,14 +195,24 @@ export function drawScores(
     return scoreB - scoreA;
   });
 
-  drawGradient(ctx, 0, FH * 1.75, 125, (displayedScorePlayers.length + 2) * FH);
+  drawGradient(
+    ctx,
+    0,
+    BOARD_TOP,
+    125,
+    (displayedScorePlayers.length + 2) * FH,
+  );
 
   ctx.fillStyle = getColorScale(
     Math.min(1, state.living / Math.max(1, state.population)),
   );
   ctx.font = `bold ${FH}px serif`;
   ctx.textAlign = 'left';
-  ctx.fillText(`${state.living}/${state.population}`, TL, FH * 3);
+  ctx.fillText(
+    `${state.living}/${state.population}`,
+    TL,
+    BOARD_TOP + FH * 1.25,
+  );
 
   displayedScorePlayers.forEach((ref, index) => {
     if (ref instanceof Player) {
@@ -209,7 +221,7 @@ export function drawScores(
         ctx.fillText(
           `🕹 ${ref.label} ${Math.round(ref.brain?.score ?? 0)}`,
           TL,
-          FH * 4 + index * FH,
+          BOARD_TOP + FH * 2.25 + index * FH,
         );
         return;
       }
@@ -236,7 +248,7 @@ export function drawScores(
       ctx.fillText(
         `${emoji} ${ref.label} ${Math.round(ref.brain?.score ?? 0)}`,
         TL,
-        FH * 4 + index * FH,
+        BOARD_TOP + FH * 2.25 + index * FH,
       );
     } else {
       ctx.fillStyle = ref.isMixed
@@ -248,7 +260,7 @@ export function drawScores(
       ctx.fillText(
         `${emoji} ${name} ${Math.round(ref.ghostScore)}`,
         TL,
-        FH * 4 + index * FH,
+        BOARD_TOP + FH * 2.25 + index * FH,
       );
     }
   });

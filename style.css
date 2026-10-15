@@ -28,6 +28,26 @@ body {
   align-items: center;
 }
 
+/* The stage overlays the rendered game canvas: the canvas and every HTML HUD
+   element live inside it, so they track the canvas edges instead of the
+   viewport. While the side panel is open the stage shrinks by exactly the
+   panel width (min(75vw, 800px), matching each game's JS layout). */
+.game-stage {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body:has(.side-panel.open) .game-stage {
+  width: calc(100% - min(75vw, 800px));
+}
+
+.game-stage > canvas {
+  display: block;
+}
+
 /* The home screen needs no extra markup: the four games are the main action. */
 body:has(.game-menu.big) {
   min-height: 100vh;
@@ -45,7 +65,8 @@ canvas {
   z-index: 999;
   display: flex;
   align-items: stretch;
-  position: fixed;
+  /* absolute inside the game stage, so the dock centers on the canvas */
+  position: absolute;
   top: 0;
   left: 50%;
   width: min(520px, calc(100% - 32px));
@@ -144,6 +165,8 @@ canvas {
 
 /* Home: four generous game tiles, using the same colors as the in-game dock. */
 .game-menu.big {
+  /* the home screen has no stage, the tiles stay page-level */
+  position: fixed;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
@@ -486,9 +509,19 @@ canvas {
   font-family: monospace;
 }
 
+/* the standalone map selector (climb) sits at the stage's top-left corner so
+   it stays reachable while the side panel is closed */
+.seed-controls.standalone {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  margin-left: 0;
+  z-index: 500;
+}
+
 /* global scores and current race share a top-right HUD stack */
 .top-right-hud {
-  position: fixed;
+  position: absolute;
   top: 24px;
   right: 24px;
   z-index: 500;
@@ -506,7 +539,7 @@ canvas {
 }
 
 .track-score-board {
-  position: fixed;
+  position: absolute;
   top: 24px;
   right: 24px;
   z-index: 500;
@@ -558,7 +591,7 @@ canvas {
 
 /* the player keeps the camera during the map transition countdown */
 .race-end-countdown {
-  position: fixed;
+  position: absolute;
   top: 50%;
   left: 50%;
   z-index: 1000;
@@ -575,7 +608,7 @@ canvas {
 
 /* a first-place human finish is intentionally hard to miss without blocking input */
 .human-celebration {
-  position: fixed;
+  position: absolute;
   top: 50%;
   left: 50%;
   z-index: 1000;
@@ -609,7 +642,7 @@ canvas {
 
 /* current race progress, positioned beneath the global scores */
 .timing-board {
-  position: fixed;
+  position: absolute;
   left: 24px;
   bottom: 132px;
   z-index: 500;
@@ -655,10 +688,9 @@ canvas {
   }
 }
 
-/* the human play toggle in the panel */
 /* control outputs + velocity vector: a fixed cockpit overlay */
 .cave-position {
-  position: fixed;
+  position: absolute;
   top: 14px;
   right: 18px;
   z-index: 2;
@@ -667,21 +699,6 @@ canvas {
   text-align: right;
   text-shadow: 0 2px 6px #000;
   pointer-events: none;
-}
-
-.cave-models {
-  position: fixed;
-  top: 14px;
-  right: 50%;
-  transform: translateX(50%);
-  z-index: 3;
-  display: flex;
-  gap: 6px;
-}
-
-.cave-models .model-btn {
-  font-size: 11px;
-  padding: 6px 10px;
 }
 
 .cave-position-label {
@@ -702,7 +719,7 @@ canvas {
 
 .steer-overlay {
   --hud-color: #c4c4c4;
-  position: fixed;
+  position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
@@ -846,7 +863,7 @@ canvas {
   visibility: hidden;
 }
 .climb-progress {
-  position: fixed;
+  position: absolute;
   top: 18px;
   right: 24px;
   z-index: 500;

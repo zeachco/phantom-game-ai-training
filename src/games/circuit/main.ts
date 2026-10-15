@@ -52,10 +52,11 @@ const PANEL_MAX_WIDTH = 800;
 const CAMERA_AHEAD_DISTANCE = 200;
 
 export default async (state: typeof defaultState) => {
+  // the stage overlays the canvas; the canvas and every HUD element live in
+  // it, so they track the canvas edges instead of the viewport
+  const stage = document.querySelector<HTMLDivElement>('.game-stage')!;
   const carCanvas = createCanvas();
-  carCanvas.style.position = 'fixed';
-  carCanvas.style.left = '0';
-  carCanvas.style.top = '0';
+  stage.appendChild(carCanvas);
 
   const networkCanvas = createCanvas();
   networkCanvas.className = 'neural-canvas';
@@ -84,12 +85,12 @@ export default async (state: typeof defaultState) => {
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❯';
+  toggleBtn.textContent = '❮';
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
   const loadBtn = document.createElement('button');
   loadBtn.className = 'model-btn';
-  loadBtn.textContent = 'Load models';
+  loadBtn.textContent = 'Load base models';
   loadBtn.title =
     'Load the base circuit models (server first, bundled preset fallback)';
   const importBtn = document.createElement('button');
@@ -103,7 +104,7 @@ export default async (state: typeof defaultState) => {
   clearBtn.textContent = 'Clear training';
   const clearScoresBtn = document.createElement('button');
   clearScoresBtn.className = 'model-btn';
-  clearScoresBtn.textContent = 'Clear race records';
+  clearScoresBtn.textContent = 'Clear records';
   loadBtn.onclick = async () => {
     try {
       loadBtn.disabled = true;
@@ -275,17 +276,17 @@ export default async (state: typeof defaultState) => {
   followKeys.append(followLabel);
   (
     [
-      [brainId(1), 1],
-      [brainId(2), 2],
-      [brainId(3), 3],
-      [brainId(4), 4],
-      [brainId(5), 5],
-      [brainId(6), 6],
-      [brainId(7), 7],
-      [brainId(8), 8],
-      [brainId(9), 9],
+      ['brain 1', 1],
+      ['brain 2', 2],
+      ['brain 3', 3],
+      ['brain 4', 4],
+      ['brain 5', 5],
+      ['brain 6', 6],
+      ['brain 7', 7],
+      ['brain 8', 8],
+      ['brain 9', 9],
       ['all', 0],
-      [brainId(0, undefined), 'mixed'],
+      ['mixed', 'mixed'],
     ] as [string, number | 'mixed'][]
   ).forEach(([label, value]) => {
     const btn = document.createElement('button');
@@ -443,7 +444,7 @@ export default async (state: typeof defaultState) => {
   raceEndCountdown.setAttribute('role', 'status');
   raceEndCountdown.setAttribute('aria-live', 'polite');
   raceEndCountdown.hidden = true;
-  document.body.appendChild(raceEndCountdown);
+  stage.appendChild(raceEndCountdown);
   const speedo = document.createElement('div');
   speedo.className = 'speedo';
   speedo.title = 'speed';
@@ -483,7 +484,7 @@ export default async (state: typeof defaultState) => {
   brainStats.className = 'brain-stats';
   brainStats.title = 'followed brain stats';
   steerOverlay.append(controlIndicators, gateGauge, readout, brainStats);
-  document.body.appendChild(steerOverlay);
+  stage.appendChild(steerOverlay);
 
   let lastFollowed: Car | undefined;
   // The loop's first tick is eager, so every state it reads must exist by then.
@@ -518,7 +519,7 @@ export default async (state: typeof defaultState) => {
   humanCelebration.setAttribute('aria-live', 'polite');
   humanCelebration.textContent = '🎉 CONGRATZ! YOU FINISHED FIRST! 🎉';
   humanCelebration.hidden = true;
-  document.body.appendChild(humanCelebration);
+  stage.appendChild(humanCelebration);
 
   let humanCelebrationTimer = 0;
   const showHumanCelebration = () => {
@@ -587,7 +588,7 @@ export default async (state: typeof defaultState) => {
   topRightHud.className = 'top-right-hud';
   // Keep global scores in the upper slot and the current race beneath it.
   topRightHud.append(trackScoreBoard.element, timingBoard.element);
-  document.body.appendChild(topRightHud);
+  stage.appendChild(topRightHud);
   const runningCategories = new Set<string>();
   if (new URLSearchParams(window.location.search).get('demo') === 'true') {
     try {

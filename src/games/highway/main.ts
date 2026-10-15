@@ -32,8 +32,18 @@ const io = fileUtilities('highway', makeSubmitChecker('highway'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
+/** the panel takes that share of the screen while open, capped in width */
+const PANEL_RATIO = 0.75;
+const PANEL_MAX_WIDTH = 800;
+
 export default async (state: typeof defaultState) => {
+  // the stage overlays the canvas; the narrow road strip centers inside it,
+  // and everything else tracks the canvas edges instead of the viewport
+  const stage = document.querySelector<HTMLDivElement>('.game-stage')!;
   const carCanvas = createCanvas();
+  carCanvas.style.display = 'block';
+  carCanvas.style.marginInline = 'auto';
+  stage.appendChild(carCanvas);
   const networkCanvas = createCanvas();
   networkCanvas.className = 'neural-canvas';
 
@@ -50,29 +60,51 @@ export default async (state: typeof defaultState) => {
   let camSet = false;
 
   const panel = document.createElement('aside');
-  panel.className = 'side-panel open';
+  panel.className = 'side-panel';
+  panel.style.width = `${PANEL_RATIO * 100}%`;
+  panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
+  let panelOpen = false;
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❯';
+  toggleBtn.textContent = '❮';
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
   const loadBtn = document.createElement('button');
   loadBtn.className = 'model-btn';
-  loadBtn.textContent = 'Load models';
-  loadBtn.disabled = true;
+  loadBtn.textContent = 'Load base models';
   loadBtn.title =
-    'disabled for now: the default archive predates the current sensors';
+    'Load the base highway models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.';
+  const importBtn = document.createElement('button');
+  importBtn.className = 'model-btn';
+  importBtn.textContent = 'Import archive';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
-  const presetBtn = document.createElement('button');
-  presetBtn.className = 'model-btn';
-  presetBtn.textContent = 'Load pre-trained';
   const clearBtn = document.createElement('button');
   clearBtn.className = 'model-btn';
   clearBtn.textContent = 'Clear training';
   loadBtn.onclick = async () => {
+    try {
+      loadBtn.disabled = true;
+      loadBtn.textContent = 'Loading…';
+      const { written } = await loadBaseModels(
+        'highway',
+        io,
+        new URL('./presets/highway_models_2026091612022.json', import.meta.url),
+      );
+      if (!written.length)
+        throw new Error('No compatible model in the base archive');
+      console.info(`Loaded base models: ${written.join(', ')}`);
+      initialize();
+    } catch (err) {
+      alert(err?.message || 'Unable to load base models');
+    } finally {
+      loadBtn.disabled = false;
+      loadBtn.textContent = 'Load base models';
+    }
+  };
+  importBtn.onclick = async () => {
     try {
       const archive = await pickModelArchive();
       if (archive.game && archive.game !== 'highway') {
@@ -93,26 +125,6 @@ export default async (state: typeof defaultState) => {
     }
   };
   saveBtn.onclick = () => downloadModelArchive('highway');
-  presetBtn.onclick = async () => {
-    try {
-      presetBtn.disabled = true;
-      presetBtn.textContent = 'Loading preset…';
-      const { written } = await loadBaseModels(
-        'highway',
-        io,
-        new URL('./presets/highway_models_2026091612022.json', import.meta.url),
-      );
-      if (!written.length)
-        throw new Error('No compatible model in the base archive');
-      console.info(`Loaded pre-trained models: ${written.join(', ')}`);
-      initialize();
-    } catch (err) {
-      alert(err?.message || 'Unable to load pre-trained preset');
-    } finally {
-      presetBtn.disabled = false;
-      presetBtn.textContent = 'Load pre-trained';
-    }
-  };
   clearBtn.onclick = () => {
     if (
       !confirm(
@@ -216,7 +228,7 @@ export default async (state: typeof defaultState) => {
       ['brain 8', 8],
       ['brain 9', 9],
       ['all', 0],
-      ['mixed experts', 'mixed'],
+      ['mixed', 'mixed'],
     ] as [string, number | 'mixed'][]
   ).forEach(([label, value]) => {
     const btn = document.createElement('button');
@@ -239,6 +251,16 @@ export default async (state: typeof defaultState) => {
     armReset(btn, value, () => setFollow(value));
   });
   setFollow(0);
+
+  // the brain preview lives in the panel, it grows into whatever is left
+  const netWrap = document.createElement('div');
+  netWrap.style.flex = '1';
+  netWrap.style.position = 'relative';
+  netWrap.style.minHeight = '0';
+  networkCanvas.style.position = 'absolute';
+  networkCanvas.style.left = '0';
+  networkCanvas.style.top = '0';
+  netWrap.append(networkCanvas);
 
   const statsBtn = document.createElement('button');
   statsBtn.className = 'model-btn';
@@ -271,18 +293,18 @@ export default async (state: typeof defaultState) => {
 
   const actions = document.createElement('div');
   actions.className = 'model-actions';
-  actions.append(loadBtn, saveBtn, presetBtn, clearBtn, statsBtn);
+  actions.append(loadBtn, saveBtn, importBtn, clearBtn, statsBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
-  panelContent.append(actions, followKeys, legend, footer);
+  panelContent.append(actions, followKeys, netWrap, legend, footer);
 
   panel.append(toggleBtn, panelContent);
   document.body.appendChild(panel);
 
   toggleBtn.onclick = () => {
-    const open = panel.classList.toggle('open');
-    toggleBtn.textContent = open ? '❯' : '❮';
+    panelOpen = panel.classList.toggle('open');
+    toggleBtn.textContent = panelOpen ? '❯' : '❮';
   };
 
   const lanes = Math.round(carCanvas.width / 75);
@@ -505,12 +527,13 @@ export default async (state: typeof defaultState) => {
     if (domUpdateDue) updateFollowButtons();
 
     resizeCanvas(carCanvas, carCtx, carCanvas.width, window.innerHeight);
-    resizeCanvas(
-      networkCanvas,
-      networkCtx,
-      window.innerWidth - carCanvas.width,
-      window.innerHeight,
-    );
+    if (panelOpen)
+      resizeCanvas(
+        networkCanvas,
+        networkCtx,
+        netWrap.clientWidth,
+        netWrap.clientHeight,
+      );
 
     const camTarget = followedCar();
     if (camTarget) {

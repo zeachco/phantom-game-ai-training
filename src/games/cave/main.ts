@@ -63,10 +63,10 @@ export default async (state: CaveState) => {
   // obstacle slabs cast soft shadows from the ball's torch onto the rock
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.domElement.style.position = 'fixed';
-  renderer.domElement.style.inset = '0';
-  renderer.domElement.style.zIndex = '0';
-  document.body.appendChild(renderer.domElement);
+  // the stage overlays the canvas; the canvas and every HUD element live in
+  // it, so they track the canvas edges instead of the viewport
+  const stage = document.querySelector<HTMLDivElement>('.game-stage')!;
+  stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(config.PLANE_COLOR);
@@ -108,7 +108,7 @@ export default async (state: CaveState) => {
   // Top-left board: each brain group's best (highest) score, replacing the
   // old seed readout. It refreshes on the throttled HUD tick.
   const scoreBoard = document.createElement('div');
-  scoreBoard.style.position = 'fixed';
+  scoreBoard.style.position = 'absolute';
   scoreBoard.style.top = '2px';
   scoreBoard.style.left = '2px';
   scoreBoard.style.zIndex = '2';
@@ -124,7 +124,7 @@ export default async (state: CaveState) => {
   scoreBoard.style.pointerEvents = 'none';
   scoreBoard.title = 'best score per brain group';
   scoreBoard.setAttribute('aria-label', 'Best score per brain group');
-  document.body.appendChild(scoreBoard);
+  stage.appendChild(scoreBoard);
 
   // ---- side panel: model actions, brain follow keys and the live network
   // visualization ported from the circuit game. It starts hidden. ----
@@ -170,6 +170,25 @@ export default async (state: CaveState) => {
   const modelActions = document.createElement('div');
   modelActions.className = 'model-actions';
   modelActions.append(
+    addModelButton(
+      'Load base models',
+      'Load the base cave models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.',
+      async () => {
+        try {
+          const { source, written } = await loadBaseModels(
+            'cave',
+            io,
+            new URL('./presets/cave_models_default.json', import.meta.url),
+          );
+          if (!written.length)
+            throw new Error('No compatible model in the base archive');
+          console.info(`Loaded base models (${source}): ${written.join(', ')}`);
+          race.initialize();
+        } catch (err) {
+          alert(err?.message || 'Unable to load base models');
+        }
+      },
+    ),
     addModelButton('Save models', 'Download the cave training saves', () =>
       downloadModelArchive('cave'),
     ),
@@ -193,25 +212,6 @@ export default async (state: CaveState) => {
           alert(message || 'Unable to load models');
       }
     }),
-    addModelButton(
-      'Load base models',
-      'Load the base cave models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.',
-      async () => {
-        try {
-          const { source, written } = await loadBaseModels(
-            'cave',
-            io,
-            new URL('./presets/cave_models_default.json', import.meta.url),
-          );
-          if (!written.length)
-            throw new Error('No compatible model in the base archive');
-          console.info(`Loaded base models (${source}): ${written.join(', ')}`);
-          race.initialize();
-        } catch (err) {
-          alert(err?.message || 'Unable to load base models');
-        }
-      },
-    ),
     addModelButton('Clear training', 'Delete every saved cave brain', () => {
       if (
         !confirm(
@@ -406,7 +406,7 @@ export default async (state: CaveState) => {
   const positionTotal = document.createElement('span');
   positionTotal.className = 'cave-position-total';
   position.append(positionLabel, positionValue, positionTotal);
-  document.body.appendChild(position);
+  stage.appendChild(position);
 
   const steerOverlay = document.createElement('div');
   steerOverlay.className = 'steer-overlay';
@@ -508,7 +508,7 @@ export default async (state: CaveState) => {
   brainStats.className = 'brain-stats';
   brainStats.title = 'followed brain stats';
   steerOverlay.append(controlIndicators, sectionGauge, readout, brainStats);
-  document.body.appendChild(steerOverlay);
+  stage.appendChild(steerOverlay);
 
   let lastStatsText = '';
 
