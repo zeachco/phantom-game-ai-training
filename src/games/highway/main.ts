@@ -11,6 +11,7 @@ import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText } from '../../utilities/colors';
+import { drawControlAxes } from '../../utilities/driveIndicators';
 import {
   bindSidePanelToggle,
   createCanvas,
@@ -26,7 +27,7 @@ import { config } from './classes/Config';
 import { DeathRay } from './classes/DeathRay';
 import { Road } from './classes/Road';
 import { ControlType } from './types';
-import { defaultState, drawScores, mixedColor } from './utilities';
+import { createScoreBoard, defaultState, mixedColor } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -77,7 +78,7 @@ export default async (state: typeof defaultState) => {
   loadBtn.className = 'model-btn';
   loadBtn.textContent = 'Load base models';
   loadBtn.title =
-    'Load the base highway models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.';
+    'Load the base highway models from the server. Overwrites the local saves of the groups it brings.';
   const importBtn = document.createElement('button');
   importBtn.className = 'model-btn';
   importBtn.textContent = 'Import archive';
@@ -91,13 +92,9 @@ export default async (state: typeof defaultState) => {
     try {
       loadBtn.disabled = true;
       loadBtn.textContent = 'Loading…';
-      const { written } = await loadBaseModels(
-        'highway',
-        io,
-        new URL('./presets/highway_models_2026091612022.json', import.meta.url),
-      );
+      const { written } = await loadBaseModels('highway', io);
       if (!written.length)
-        throw new Error('No compatible model in the base archive');
+        throw new Error('No base model available from the server');
       console.info(`Loaded base models: ${written.join(', ')}`);
       initialize();
     } catch (err) {
@@ -242,8 +239,8 @@ export default async (state: typeof defaultState) => {
       value === 'mixed'
         ? config.MIXED_COLOR
         : value === 0
-        ? undefined
-        : layerColor(value, config.MAX_NETWORK_LAYERS);
+          ? undefined
+          : layerColor(value, config.MAX_NETWORK_LAYERS);
     if (color) {
       btn.style.setProperty('--btn-color', color);
       // black or white, whichever keeps the higher contrast on the car color
@@ -321,6 +318,34 @@ export default async (state: typeof defaultState) => {
   toggleBtn.onclick = togglePanel;
   // F12 or L open the panel like the tab button does
   bindSidePanelToggle(togglePanel);
+
+  const scoreBoard = createScoreBoard();
+  stage.appendChild(scoreBoard.el);
+
+  // The output box mimics the followed car, display only, and brainStats
+  // carries its network / mutation / score readout.
+  const steerOverlay = document.createElement('div');
+  steerOverlay.className = 'steer-overlay hidden';
+  const controlIndicators = document.createElement('div');
+  controlIndicators.className = 'control-indicators';
+  const controlCanvas = document.createElement('canvas');
+  controlCanvas.className = 'control-axis';
+  controlCanvas.width = 110;
+  controlCanvas.height = 110;
+  const controlCtx = controlCanvas.getContext('2d');
+  controlIndicators.append(controlCanvas);
+  const readout = document.createElement('div');
+  readout.className = 'readout';
+  const speedEl = document.createElement('div');
+  speedEl.className = 'laps';
+  speedEl.title = 'followed car speed';
+  const brainStats = document.createElement('div');
+  brainStats.className = 'brain-stats';
+  brainStats.title = 'followed car brain stats';
+  readout.append(speedEl, brainStats);
+  steerOverlay.append(controlIndicators, readout);
+  stage.appendChild(steerOverlay);
+  let lastStatsHtml = '';
 
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
@@ -485,17 +510,12 @@ export default async (state: typeof defaultState) => {
       cars.push(car);
     }
   }
-  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize.
   void (async () => {
     try {
-      const { written } = await loadBaseModels(
-        'highway',
-        io,
-        new URL('./presets/highway_models_2026091612022.json', import.meta.url),
-        true,
-      );
+      const { written } = await loadBaseModels('highway', io, true);
       if (written.length) {
         console.info(`Loaded base models: ${written.join(', ')}`);
         initialize();
@@ -595,7 +615,28 @@ export default async (state: typeof defaultState) => {
 
     carCtx.restore();
 
-    drawScores(state, carCtx);
+    // HUDs: the scoreboard floats at the stage's left edge, the cockpit mimics
+    // the followed car; both only touch the DOM on a HUD tick.
+    if (domUpdateDue) {
+      scoreBoard.update(state);
+      steerOverlay.style.setProperty(
+        '--hud-color',
+        camTarget?.color || '#c4c4c4',
+      );
+      steerOverlay.classList.toggle('hidden', !camTarget);
+    }
+    if (camTarget) {
+      const c = camTarget.controls;
+      if (controlCtx)
+        drawControlAxes(
+          controlCtx,
+          c.left,
+          c.right,
+          c.forward - c.reverse,
+          camTarget.color,
+        );
+      if (domUpdateDue) updateBrainStats(camTarget);
+    }
 
     const followed = camTarget?.brain;
     if (followed) {
@@ -739,12 +780,35 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-        : true);
+          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+          : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)
     );
+  }
+
+  /** Rebuild the inline stats block of the followed car; the DOM is only
+   *  touched when the rendered text changes, so a steady frame is cheap. */
+  function updateBrainStats(car: Car) {
+    const brain = car.brain;
+    const mixed = brain instanceof MixedNetwork;
+    const mutation =
+      brain.mutationIndex === 0
+        ? 'Original model'
+        : `Mut ${(brain.mutationFactor * 100).toFixed(4)}%`;
+    const lines = [
+      `${mixed ? '🧭 Mixed ' : ''}Net ${brain.levels.length}-${brain.version}`,
+      `Idx ${brain.mutationIndex}`,
+      mutation,
+      `Score ${Math.round(brain.score)}`,
+    ];
+    speedEl.textContent = `Speed ${car.speed.toFixed(2)}`;
+    const html = lines.map((line) => `<span>${line}</span>`).join('');
+    if (html !== lastStatsHtml) {
+      lastStatsHtml = html;
+      brainStats.innerHTML = html;
+    }
   }
 
   function endExperiment() {

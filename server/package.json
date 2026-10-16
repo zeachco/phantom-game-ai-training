@@ -6,7 +6,8 @@
   "scripts": {
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "reset:models": "bun scripts/reset-models.ts"
   },
   "dependencies": {
     "mongodb": "^7.7.0"

@@ -603,6 +603,28 @@ canvas {
   margin-top: 0.15em;
 }
 
+/* Highway's scoreboard floats at the stage's left edge: the road canvas is a
+   narrow centered strip, so an in-canvas list read as a middle-of-screen HUD
+   instead of a screen-left one. */
+.highway-score-board {
+  top: 24px;
+  left: 24px;
+  right: auto;
+  min-width: 200px;
+}
+
+.highway-score-cars {
+  margin-bottom: 0.3em;
+  font-weight: 700;
+}
+
+.highway-score-row {
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* the player keeps the camera during the map transition countdown */
 .race-end-countdown {
   position: absolute;
@@ -699,6 +721,12 @@ canvas {
 
   .track-score-board {
     min-width: 230px;
+  }
+
+  .highway-score-board {
+    top: 8px;
+    left: 8px;
+    min-width: 170px;
   }
 }
 
@@ -935,5 +963,77 @@ canvas {
   .game-menu.big a:focus-visible,
   .game-menu.big a:active {
     transform: none;
+  }
+
+  .toast {
+    transition: none;
+  }
+}
+
+/* Transient notifications pinned to the bottom of the page: a centered
+   snackbar on desktop, full width on mobile. */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 24px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  --toast-accent: #56dcf5;
+  box-sizing: border-box;
+  padding: 0.7em 1em;
+  border: 1px solid #343a45;
+  border-left: 4px solid var(--toast-accent);
+  border-radius: 0.5em;
+  background: rgba(17, 21, 24, 0.94);
+  color: var(--ui-text);
+  font: 13px monospace;
+  box-shadow: 0 8px 24px #0007;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--ui-motion),
+    transform var(--ui-motion);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast[data-tone="success"] {
+  --toast-accent: #70e08a;
+}
+
+.toast[data-tone="error"] {
+  --toast-accent: #ff7070;
+}
+
+/* Mobile: the notification spans the viewport width at the bottom edge. */
+@media (max-width: 560px) {
+  .toast-stack {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  .toast {
+    border-radius: 0;
+    border-left: 0;
+    border-bottom: 0;
+    border-top: 3px solid var(--toast-accent);
   }
 }

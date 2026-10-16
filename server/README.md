@@ -74,6 +74,23 @@ All responses are JSON. `POST` bodies are JSON; the client id is read from the
    - the replay confirms the claim: `confirmedScore >= score * (1 - VERIFY_TOLERANCE)`
      (otherwise `422 replay did not confirm the claimed score`).
 
+## Resetting a game's models
+
+The `models` collection stores one document per submitted brain, and its
+`score` field is what a fresh client starts from. After a scoring change or a
+game change that makes those stored scores meaningless, wipe that game's
+models so every client trains from scratch again:
+
+```sh
+cd server
+bun run reset:models highway          # delete the game's models
+bun run reset:models cave --scores    # also clear its score leaderboard
+bun run reset:models circuit --dry-run
+```
+
+Run it from `server/` so its `.env` (with `MONGO_URL`) is loaded, or pass
+`MONGO_URL=... bun server/scripts/reset-models.ts <game>` from the repo root.
+
 ## Deployment
 
 Deployed on Railway as the `phantom-ai-training` service in "zeachco's main

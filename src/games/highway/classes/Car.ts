@@ -120,7 +120,9 @@ export class Car {
     const old_y = this.y;
     this.#move();
 
-    if (this.brain) this.brain.score += this.y - old_y;
+    // Reward vertical progress only: forward travel decreases y, so the
+    // gain is old_y - y. Lateral movement and total distance earn nothing.
+    if (this.brain) this.brain.score += old_y - this.y;
 
     this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);

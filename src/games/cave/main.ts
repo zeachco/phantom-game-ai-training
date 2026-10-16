@@ -181,16 +181,12 @@ export default async (state: CaveState) => {
   modelActions.append(
     addModelButton(
       'Load base models',
-      'Load the base cave models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.',
+      'Load the base cave models from the server. Overwrites the local saves of the groups it brings.',
       async () => {
         try {
-          const { source, written } = await loadBaseModels(
-            'cave',
-            io,
-            new URL('./presets/cave_models_default.json', import.meta.url),
-          );
+          const { source, written } = await loadBaseModels('cave', io);
           if (!written.length)
-            throw new Error('No compatible model in the base archive');
+            throw new Error('No base model available from the server');
           console.info(`Loaded base models (${source}): ${written.join(', ')}`);
           race.initialize();
         } catch (err) {
@@ -530,17 +526,12 @@ export default async (state: CaveState) => {
 
   let lastStatsText = '';
 
-  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize.
   void (async () => {
     try {
-      const { written } = await loadBaseModels(
-        'cave',
-        io,
-        new URL('./presets/cave_models_default.json', import.meta.url),
-        true,
-      );
+      const { written } = await loadBaseModels('cave', io, true);
       if (written.length) {
         console.info(`Loaded base models: ${written.join(', ')}`);
         race.initialize();
@@ -646,8 +637,8 @@ export default async (state: CaveState) => {
       (follow === 'mixed'
         ? ball.brain instanceof MixedNetwork
         : follow > 0
-        ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
-        : true);
+          ? ball.brainLayers === follow && !(ball.brain instanceof MixedNetwork)
+          : true);
     let leader: Ball | undefined;
     for (const ball of state.balls) {
       if (
@@ -735,12 +726,12 @@ export default async (state: CaveState) => {
       const emoji = isHistorical
         ? '👻'
         : leader?.damaged
-        ? isCurrentLeader
-          ? '🏆'
-          : '💀'
-        : isCurrentLeader
-        ? '💚'
-        : '💜';
+          ? isCurrentLeader
+            ? '🏆'
+            : '💀'
+          : isCurrentLeader
+            ? '💚'
+            : '💜';
       const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
       const score = best > 0 ? String(Math.round(best)) : '—';
       const color = group.isMixed

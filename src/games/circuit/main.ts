@@ -18,7 +18,10 @@ import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Car } from './classes/Car';
 import { CircuitRace } from './classes/CircuitRace';
 import { config, isDemo } from './classes/Config';
-import { drawControlAxes, drawVelocityVector } from './ui/driveIndicators';
+import {
+  drawControlAxes,
+  drawVelocityVector,
+} from '../../utilities/driveIndicators';
 import { TimingBoard } from './ui/TimingBoard';
 import { TrackScoreBoard } from './ui/TrackScoreBoard';
 import {
@@ -34,15 +37,9 @@ const io = fileUtilities('circuit', makeSubmitChecker('circuit'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
-/** Base models: the server first (community submissions), the bundled
- * preset file as fallback. */
+/** Base models: the best community submissions from the server. */
 async function loadDefaultModels(onlyMissing = false): Promise<string[]> {
-  const { written } = await loadBaseModels(
-    'circuit',
-    io,
-    new URL('./presets/circuit_models_default.json', import.meta.url),
-    onlyMissing,
-  );
+  const { written } = await loadBaseModels('circuit', io, onlyMissing);
   return written;
 }
 
@@ -94,8 +91,7 @@ export default async (state: typeof defaultState) => {
   const loadBtn = document.createElement('button');
   loadBtn.className = 'model-btn';
   loadBtn.textContent = 'Load base models';
-  loadBtn.title =
-    'Load the base circuit models (server first, bundled preset fallback)';
+  loadBtn.title = 'Load the base circuit models from the server';
   const importBtn = document.createElement('button');
   importBtn.className = 'model-btn';
   importBtn.textContent = 'Import archive';
@@ -614,18 +610,13 @@ export default async (state: typeof defaultState) => {
       console.warn('Unable to load default circuit models', err);
     }
   }
-  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize. (The ?demo=true block above already loads them.)
   if (new URLSearchParams(window.location.search).get('demo') !== 'true') {
     void (async () => {
       try {
-        const { written } = await loadBaseModels(
-          'circuit',
-          io,
-          new URL('./presets/circuit_models_default.json', import.meta.url),
-          true,
-        );
+        const { written } = await loadBaseModels('circuit', io, true);
         if (written.length) {
           console.info(`Loaded base models: ${written.join(', ')}`);
           race.initialize();
@@ -990,8 +981,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-        : true);
+          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+          : true);
     // the leaderboard sort runs on HUD ticks only, so the camera target
     // resolves the leader with a single max-score scan
     let leader: Car | undefined;
@@ -1044,10 +1035,10 @@ export default async (state: typeof defaultState) => {
       delta === null
         ? ''
         : delta < 0
-        ? '#70e08a'
-        : delta > 0
-        ? '#ff7070'
-        : 'rgba(255, 255, 255, 0.55)';
+          ? '#70e08a'
+          : delta > 0
+            ? '#ff7070'
+            : 'rgba(255, 255, 255, 0.55)';
   }
 
   function updateFocusedTiming(car: Car) {

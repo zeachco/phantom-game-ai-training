@@ -47,24 +47,13 @@ const modelColor = (model: ModelsByLayerCount[number]) =>
       )
     : layerColor(model.levels.length, config.MAX_NETWORK_LAYERS);
 
-const FH = 12;
-const TL = 0;
-let gradient: CanvasGradient | undefined;
-
-function drawGradient(ctx: CanvasRenderingContext2D, x, y, w, h) {
-  if (!gradient) {
-    gradient = ctx.createLinearGradient(0, 0, w, 0);
-    gradient.addColorStop(0, '#333');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  }
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, w, h);
+interface ScoreEntry {
+  text: string;
+  color: string;
 }
 
-export function drawScores(
-  state: typeof defaultState,
-  ctx: CanvasRenderingContext2D,
-) {
+/** The rows of the scoreboard, best first: saved ghosts plus the live cars. */
+function scoreEntries(state: typeof defaultState): ScoreEntry[] {
   const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
     ...state.sortedModels.map((m) => m[0]).filter(Boolean),
     ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
@@ -75,14 +64,7 @@ export function drawScores(
     return scoreB - scoreA;
   });
 
-  drawGradient(ctx, 0, FH * 1.75, 125, (displayedScoreCars.length + 2) * FH);
-
-  ctx.fillStyle = getColorScale(state.living / state.sortedCars.length);
-  ctx.font = `bold ${FH}px serif`;
-  ctx.textAlign = 'left';
-  ctx.fillText(`${state.living}/${state.sortedCars.length} cars`, TL, FH * 3);
-
-  displayedScoreCars.forEach((ref, index) => {
+  return displayedScoreCars.map((ref) => {
     if (ref instanceof Car) {
       const previous = previousSave(state, ref.brain);
       const previousScore = previous?.score || 0;
@@ -95,26 +77,71 @@ export function drawScores(
       } else {
         emoji = ref.damaged ? '💀' : '💜';
       }
+      return {
+        text: `${emoji} ${ref.label} ${Math.round(ref.brain.score)}${add}`,
+        color: ref.damaged ? '#def' : ref.color,
+      };
+    }
 
-      ctx.fillStyle = ref.damaged ? '#def' : ref.color;
-      ctx.fillText(
-        `${emoji} ${ref.label} ${Math.round(ref.brain.score)}${add}`,
-        TL,
-        FH * 4 + index * FH,
-      );
-    } else {
-      ctx.fillStyle = modelColor(ref);
+    const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
+    const emoji = isMixed(ref) ? '🧭' : '👻';
+    const name = isMixed(ref)
+      ? `${ref.version}-${ref.mutationIndex}`
+      : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
+    return {
+      text: `${emoji} ${name} ${Math.round(ref.score)} ${symb}`,
+      color: modelColor(ref),
+    };
+  });
+}
 
-      const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
-      const emoji = isMixed(ref) ? '🧭' : '👻';
-      const name = isMixed(ref)
-        ? `${ref.version}-${ref.mutationIndex}`
-        : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
-      ctx.fillText(
-        `${emoji} ${name} ${Math.round(ref.score)} ${symb}`,
-        TL,
-        FH * 4 + index * FH,
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * A DOM scoreboard that floats at the stage's left edge, so it reads as a
+ * screen HUD instead of being painted inside the narrow centered road canvas.
+ * `update` is cheap to call every frame: it only rewrites the DOM when the
+ * rendered markup changed.
+ */
+export function createScoreBoard() {
+  const el = document.createElement('div');
+  el.className = 'track-score-board highway-score-board';
+  const title = document.createElement('div');
+  title.className = 'track-score-title';
+  title.textContent = 'Score board';
+  const cars = document.createElement('div');
+  cars.className = 'highway-score-cars';
+  const rows = document.createElement('div');
+  rows.className = 'track-score-rows';
+  el.append(title, cars, rows);
+
+  let lastCars = '';
+  let lastRows = '';
+
+  const update = (state: typeof defaultState) => {
+    const carsText = `${state.living}/${state.sortedCars.length} cars`;
+    if (carsText !== lastCars) {
+      lastCars = carsText;
+      cars.textContent = carsText;
+      cars.style.color = getColorScale(
+        state.sortedCars.length ? state.living / state.sortedCars.length : 0,
       );
     }
-  });
+
+    const html = scoreEntries(state)
+      .map(
+        ({ text, color }) =>
+          `<div class="highway-score-row" style="color:${color}">${escapeHtml(
+            text,
+          )}</div>`,
+      )
+      .join('');
+    if (html !== lastRows) {
+      lastRows = html;
+      rows.innerHTML = html;
+    }
+  };
+
+  return { el, update };
 }

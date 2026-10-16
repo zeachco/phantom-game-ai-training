@@ -78,7 +78,7 @@ export default async (state: typeof defaultState) => {
   baseBtn.className = 'model-btn';
   baseBtn.textContent = 'Load base models';
   baseBtn.title =
-    'Load the base climb models: server first, bundled preset fallback. Overwrites the local saves of the groups it brings.';
+    'Load the base climb models from the server. Overwrites the local saves of the groups it brings.';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'model-btn';
   saveBtn.textContent = 'Save models';
@@ -111,13 +111,9 @@ export default async (state: typeof defaultState) => {
   };
   baseBtn.onclick = async () => {
     try {
-      const { source, written } = await loadBaseModels(
-        'climb',
-        io,
-        new URL('./presets/climb_models_default.json', import.meta.url),
-      );
+      const { source, written } = await loadBaseModels('climb', io);
       if (!written.length)
-        throw new Error('No compatible model in the base archive');
+        throw new Error('No base model available from the server');
       console.info(`Loaded base models (${source}): ${written.join(', ')}`);
       race.initialize();
     } catch (err) {
@@ -433,17 +429,12 @@ export default async (state: typeof defaultState) => {
   /** world-space y at the bottom of the view; the camera only ever climbs */
   let camTop = 0;
 
-  // Base models: server first, bundled preset as fallback. onlyMissing so a
+  // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize.
   void (async () => {
     try {
-      const { written } = await loadBaseModels(
-        'climb',
-        io,
-        new URL('./presets/climb_models_default.json', import.meta.url),
-        true,
-      );
+      const { written } = await loadBaseModels('climb', io, true);
       if (written.length) {
         console.info(`Loaded base models: ${written.join(', ')}`);
         race.initialize();

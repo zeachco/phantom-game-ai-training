@@ -2,11 +2,12 @@
  * Sync between the browser games and the phantom-ai-training server.
  *
  * Base models flow down: at boot (and via the "Load base models" buttons)
- * the best community-submitted brain per group is fetched from the server,
- * falling back to the bundled preset file. Trained brains flow up: whenever
- * a group's top model beats the base reference score for that group, it is
- * submitted once, so the next visitors can start from it.
+ * the best community-submitted brain per group is fetched from the server
+ * and written to localStorage; there is no bundled preset anymore. Trained
+ * brains flow up: whenever a group's top model beats the base reference score
+ * for that group, it is submitted once, so the next visitors can start from it.
  */
+import { showToast } from '../utilities/toast';
 import type { ModelsByLayerCount } from './utils';
 
 /** Live server (Railway, see .railway/railway.ts). The games are served from
@@ -163,42 +164,27 @@ function scoresByGroup(
 }
 
 /**
- * Loads the base models: the server first (community submissions), the
- * bundled preset file as fallback. Whichever source answers has its
- * reference scores recorded, so makeSubmitChecker knows what to beat.
- * `onlyMissing` skips groups the visitor already has a save for.
+ * Loads the base models from the server and writes them to localStorage.
+ * There is no bundled preset fallback: when the server is unreachable or has
+ * nothing for this game, the visitor's own localStorage saves are left as-is
+ * and `written` is empty. `onlyMissing` skips groups the visitor already has
+ * a save for, which is what the boot call uses so local training is never
+ * overwritten.
  */
 export async function loadBaseModels(
   game: string,
   io: { importModels(models: Record<string, unknown> | null): string[] },
-  presetUrl: URL | string,
   onlyMissing = false,
-): Promise<{ source: 'server' | 'file'; written: string[] }> {
-  let source: 'server' | 'file' = 'server';
-  let models: Record<string, unknown[]> | null = await fetchBaseModels(game);
-  if (!models) {
-    source = 'file';
-    const res = await fetch(presetUrl);
-    if (!res.ok)
-      throw new Error(
-        `Base models unavailable: server unreachable, preset ${res.status}`,
-      );
-    const archive = (await res.json()) as { game?: string; models?: unknown };
-    if (archive.game && archive.game !== game)
-      throw new Error(`Base archive is for "${archive.game}", not ${game}`);
-    models =
-      archive.models && typeof archive.models === 'object'
-        ? (archive.models as Record<string, unknown[]>)
-        : null;
-    if (!models || !Object.keys(models).length)
-      throw new Error('Base models unavailable: preset has no models');
-  }
+): Promise<{ source: 'server' | 'none'; written: string[] }> {
+  const models = await fetchBaseModels(game);
+  if (!models) return { source: 'none', written: [] };
   recordBaseScores(game, scoresByGroup(models));
-  if (onlyMissing)
-    models = Object.fromEntries(
-      Object.entries(models).filter(([key]) => !localStorage.getItem(key)),
-    );
-  return { source, written: io.importModels(models) };
+  const toImport = onlyMissing
+    ? Object.fromEntries(
+        Object.entries(models).filter(([key]) => !localStorage.getItem(key)),
+      )
+    : models;
+  return { source: 'server', written: io.importModels(toImport) };
 }
 
 /** Submits one brain to the server; resolves false on any failure. */
@@ -305,6 +291,10 @@ function enqueue(item: Pending): void {
           recordSubmittedSig(item.game, item.sig);
           console.info(
             `☁️ submitted ${item.group} score ${item.score.toFixed(4)} to the server`,
+          );
+          showToast(
+            `☁️ Uploaded ${item.group} to the server · score ${item.score.toFixed(2)}`,
+            { tone: 'success' },
           );
         } else {
           backoffStep = Math.min(backoffStep + 1, 16);

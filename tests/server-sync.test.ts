@@ -204,11 +204,7 @@ test('loadBaseModels prefers the server and records the base scores', async () =
             })
           : new Response('unexpected', { status: 404 }),
       async () => {
-        const res = await loadBaseModels(
-          'cave',
-          fileUtilities('cave'),
-          new URL('cave_models_default.json', 'https://example.test/'),
-        );
+        const res = await loadBaseModels('cave', fileUtilities('cave'));
         expect(res.source).toBe('server');
         expect(res.written.sort()).toEqual(['cave_1', 'cave_5']);
         expect(baseScores('cave')).toEqual({ cave_1: 50, cave_5: 150 });
@@ -221,29 +217,21 @@ test('loadBaseModels prefers the server and records the base scores', async () =
   });
 });
 
-test('loadBaseModels falls back to the preset file when the server is unreachable', async () => {
+test('loadBaseModels is server-only: an unreachable server leaves local saves untouched', async () => {
   const { store, storage } = makeStorage();
   await withStorage(storage as Storage, async () => {
+    storage.setItem('cave_1', JSON.stringify([brain(99)]));
     await withFetch(
-      (url, init) => {
-        if (init?.method === 'POST' || url.includes('/api/models'))
-          throw new Error('offline');
-        return json({
-          game: 'cave',
-          models: { cave_1: [brain(7)], cave_2: [brain(8)] },
-        });
+      () => {
+        throw new Error('offline');
       },
       async () => {
-        const res = await loadBaseModels(
-          'cave',
-          fileUtilities('cave'),
-          new URL('cave_models_default.json', 'https://example.test/'),
-        );
-        expect(res.source).toBe('file');
-        expect(res.written.sort()).toEqual(['cave_1', 'cave_2']);
-        expect(baseScores('cave')).toEqual({ cave_1: 7, cave_2: 8 });
-        const saved = JSON.parse(store.get('cave_2') || '[]');
-        expect(saved[0].score).toBe(8);
+        const res = await loadBaseModels('cave', fileUtilities('cave'));
+        expect(res.source).toBe('none');
+        expect(res.written).toEqual([]);
+        // no bundled preset is fetched or written; the visitor's save wins
+        expect(JSON.parse(store.get('cave_1') || '[]')[0].score).toBe(99);
+        expect(store.get('cave_2')).toBeUndefined();
       },
     );
   });
@@ -265,12 +253,7 @@ test('loadBaseModels with onlyMissing keeps the visitor\u2019s existing groups',
             })
           : new Response('no', { status: 404 }),
       async () => {
-        const res = await loadBaseModels(
-          'cave',
-          fileUtilities('cave'),
-          new URL('cave_models_default.json', 'https://example.test/'),
-          true,
-        );
+        const res = await loadBaseModels('cave', fileUtilities('cave'), true);
         expect(res.written).toEqual(['cave_2']);
         // the reference scores cover every group the source knew about
         expect(baseScores('cave')).toEqual({ cave_1: 60, cave_2: 80 });
