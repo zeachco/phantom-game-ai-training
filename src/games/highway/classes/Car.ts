@@ -117,8 +117,10 @@ export class Car {
 
   update(roadBorders: Vector[][], traffic: Car[], deathRays: DeathRay[]) {
     if (this.damaged) return;
+    const old_y = this.y;
     this.#move();
-    if (this.brain) this.#updateScore();
+
+    if (this.brain) this.brain.score += this.y - old_y;
 
     this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
@@ -142,13 +144,6 @@ export class Car {
         this.controls.reverse = reverse;
       }
     }
-  }
-
-  #updateScore() {
-    // vertical distance
-    this.brain.score += Math.cos(this.angle) * this.speed;
-    // travel distance
-    this.brain.score += this.speed / 10;
   }
 
   #assessDamage(roadBorders: Vector[][], traffic: Car[]) {
