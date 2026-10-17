@@ -5,14 +5,16 @@ import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText } from '../../utilities/colors';
+import { contrastText, getColorScale } from '../../utilities/colors';
+import { drawGamepadControls } from '../../utilities/driveIndicators';
+import { bindFollowKeys } from '../../utilities/followKeys';
+import { createScoreBoard } from '../../utilities/scoreBoard';
 import {
   bindSidePanelToggle,
   createCanvas,
   createFrameMeter,
   resizeCanvas,
 } from '../../utilities/dom';
-import { GamePad } from '../../utilities/inputs/Gamepad';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Ball } from './classes/Ball';
 import { CaveRace } from './classes/CaveRace';
@@ -30,8 +32,8 @@ const neuralVisualizer = new Visualizer(config);
 const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
 
-/** one captured jump sample per pixel column of the jump timeline */
-const JUMP_TIMELINE_WIDTH = 110;
+/** how many per-frame jump samples the action button's history holds */
+const JUMP_HISTORY = 80;
 
 /** Screen resolution divisor: 1 keeps the native device pixel ratio, 2 draws
  *  half of it, 4 a quarter. Zero, negatives and garbage fall back to this.
@@ -100,7 +102,7 @@ export default async (state: CaveState) => {
     1600,
   );
 
-  // Wireframe is opt-in: the backtick key toggles it for mesh debugging.
+  // Wireframe is opt-in: the V key toggles it for mesh debugging.
   let wireframe = false;
 
   const race = new CaveRace(state, io, seed, scene, {
@@ -112,24 +114,10 @@ export default async (state: CaveState) => {
 
   // Top-left board: each brain group's best (highest) score, replacing the
   // old seed readout. It refreshes on the throttled HUD tick.
-  const scoreBoard = document.createElement('div');
-  scoreBoard.style.position = 'absolute';
-  scoreBoard.style.top = '2px';
-  scoreBoard.style.left = '2px';
-  scoreBoard.style.zIndex = '2';
-  scoreBoard.style.boxSizing = 'border-box';
-  scoreBoard.style.minWidth = '158px';
-  scoreBoard.style.padding = '14px 18px 14px 16px';
-  scoreBoard.style.color = '#f4f6f8';
-  scoreBoard.style.font = '700 13px/1.5 monospace';
-  scoreBoard.style.textShadow = '0 1px 3px #000';
-  scoreBoard.style.whiteSpace = 'pre';
-  scoreBoard.style.background =
-    'linear-gradient(90deg, rgba(51, 51, 51, 0.82), rgba(51, 51, 51, 0.48) 68%, transparent)';
-  scoreBoard.style.pointerEvents = 'none';
-  scoreBoard.title = 'best score per brain group';
-  scoreBoard.setAttribute('aria-label', 'Best score per brain group');
-  stage.appendChild(scoreBoard);
+  const scoreBoard = createScoreBoard('Best');
+  scoreBoard.el.title = 'best score per brain group';
+  scoreBoard.el.setAttribute('aria-label', 'Best score per brain group');
+  stage.appendChild(scoreBoard.el);
 
   // ---- side panel: model actions, brain follow keys and the live network
   // visualization ported from the circuit game. It starts hidden. ----
@@ -137,7 +125,6 @@ export default async (state: CaveState) => {
   networkCanvas.className = 'neural-canvas';
   const networkCtx = networkCanvas.getContext('2d');
 
-  const followPad = new GamePad(new Map());
   /** 0 follows the best-scoring AI ball, 1-9 that brain layer, 'mixed' the
    *  mixed brain; the human ball takes over while the player drives */
   let follow: number | 'mixed' = 0;
@@ -353,6 +340,13 @@ export default async (state: CaveState) => {
     armReset(btn, value, () => setFollow(value));
   });
   setFollow(0);
+  // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
+  // backquote the mixed brain
+  bindFollowKeys({
+    digit: (layer) => setFollow(layer),
+    all: () => setFollow(0),
+    mixed: () => setFollow('mixed'),
+  });
 
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
@@ -372,7 +366,7 @@ export default async (state: CaveState) => {
     '🎯 the followed ball is drawn solid, the rest fade to 50%',
     '🥅 the next gate ring glows and grows',
     '🪙 a spinning coin adds score and a temporary speed boost',
-    '🧭 ` toggles the wireframe view',
+    '🧭 V toggles the wireframe view',
     '📉 the section gauge kills a ball that stops progressing',
   ].forEach((line, i) => {
     const el = document.createElement('span');
@@ -431,18 +425,7 @@ export default async (state: CaveState) => {
   controlCanvas.width = 110;
   controlCanvas.height = 110;
   const controlCtx = controlCanvas.getContext('2d');
-  const velocityCanvas = document.createElement('canvas');
-  velocityCanvas.className = 'velocity-vector';
-  velocityCanvas.width = 110;
-  velocityCanvas.height = 34;
-  const velocityCtx = velocityCanvas.getContext('2d');
-  const jumpCanvas = document.createElement('canvas');
-  jumpCanvas.className = 'jump-timeline-canvas';
-  jumpCanvas.width = JUMP_TIMELINE_WIDTH;
-  jumpCanvas.height = 34;
-  jumpCanvas.title = 'jump input each rendered frame, newest at the right edge';
-  const jumpCtx = jumpCanvas.getContext('2d');
-  controlIndicators.append(controlCanvas, velocityCanvas, jumpCanvas);
+  controlIndicators.append(controlCanvas);
 
   const readout = document.createElement('div');
   readout.className = 'readout';
@@ -706,57 +689,47 @@ export default async (state: CaveState) => {
     );
   }
 
-  /** Redraw the top-left board with each group's best score, in a stable order
-   *  (layers 1..9, then mixed). The row treatment mirrors the 2D games: the
-   *  group keeps its brain color and its emoji says whether the visible record
-   *  is live, dead, or from an earlier cave. */
-  let lastBoardText = '';
+  /** Refresh the top-left board with each group's best score, in a stable
+   *  order (layers 1..9, then mixed). The row treatment mirrors the 2D
+   *  games: the group keeps its brain color and its emoji says whether the
+   *  visible record is live, dead, or from an earlier cave. */
   function updateScoreBoard() {
     const ordered = [...race.groups].sort((a, b) =>
       a.isMixed === b.isMixed ? a.layer - b.layer : a.isMixed ? 1 : -1,
     );
-    const rows = ordered.map((group) => {
-      const best = groupBestScore(group);
-      const leader = bestBall(group);
-      const liveScore = leader?.brain.score ?? -Infinity;
-      const currentRecord = group.scores.seed;
-      const isHistorical = best > liveScore + Number.EPSILON;
-      const isCurrentLeader =
-        currentRecord > 0 && liveScore >= currentRecord - Number.EPSILON;
-      const emoji = isHistorical
-        ? '👻'
-        : leader?.damaged
-          ? isCurrentLeader
-            ? '🏆'
-            : '💀'
-          : isCurrentLeader
-            ? '💚'
-            : '💜';
-      const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
-      const score = best > 0 ? String(Math.round(best)) : '—';
-      const color = group.isMixed
-        ? config.MIXED_COLOR
-        : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-      const textColor = leader?.damaged && !isHistorical ? '#def' : color;
-      return { best, emoji, label, score, textColor };
-    });
-    const renderKey = rows
-      .map(({ best, emoji, label, score, textColor }) =>
-        [best, emoji, label, score, textColor].join('|'),
-      )
-      .join('||');
-    if (renderKey === lastBoardText) return;
-    lastBoardText = renderKey;
-
-    const title = document.createElement('div');
-    title.textContent = 'best';
-    scoreBoard.replaceChildren(title);
-    for (const rowData of rows) {
-      const row = document.createElement('div');
-      row.style.color = rowData.textColor;
-      row.textContent = `${rowData.emoji} ${rowData.label} ${rowData.score}`;
-      scoreBoard.appendChild(row);
-    }
+    scoreBoard.update(
+      {
+        text: `${state.living}/${state.balls.length} balls`,
+        color: getColorScale(
+          Math.min(1, state.living / Math.max(1, state.balls.length)),
+        ),
+      },
+      ordered.map((group) => {
+        const best = groupBestScore(group);
+        const leader = bestBall(group);
+        const liveScore = leader?.brain.score ?? -Infinity;
+        const currentRecord = group.scores.seed;
+        const isHistorical = best > liveScore + Number.EPSILON;
+        const isCurrentLeader =
+          currentRecord > 0 && liveScore >= currentRecord - Number.EPSILON;
+        const emoji = isHistorical
+          ? '👻'
+          : leader?.damaged
+            ? isCurrentLeader
+              ? '🏆'
+              : '💀'
+            : isCurrentLeader
+              ? '💚'
+              : '💜';
+        const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
+        const score = best > 0 ? String(Math.round(best)) : '—';
+        const color = group.isMixed
+          ? config.MIXED_COLOR
+          : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
+        const textColor = leader?.damaged && !isHistorical ? '#def' : color;
+        return { emoji, text: `${label} ${score}`, color: textColor };
+      }),
+    );
   }
 
   /** The 3D viewport and the network canvas split the window while the panel
@@ -785,12 +758,6 @@ export default async (state: CaveState) => {
   const loop = new GameLoop();
   let accumulator = 0;
   loop.play((_elapsed, dt) => {
-    // 1-9 follow a brain layer, 0 the mixed brain (click the panel for "all").
-    for (let digit = 0; digit <= 9; digit++) {
-      if (followPad.once(`Digit${digit}`))
-        setFollow(digit === 0 ? 'mixed' : digit);
-    }
-
     // Keep physics, AI and race timers at 60 Hz on every display. Limit
     // catch-up after tab suspension so it cannot spiral into a long frame.
     accumulator = Math.min(accumulator + dt, 5 / 60);
@@ -865,18 +832,18 @@ export default async (state: CaveState) => {
     steerOverlay.style.setProperty('--hud-color', followed.color || '#c4c4c4');
     steerOverlay.classList.toggle('hidden', !isFollowedAlive);
     if (isFollowedAlive) {
-      if (controlCtx)
-        drawStick(
-          controlCtx,
-          followed.controls.moveX,
-          followed.controls.moveY,
-          followed.color,
-        );
-      if (velocityCtx) drawCaveVelocityVector(velocityCtx, followed);
       jumpSamples.push(followed.controls.jumpHeld ? 1 : 0);
-      if (jumpSamples.length > JUMP_TIMELINE_WIDTH)
-        jumpSamples.splice(0, jumpSamples.length - JUMP_TIMELINE_WIDTH);
-      if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
+      if (jumpSamples.length > JUMP_HISTORY)
+        jumpSamples.splice(0, jumpSamples.length - JUMP_HISTORY);
+      if (controlCtx)
+        drawGamepadControls(controlCtx, {
+          x: followed.controls.moveX,
+          y: followed.controls.moveY,
+          color: followed.color,
+          action: followed.controls.jumpHeld,
+          actionLabel: 'JUMP',
+          actionHistory: jumpSamples,
+        });
     }
 
     renderer.render(scene, camera);
@@ -980,7 +947,7 @@ export default async (state: CaveState) => {
     layoutViewport();
   });
   window.addEventListener('keydown', (event) => {
-    if (event.code === 'Backquote' || event.key === '`') {
+    if (event.code === 'KeyV' || event.key.toLowerCase() === 'v') {
       if (event.repeat || event.isComposing) return;
       const target = event.target;
       if (
@@ -1017,135 +984,4 @@ export default async (state: CaveState) => {
 function readSeed() {
   const match = location.hash.match(/cave=(\d+)/);
   return match ? Number.parseInt(match[1], 10) : 0;
-}
-
-/** Draw the followed ball's stick input: a vector from center to (x, y). */
-function drawStick(
-  ctx: CanvasRenderingContext2D,
-  moveX: number,
-  moveY: number,
-  color: string,
-  size = 110,
-) {
-  const center = size / 2;
-  const radius = size * 0.4;
-  const x = Math.max(-1, Math.min(1, moveX));
-  const y = Math.max(-1, Math.min(1, moveY));
-
-  ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = 'rgba(25, 52, 94, 0.55)';
-  ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.7;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, size - 2, size - 2);
-  ctx.globalAlpha = 0.25;
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(center, 8);
-  ctx.lineTo(center, size - 8);
-  ctx.moveTo(8, center);
-  ctx.lineTo(size - 8, center);
-  ctx.stroke();
-
-  const endX = center + x * radius;
-  const endY = center - y * radius;
-  ctx.globalAlpha = 0.9;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(center, center);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(endX, endY, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-}
-
-/** Project 3D velocity into the followed ball's track forward/right plane. */
-function drawCaveVelocityVector(
-  ctx: CanvasRenderingContext2D,
-  ball: Ball,
-  width = 110,
-  height = 34,
-) {
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const forward = ball.vx * ball.fx + ball.vy * ball.fy + ball.vz * ball.fz;
-  const lateral = ball.vx * ball.rx + ball.vy * ball.ry + ball.vz * ball.rz;
-  const scale = (Math.min(width, height) * 0.42) / Math.max(1, ball.maxSpeed);
-  const endX = centerX + lateral * scale;
-  const endY = centerY - forward * scale;
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.strokeStyle = ball.color;
-  ctx.globalAlpha = 0.25;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(8, centerY);
-  ctx.lineTo(width - 8, centerY);
-  ctx.stroke();
-  ctx.globalAlpha = 0.9;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(centerX, centerY);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-  const angle = Math.atan2(endY - centerY, endX - centerX);
-  ctx.fillStyle = ball.color;
-  ctx.beginPath();
-  ctx.moveTo(endX, endY);
-  ctx.lineTo(
-    endX - Math.cos(angle - Math.PI / 6) * 7,
-    endY - Math.sin(angle - Math.PI / 6) * 7,
-  );
-  ctx.lineTo(
-    endX - Math.cos(angle + Math.PI / 6) * 7,
-    endY - Math.sin(angle + Math.PI / 6) * 7,
-  );
-  ctx.closePath();
-  ctx.fill();
-  ctx.globalAlpha = 1;
-}
-
-/**
- * A left-scrolling strip of jump input: one 1px column per rendered frame,
- * newest at the right edge. A raised bar means the jump channel was held that
- * frame (a brain's third output or a live Space / primary-button press), so a
- * single-frame tap reads as a needle and a held jump as a plateau.
- */
-function drawJumpTimeline(
-  ctx: CanvasRenderingContext2D,
-  samples: number[],
-  color: string,
-  width = JUMP_TIMELINE_WIDTH,
-  height = 34,
-) {
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = 'rgba(25, 52, 94, 0.55)';
-  ctx.fillRect(0, 0, width, height);
-
-  // silence baseline, matching the velocity vector's axis
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.25;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, height - 5.5);
-  ctx.lineTo(width, height - 5.5);
-  ctx.stroke();
-
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.9;
-  const offset = width - samples.length;
-  for (let i = 0; i < samples.length; i++) {
-    if (!samples[i]) continue;
-    ctx.fillRect(offset + i, 3, 1, height - 9);
-  }
-
-  ctx.globalAlpha = 0.7;
-  ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
-  ctx.globalAlpha = 1;
 }

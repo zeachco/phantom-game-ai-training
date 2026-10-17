@@ -603,22 +603,20 @@ canvas {
   margin-top: 0.15em;
 }
 
-/* Highway's scoreboard floats at the stage's left edge: the road canvas is a
-   narrow centered strip, so an in-canvas list read as a middle-of-screen HUD
-   instead of a screen-left one. */
-.highway-score-board {
+/* the live scoreboard floats at the stage's left edge in every game */
+.score-board-left {
   top: 24px;
   left: 24px;
   right: auto;
   min-width: 200px;
 }
 
-.highway-score-cars {
+.score-board-cars {
   margin-bottom: 0.3em;
   font-weight: 700;
 }
 
-.highway-score-row {
+.score-board-row {
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
@@ -723,7 +721,7 @@ canvas {
     min-width: 230px;
   }
 
-  .highway-score-board {
+  .score-board-left {
     top: 8px;
     left: 8px;
     min-width: 170px;
@@ -787,14 +785,6 @@ canvas {
 .control-axis {
   width: 110px;
   height: 110px;
-}
-.velocity-vector {
-  width: 110px;
-  height: 34px;
-}
-.jump-timeline-canvas {
-  width: 110px;
-  height: 34px;
 }
 .readout {
   display: flex;
@@ -923,18 +913,6 @@ canvas {
 }
 .climb-platform-value {
   font: 800 clamp(42px, 6vw, 78px) / 0.9 monospace;
-}
-.climb-group-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 8px;
-  font: 12px monospace;
-}
-.climb-group-row {
-  display: flex;
-  justify-content: flex-end;
-  opacity: 0.9;
 }
 
 @media (max-width: 760px) {

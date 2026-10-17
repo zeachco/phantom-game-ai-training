@@ -5,7 +5,7 @@ import {
   mixedNetworkColor,
   savedMixedNetworkColor,
 } from '../../utilities/ai/colors';
-import { getColorScale } from '../../utilities/colors';
+import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { Car } from './classes/Car';
 import { config } from './classes/Config';
 
@@ -47,13 +47,8 @@ const modelColor = (model: ModelsByLayerCount[number]) =>
       )
     : layerColor(model.levels.length, config.MAX_NETWORK_LAYERS);
 
-interface ScoreEntry {
-  text: string;
-  color: string;
-}
-
 /** The rows of the scoreboard, best first: saved ghosts plus the live cars. */
-function scoreEntries(state: typeof defaultState): ScoreEntry[] {
+export function scoreEntries(state: typeof defaultState): ScoreBoardRow[] {
   const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
     ...state.sortedModels.map((m) => m[0]).filter(Boolean),
     ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
@@ -78,7 +73,8 @@ function scoreEntries(state: typeof defaultState): ScoreEntry[] {
         emoji = ref.damaged ? '💀' : '💜';
       }
       return {
-        text: `${emoji} ${ref.label} ${Math.round(ref.brain.score)}${add}`,
+        emoji,
+        text: `${ref.label} ${Math.round(ref.brain.score)}${add}`,
         color: ref.damaged ? '#def' : ref.color,
       };
     }
@@ -89,59 +85,9 @@ function scoreEntries(state: typeof defaultState): ScoreEntry[] {
       ? `${ref.version}-${ref.mutationIndex}`
       : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
     return {
-      text: `${emoji} ${name} ${Math.round(ref.score)} ${symb}`,
+      emoji,
+      text: `${name} ${Math.round(ref.score)} ${symb}`,
       color: modelColor(ref),
     };
   });
-}
-
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-/**
- * A DOM scoreboard that floats at the stage's left edge, so it reads as a
- * screen HUD instead of being painted inside the narrow centered road canvas.
- * `update` is cheap to call every frame: it only rewrites the DOM when the
- * rendered markup changed.
- */
-export function createScoreBoard() {
-  const el = document.createElement('div');
-  el.className = 'track-score-board highway-score-board';
-  const title = document.createElement('div');
-  title.className = 'track-score-title';
-  title.textContent = 'Score board';
-  const cars = document.createElement('div');
-  cars.className = 'highway-score-cars';
-  const rows = document.createElement('div');
-  rows.className = 'track-score-rows';
-  el.append(title, cars, rows);
-
-  let lastCars = '';
-  let lastRows = '';
-
-  const update = (state: typeof defaultState) => {
-    const carsText = `${state.living}/${state.sortedCars.length} cars`;
-    if (carsText !== lastCars) {
-      lastCars = carsText;
-      cars.textContent = carsText;
-      cars.style.color = getColorScale(
-        state.sortedCars.length ? state.living / state.sortedCars.length : 0,
-      );
-    }
-
-    const html = scoreEntries(state)
-      .map(
-        ({ text, color }) =>
-          `<div class="highway-score-row" style="color:${color}">${escapeHtml(
-            text,
-          )}</div>`,
-      )
-      .join('');
-    if (html !== lastRows) {
-      lastRows = html;
-      rows.innerHTML = html;
-    }
-  };
-
-  return { el, update };
 }

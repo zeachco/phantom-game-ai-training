@@ -5,7 +5,7 @@ import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText } from '../../utilities/colors';
+import { contrastText, getColorScale } from '../../utilities/colors';
 import {
   bindSidePanelToggle,
   createCanvas,
@@ -13,22 +13,20 @@ import {
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
-import { GamePad } from '../../utilities/inputs/Gamepad';
+import { bindFollowKeys } from '../../utilities/followKeys';
+import { createScoreBoard } from '../../utilities/scoreBoard';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Car } from './classes/Car';
 import { CircuitRace } from './classes/CircuitRace';
 import { config, isDemo } from './classes/Config';
-import {
-  drawControlAxes,
-  drawVelocityVector,
-} from '../../utilities/driveIndicators';
+import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { TimingBoard } from './ui/TimingBoard';
 import { TrackScoreBoard } from './ui/TrackScoreBoard';
 import {
   brainId,
   clearScoreRecords,
+  scoreBoardRows,
   type defaultState,
-  drawScores,
 } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
@@ -63,7 +61,6 @@ export default async (state: typeof defaultState) => {
   const carCtx = carCanvas.getContext('2d');
   const networkCtx = networkCanvas.getContext('2d');
 
-  const followPad = new GamePad(new Map());
   /** 0 follows the best score overall, 1-9 the best car of that brain layer */
   let follow: number | 'mixed' = 0;
   /** manual/player follow enables the rotating, ahead-of-car camera mode */
@@ -306,6 +303,13 @@ export default async (state: typeof defaultState) => {
     armReset(btn, value, () => setFollow(value));
   });
   setFollow(0, false);
+  // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
+  // backquote the mixed brain
+  bindFollowKeys({
+    digit: (layer) => setFollow(layer),
+    all: () => setFollow(0, false),
+    mixed: () => setFollow('mixed'),
+  });
 
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
@@ -327,7 +331,7 @@ export default async (state: typeof defaultState) => {
     '💚 car is leading its group on this track',
     '👻 track record, frozen when its holder died',
     '🕹 human car, driven with arrows/WASD or a DualShock (left stick + L2/R2)',
-    '🧭 Z',
+    '🧭 ` follows the mixed brain',
     '🏁 next checkpoint glows',
     '🚧 gray obstacle (circle or wall)',
   ].forEach((line, i) => {
@@ -370,7 +374,7 @@ export default async (state: typeof defaultState) => {
   // the demo profile hides the whole panel instead of starting it collapsed
   if (!isDemo) document.body.appendChild(panel);
 
-  // The output box and velocity vector mimic the followed car, display only.
+  // The outputs box mimics the followed car, display only.
   const steerOverlay = document.createElement('div');
   steerOverlay.className = 'steer-overlay hidden';
   const controlIndicators = document.createElement('div');
@@ -380,12 +384,7 @@ export default async (state: typeof defaultState) => {
   controlCanvas.width = 110;
   controlCanvas.height = 110;
   const controlCtx = controlCanvas.getContext('2d');
-  const velocityCanvas = document.createElement('canvas');
-  velocityCanvas.className = 'velocity-vector';
-  velocityCanvas.width = 110;
-  velocityCanvas.height = 34;
-  const velocityCtx = velocityCanvas.getContext('2d');
-  controlIndicators.append(controlCanvas, velocityCanvas);
+  controlIndicators.append(controlCanvas);
   // the race, laps and speed readouts sit together, race on top, laps just
   // above the speed
   const readout = document.createElement('div');
@@ -600,6 +599,9 @@ export default async (state: typeof defaultState) => {
   // Keep global scores in the upper slot and the current race beneath it.
   topRightHud.append(trackScoreBoard.element, timingBoard.element);
   stage.appendChild(topRightHud);
+  // the shared live scoreboard: a DOM board at the stage's left edge
+  const scoreBoard = createScoreBoard();
+  stage.appendChild(scoreBoard.el);
   const runningCategories = new Set<string>();
   if (new URLSearchParams(window.location.search).get('demo') === 'true') {
     try {
@@ -636,12 +638,6 @@ export default async (state: typeof defaultState) => {
     (_es, _dt) => {
       const now = performance.now();
       frameMeter.tick(now);
-      if (followPad.once('Space')) setFollow(0, false);
-      for (let digit = 0; digit <= 9; digit++) {
-        if (followPad.once(`Digit${digit}`))
-          setFollow(digit === 0 ? 'mixed' : digit);
-      }
-
       if (state.playing) {
         race.update(now);
 
@@ -663,6 +659,15 @@ export default async (state: typeof defaultState) => {
         race.refreshLeaderboard();
         timingBoard.update();
         trackScoreBoard.update(race.seed);
+        scoreBoard.update(
+          {
+            text: `${state.living}/${state.population} cars`,
+            color: getColorScale(
+              Math.min(1, state.living / Math.max(1, state.population)),
+            ),
+          },
+          scoreBoardRows(state),
+        );
         updateFollowButtons();
         if (race.seedChangeAt) {
           const remaining = Math.max(0, race.seedChangeAt - now);
@@ -767,22 +772,11 @@ export default async (state: typeof defaultState) => {
       if (camTarget) {
         const c = camTarget.controls;
         if (controlCtx)
-          drawControlAxes(
-            controlCtx,
-            c.left,
-            c.right,
-            c.throttle,
-            camTarget.color,
-          );
-        if (velocityCtx)
-          drawVelocityVector(
-            velocityCtx,
-            camTarget.angle,
-            camTarget.vx,
-            camTarget.vy,
-            camTarget.maxSpeed,
-            camTarget.color,
-          );
+          drawGamepadControls(controlCtx, {
+            x: c.right - c.left,
+            y: c.throttle,
+            color: camTarget.color,
+          });
         if (domUpdateDue) {
           speedoValue.textContent = Math.hypot(
             camTarget.vx,
@@ -913,8 +907,6 @@ export default async (state: typeof defaultState) => {
       carCtx.globalAlpha = 1;
 
       carCtx.restore();
-
-      drawScores(state, carCtx);
 
       const followed = camTarget?.brain;
       if (panelOpen && followed) {

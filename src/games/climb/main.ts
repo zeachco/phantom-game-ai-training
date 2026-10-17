@@ -5,7 +5,10 @@ import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText } from '../../utilities/colors';
+import { contrastText, getColorScale } from '../../utilities/colors';
+import { drawGamepadControls } from '../../utilities/driveIndicators';
+import { bindFollowKeys } from '../../utilities/followKeys';
+import { createScoreBoard } from '../../utilities/scoreBoard';
 import {
   bindSidePanelToggle,
   createCanvas,
@@ -21,8 +24,8 @@ import type { Player } from './classes/Player';
 import {
   brainId,
   clearScoreRecords,
+  scoreBoardRows,
   type defaultState,
-  drawScores,
 } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
@@ -36,8 +39,8 @@ const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 800;
 /** world height visible on screen at the reference scale */
 const VIEW_HEIGHT = 420;
-/** one captured jump sample per pixel column of the jump timeline */
-const JUMP_TIMELINE_WIDTH = 110;
+/** how many per-frame jump samples the action button's history holds */
+const JUMP_HISTORY = 80;
 
 export default async (state: typeof defaultState) => {
   // the stage overlays the canvas; the canvas and every HUD element live in
@@ -244,8 +247,8 @@ export default async (state: typeof defaultState) => {
     'Climb: a seeded Icy Tower-style tower. Every brain line climbs the same ' +
     'tower at once; a line that banks floors saves its brain, and when enough ' +
     'lines hold the seed target the tower gets harder. Arrows / WASD move, ' +
-    'Space or the gamepad primary button jumps. 0-9 and M follow a line, R ' +
-    'jumps to a random seed, < and > step the seed.';
+    'Space or the gamepad primary button jumps. 1-9 and ` follow a line, ' +
+    '0 the best climber, R jumps to a random seed, < and > step the seed.';
 
   const footer = document.createElement('div');
   footer.className = 'side-panel-footer';
@@ -294,15 +297,10 @@ export default async (state: typeof defaultState) => {
   const controlCanvas = document.createElement('canvas');
   controlCanvas.className = 'control-axis';
   controlCanvas.width = 110;
-  controlCanvas.height = 34;
+  controlCanvas.height = 110;
   const controlCtx = controlCanvas.getContext('2d');
-  const jumpCanvas = document.createElement('canvas');
-  jumpCanvas.className = 'jump-timeline-canvas';
-  jumpCanvas.width = JUMP_TIMELINE_WIDTH;
-  jumpCanvas.height = 34;
-  const jumpCtx = jumpCanvas.getContext('2d');
   const jumpSamples: number[] = [];
-  controlIndicators.append(controlCanvas, jumpCanvas);
+  controlIndicators.append(controlCanvas);
 
   const readout = document.createElement('div');
   readout.className = 'readout';
@@ -360,10 +358,11 @@ export default async (state: typeof defaultState) => {
   const platformValue = document.createElement('div');
   platformValue.className = 'climb-platform-value';
   platformValue.textContent = '0';
-  const groupProgress = document.createElement('div');
-  groupProgress.className = 'climb-group-progress';
-  climbProgress.append(platformLabel, platformValue, groupProgress);
+  climbProgress.append(platformLabel, platformValue);
   stage.appendChild(climbProgress);
+  // the shared live scoreboard: a DOM board at the stage's left edge
+  const scoreBoard = createScoreBoard();
+  stage.appendChild(scoreBoard.el);
 
   const loop = new GameLoop();
   const shouldUpdateDom = createUpdateLimiter(20);
@@ -414,17 +413,16 @@ export default async (state: typeof defaultState) => {
         t.isContentEditable)
     )
       return;
-    if (e.code === 'Digit0') setFollow(0);
-    else if (
-      e.code.startsWith('Digit') &&
-      Number(e.code.slice(5)) <= config.MAX_NETWORK_LAYERS
-    )
-      setFollow(Number(e.code.slice(5)));
-    else if (e.code === 'KeyM') setFollow('mixed');
-    else if (e.code === 'KeyR')
-      race.applyUserSeed(Math.floor(Math.random() * 1000));
+    if (e.code === 'KeyR') race.applyUserSeed(Math.floor(Math.random() * 1000));
   };
   document.addEventListener('keydown', onKey);
+  // unified follow shortcuts: 1-9 a brain group, 0 the best climber,
+  // backquote the mixed brain
+  bindFollowKeys({
+    digit: (layer) => setFollow(layer),
+    all: () => setFollow(0),
+    mixed: () => setFollow('mixed'),
+  });
 
   /** world-space y at the bottom of the view; the camera only ever climbs */
   let camTop = 0;
@@ -582,8 +580,6 @@ export default async (state: typeof defaultState) => {
         state.human.draw(gameCtx, now, false);
       gameCtx.restore();
 
-      drawScores(state, gameCtx);
-
       // the cockpit mimics the followed climber, hidden while it is dead
       if (domUpdateDue) {
         steerOverlay.style.setProperty(
@@ -596,49 +592,31 @@ export default async (state: typeof defaultState) => {
           !neuralVisualizer.renderStats || !followed?.brain,
         );
         platformValue.textContent = String(followed?.bestPlatform ?? 0);
-        // group rows are built once and only their text and color refresh each
-        // tick, so the 20 Hz board never realigns its DOM nodes
-        let groupRows = groupProgress.children;
-        if (groupRows.length !== race.groups.length) {
-          groupProgress.replaceChildren(
-            ...race.groups.map(() => {
-              const row = document.createElement('div');
-              row.className = 'climb-group-row';
-              row.append(document.createElement('span'));
-              return row;
-            }),
-          );
-          groupRows = groupProgress.children;
-        }
-        // ranked by live score, not group number; a stable tie-break keeps
-        // equal scores from swapping rows between ticks. The row color
-        // identifies the group, so only the score is written
-        const ranked = [...race.groups].sort(
-          (a, b) =>
-            b.scores.seed - a.scores.seed ||
-            Number(a.isMixed) - Number(b.isMixed) ||
-            a.layer - b.layer,
+        scoreBoard.update(
+          {
+            text: `${state.living}/${state.population} climbers`,
+            color: getColorScale(
+              Math.min(1, state.living / Math.max(1, state.population)),
+            ),
+          },
+          scoreBoardRows(state),
         );
-        for (let i = 0; i < ranked.length; i++) {
-          const group = ranked[i];
-          const row = groupRows[i] as HTMLElement;
-          row.style.color = group.isMixed
-            ? config.MIXED_COLOR
-            : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-          row.children[0].textContent = String(
-            Math.max(0, Math.round(group.scores.seed)),
-          );
-        }
       }
       if (followed) {
         const c = followed.controls;
+        jumpSamples.push(c.jumpHeld ? 1 : 0);
+        if (jumpSamples.length > JUMP_HISTORY) jumpSamples.shift();
         if (controlCtx)
-          drawControlAxis(controlCtx, c.left, c.right, followed.color);
+          drawGamepadControls(controlCtx, {
+            x: c.right - c.left,
+            y: 0,
+            color: followed.color,
+            action: c.jumpHeld,
+            actionLabel: 'JUMP',
+            actionHistory: jumpSamples,
+          });
         comboEl.hidden = followed.comboValue < 2;
         comboEl.textContent = `x${followed.comboValue}`;
-        jumpSamples.push(followed.controls.jumpHeld ? 1 : 0);
-        if (jumpSamples.length > JUMP_TIMELINE_WIDTH) jumpSamples.shift();
-        if (jumpCtx) drawJumpTimeline(jumpCtx, jumpSamples, followed.color);
         floorEl.textContent = `floor ${Math.round(followed.brain?.score ?? 0)}`;
         if (followed.brain && neuralVisualizer.renderStats)
           updateBrainStats(followed.brain, followed);
@@ -754,75 +732,4 @@ function drawClouds(
       ctx.fill();
     }
   }
-}
-
-/** a horizontal left/right axis: the bar fills from the center toward the
- *  pressed side */
-function drawControlAxis(
-  ctx: CanvasRenderingContext2D,
-  left: number,
-  right: number,
-  color: string,
-) {
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = 'rgba(25, 52, 94, 0.55)';
-  ctx.fillRect(0, 0, w, h);
-  // center line
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.35;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(w / 2, 4);
-  ctx.lineTo(w / 2, h - 4);
-  ctx.stroke();
-  // the drive bar
-  const dir = right - left;
-  const mag = Math.max(left, right);
-  ctx.globalAlpha = 0.9;
-  ctx.fillStyle = color;
-  const bw = (w / 2 - 6) * mag;
-  if (dir >= 0) ctx.fillRect(w / 2, 6, bw, h - 12);
-  else ctx.fillRect(w / 2 - bw, 6, bw, h - 12);
-  ctx.globalAlpha = 0.7;
-  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
-  ctx.globalAlpha = 1;
-}
-
-/**
- * A left-scrolling strip of jump input: one 1px column per rendered frame,
- * newest at the right edge. A raised bar means the jump channel was held that
- * frame, so a single-frame tap reads as a needle and a held jump as a plateau.
- */
-function drawJumpTimeline(
-  ctx: CanvasRenderingContext2D,
-  samples: number[],
-  color: string,
-  width = JUMP_TIMELINE_WIDTH,
-  height = 34,
-) {
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = 'rgba(25, 52, 94, 0.55)';
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.25;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, height - 5.5);
-  ctx.lineTo(width, height - 5.5);
-  ctx.stroke();
-
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.9;
-  const offset = width - samples.length;
-  for (let i = 0; i < samples.length; i++) {
-    if (!samples[i]) continue;
-    ctx.fillRect(offset + i, 3, 1, height - 9);
-  }
-
-  ctx.globalAlpha = 0.7;
-  ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
-  ctx.globalAlpha = 1;
 }

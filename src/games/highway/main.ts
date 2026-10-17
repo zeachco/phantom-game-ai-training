@@ -10,8 +10,8 @@ import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText } from '../../utilities/colors';
-import { drawControlAxes } from '../../utilities/driveIndicators';
+import { contrastText, getColorScale } from '../../utilities/colors';
+import { drawGamepadControls } from '../../utilities/driveIndicators';
 import {
   bindSidePanelToggle,
   createCanvas,
@@ -19,7 +19,8 @@ import {
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
-import { GamePad } from '../../utilities/inputs/Gamepad';
+import { bindFollowKeys } from '../../utilities/followKeys';
+import { createScoreBoard } from '../../utilities/scoreBoard';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
@@ -27,7 +28,7 @@ import { config } from './classes/Config';
 import { DeathRay } from './classes/DeathRay';
 import { Road } from './classes/Road';
 import { ControlType } from './types';
-import { createScoreBoard, defaultState, mixedColor } from './utilities';
+import { defaultState, mixedColor, scoreEntries } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -55,7 +56,6 @@ export default async (state: typeof defaultState) => {
 
   carCanvas.width = 200;
 
-  const followPad = new GamePad(new Map());
   /** 0 follows the best score overall, 1-9 the best car of that brain layer */
   let follow: number | 'mixed' = 0;
   /** world y mapped to the follow line, it lerps so target switches animate */
@@ -251,6 +251,13 @@ export default async (state: typeof defaultState) => {
     armReset(btn, value, () => setFollow(value));
   });
   setFollow(0);
+  // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
+  // backquote the mixed brain
+  bindFollowKeys({
+    digit: (layer) => setFollow(layer),
+    all: () => setFollow(0),
+    mixed: () => setFollow('mixed'),
+  });
 
   // the brain preview lives in the panel, it grows into whatever is left
   const netWrap = document.createElement('div');
@@ -393,12 +400,6 @@ export default async (state: typeof defaultState) => {
         lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, 1 - scoreRatio) /
         divider;
 
-      console.debug(
-        `#${l} Gen-${savedModel?.version} Mutation ${
-          Math.round(mutationTarget * 10000000) / 100000
-        }% | Score: ${Math.round(layerOriginScore)} `,
-      );
-
       let isSaveCompatible = true;
 
       for (let i = 0; i <= carsNbForThisLayer; i++) {
@@ -418,12 +419,10 @@ export default async (state: typeof defaultState) => {
 
           try {
             if (isSaveCompatible) car.brain.mutate(savedModel);
-          } catch (err) {
+          } catch {
+            // the saved brain no longer fits the current sensors: this car
+            // keeps the constructor's random brain and starts fresh
             isSaveCompatible = false;
-            console.error(
-              `Unable to mutate existing brain #${car.brain.id}.\nReset data with ${location.href}&clear=true`,
-              err.message,
-            );
           }
 
           car.label = [l, i].join('-');
@@ -454,22 +453,11 @@ export default async (state: typeof defaultState) => {
       config.MIXED_EXPERTS_PER_LAYER,
     );
 
-    if (experts.length < config.MIXED_MIN_EXPERTS) {
-      console.debug(
-        `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${experts.length} available`,
-      );
-      return;
-    }
+    if (experts.length < config.MIXED_MIN_EXPERTS) return;
 
     const savedModel = state.sortedMixed[MIXED_LEVELS]?.[0];
     const divider = (savedModel?.version > 10 ? savedModel.version : 10) / 10;
     const mutationTarget = config.MIXED_MAX_MUTATION_LVL / divider;
-
-    console.debug(
-      `🧭 Gen-${savedModel?.version ?? 0} Mutation ${
-        Math.round(mutationTarget * 10000) / 100
-      }% | ${experts.length} experts: ${expertSlotIds(experts).join(', ')}`,
-    );
 
     let isSaveCompatible = true;
     const carsNb = Math.max(config.MIXED_CARS, config.MIXED_MIN_CARS);
@@ -531,11 +519,6 @@ export default async (state: typeof defaultState) => {
   loop.play((_es, _dt) => {
     const now = performance.now();
     frameMeter.tick(now);
-    if (followPad.once('Space')) setFollow(0);
-    for (let digit = 0; digit <= 9; digit++) {
-      if (followPad.once(`Digit${digit}`))
-        setFollow(digit === 0 ? 'mixed' : digit);
-    }
     ray.update();
     for (let i = 0; i < state.traffic.length; i++) {
       state.traffic[i].update(road.borders, noTraffic, deathRays);
@@ -618,7 +601,17 @@ export default async (state: typeof defaultState) => {
     // HUDs: the scoreboard floats at the stage's left edge, the cockpit mimics
     // the followed car; both only touch the DOM on a HUD tick.
     if (domUpdateDue) {
-      scoreBoard.update(state);
+      scoreBoard.update(
+        {
+          text: `${state.living}/${state.sortedCars.length} cars`,
+          color: getColorScale(
+            state.sortedCars.length
+              ? state.living / state.sortedCars.length
+              : 0,
+          ),
+        },
+        scoreEntries(state),
+      );
       steerOverlay.style.setProperty(
         '--hud-color',
         camTarget?.color || '#c4c4c4',
@@ -628,13 +621,11 @@ export default async (state: typeof defaultState) => {
     if (camTarget) {
       const c = camTarget.controls;
       if (controlCtx)
-        drawControlAxes(
-          controlCtx,
-          c.left,
-          c.right,
-          c.forward - c.reverse,
-          camTarget.color,
-        );
+        drawGamepadControls(controlCtx, {
+          x: c.right - c.left,
+          y: c.forward - c.reverse,
+          color: camTarget.color,
+        });
       if (domUpdateDue) updateBrainStats(camTarget);
     }
 
@@ -728,18 +719,14 @@ export default async (state: typeof defaultState) => {
         layerColor(bestLayerNb, config.MAX_NETWORK_LAYERS),
         bestLayerNb,
       );
-      console.log(`Death car is layer ${bestLayerNb}`);
       state.player.brain.mutationFactor = 0;
       state.player.brain.mutationIndex = 0;
       try {
         state.player.brain.mutate(deathCarModel);
         state.cars.push(state.player);
-      } catch (err) {
-        // an old save with a different sensor count would otherwise kill the run
-        console.error(
-          `Death car model does not fit the current sensors, skipping it.\nReset data with ${location.href}&clear=true`,
-          err.message,
-        );
+      } catch {
+        // an old save with a different sensor count would otherwise kill the
+        // run: the death car is skipped and the run continues without it
         state.player = undefined;
       }
     }

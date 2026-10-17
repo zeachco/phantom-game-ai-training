@@ -2,7 +2,7 @@ import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import { layerColor } from '../../utilities/ai/colors';
-import { getColorScale } from '../../utilities/colors';
+import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { config } from './classes/Config';
 import { Player } from './classes/Player';
 import type { Tower } from './classes/Tower';
@@ -144,37 +144,17 @@ export function foldScores(scores: GroupScores, newSeed: number): void {
   scores.seed = 0;
 }
 
-const FH = 12;
-const TL = 0;
-/** the DOM seed selector owns the top-left corner, the board starts below it */
-const BOARD_TOP = 44;
-let gradient: CanvasGradient | undefined;
-
-/** the board rows are rebuilt in place every tick, no new array per frame */
-const displayedScorePlayers: (Player | Group)[] = [];
-
-function drawGradient(ctx: CanvasRenderingContext2D, x, y, w, h) {
-  if (!gradient) {
-    gradient = ctx.createLinearGradient(0, 0, w, 0);
-    gradient.addColorStop(0, '#333');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  }
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, w, h);
-}
-
-export function drawScores(
-  state: typeof defaultState,
-  ctx: CanvasRenderingContext2D,
-) {
-  // Ghosts are frozen dead records: a ghost is only saved when the record
-  // holder dies, and it stays hidden while a board player already shows that
-  // score, so the leader is never doubled by its own ghost.
+/**
+ * The shared left scoreboard rows, best first: frozen group ghosts plus the
+ * live players, current tower only. Running players use their live score,
+ * ghosts the frozen dead record; a ghost stays hidden while a board player
+ * already shows that score, so the leader is never doubled by its own ghost.
+ */
+export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
+  const entries: (Player | Group)[] = [];
   const topPlayers = state.sortedPlayers;
   const topCount = Math.min(topPlayers.length, config.SCORES_NB);
-  displayedScorePlayers.length = 0;
-  for (let g = 0; g < state.groups.length; g++) {
-    const group = state.groups[g];
+  for (const group of state.groups) {
     if (group.ghostScore <= 0) continue;
     let shown = false;
     for (let i = 0; i < topCount; i++) {
@@ -183,48 +163,23 @@ export function drawScores(
         break;
       }
     }
-    if (!shown) displayedScorePlayers.push(group);
+    if (!shown) entries.push(group);
   }
-  for (let i = 0; i < topCount; i++) displayedScorePlayers.push(topPlayers[i]);
-  displayedScorePlayers.sort((a, b) => {
-    // Current tower only: running players use their live score, ghosts use the
-    // frozen dead record. Previous seeds and the cross-seed total never
-    // take part in scoreboard ordering.
+  for (let i = 0; i < topCount; i++) entries.push(topPlayers[i]);
+  entries.sort((a, b) => {
     const scoreA = a instanceof Player ? (a.brain?.score ?? 0) : a.ghostScore;
     const scoreB = b instanceof Player ? (b.brain?.score ?? 0) : b.ghostScore;
     return scoreB - scoreA;
   });
 
-  drawGradient(
-    ctx,
-    0,
-    BOARD_TOP,
-    125,
-    (displayedScorePlayers.length + 2) * FH,
-  );
-
-  ctx.fillStyle = getColorScale(
-    Math.min(1, state.living / Math.max(1, state.population)),
-  );
-  ctx.font = `bold ${FH}px serif`;
-  ctx.textAlign = 'left';
-  ctx.fillText(
-    `${state.living}/${state.population}`,
-    TL,
-    BOARD_TOP + FH * 1.25,
-  );
-
-  displayedScorePlayers.forEach((ref, index) => {
+  return entries.map((ref): ScoreBoardRow => {
     if (ref instanceof Player) {
-      if (ref === state.human) {
-        ctx.fillStyle = ref.damaged ? '#def' : ref.color;
-        ctx.fillText(
-          `🕹 ${ref.label} ${Math.round(ref.brain?.score ?? 0)}`,
-          TL,
-          BOARD_TOP + FH * 2.25 + index * FH,
-        );
-        return;
-      }
+      if (ref === state.human)
+        return {
+          emoji: '🕹',
+          text: `${ref.label} ${Math.round(ref.brain?.score ?? 0)}`,
+          color: ref.damaged ? '#def' : ref.color,
+        };
       const group = state.groups.find(
         (g) =>
           g.key ===
@@ -237,31 +192,25 @@ export function drawScores(
       const groupHigh = group?.scores.seed || 0;
       const leads =
         groupHigh > 0 && (ref.brain?.score ?? 0) >= groupHigh - Number.EPSILON;
-      let emoji = '';
-      if (leads) {
-        emoji = ref.damaged ? '🏆' : '💚';
-      } else {
-        emoji = ref.damaged ? '💀' : '💜';
-      }
-
-      ctx.fillStyle = ref.damaged ? '#def' : ref.color;
-      ctx.fillText(
-        `${emoji} ${ref.label} ${Math.round(ref.brain?.score ?? 0)}`,
-        TL,
-        BOARD_TOP + FH * 2.25 + index * FH,
-      );
-    } else {
-      ctx.fillStyle = ref.isMixed
-        ? config.MIXED_COLOR
-        : layerColor(ref.layer, config.MAX_NETWORK_LAYERS);
-
-      const emoji = '👻';
-      const name = brainId(ref.layer, undefined);
-      ctx.fillText(
-        `${emoji} ${name} ${Math.round(ref.ghostScore)}`,
-        TL,
-        BOARD_TOP + FH * 2.25 + index * FH,
-      );
+      const emoji = leads
+        ? ref.damaged
+          ? '🏆'
+          : '💚'
+        : ref.damaged
+          ? '💀'
+          : '💜';
+      return {
+        emoji,
+        text: `${ref.label} ${Math.round(ref.brain?.score ?? 0)}`,
+        color: ref.damaged ? '#def' : ref.color,
+      };
     }
+    return {
+      emoji: '👻',
+      text: `${brainId(ref.layer, undefined)} ${Math.round(ref.ghostScore)}`,
+      color: ref.isMixed
+        ? config.MIXED_COLOR
+        : layerColor(ref.layer, config.MAX_NETWORK_LAYERS),
+    };
   });
 }
