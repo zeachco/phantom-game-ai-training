@@ -237,12 +237,8 @@ export function hydrateExperts(
         return;
       }
       const expert = NeuralNetwork.hydrate(saved);
-      if (expert.inputCount !== inputNb || expert.outputCount !== outputNb) {
-        console.debug(
-          `🧭 Skipping expert ${expert.id}, ${expert.inputCount}/${expert.outputCount} does not fit ${inputNb}/${outputNb}`,
-        );
+      if (expert.inputCount !== inputNb || expert.outputCount !== outputNb)
         return;
-      }
       experts.push(expert);
     });
   });

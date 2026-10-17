@@ -181,11 +181,9 @@ export class ClimbRace {
       player.brain.mutationFactor = this.#slotMutation(group, slot);
       try {
         player.brain.mutate(source.brain);
-      } catch (err) {
-        console.error(
-          `Line ${group.layer} save does not fit the current sensors, starting fresh.\nReset data with ${location.href}&clear=true`,
-          err instanceof Error ? err.message : err,
-        );
+      } catch {
+        // the saved brain no longer fits the current sensors: this player keeps
+        // the constructor's random brain and starts fresh
       }
     } else if (this.#isExplorerSlot(group, slot) && player.brain) {
       // explorers keep the constructor's random brain: nothing to mutate
@@ -207,14 +205,29 @@ export class ClimbRace {
       outputCount,
       config.MIXED_EXPERTS_PER_LAYER,
     );
-    if (hydrated.length < config.MIXED_MIN_EXPERTS) {
-      console.debug(
-        `🧭 Mixed brain needs ${config.MIXED_MIN_EXPERTS} trained brains, ${hydrated.length} available`,
-      );
-      return this.#experts;
-    }
+    if (hydrated.length < config.MIXED_MIN_EXPERTS) return this.#experts;
     this.#experts = hydrated;
+    this.#invalidateStaleMixed();
     return this.#experts;
+  }
+
+  /** A mixed champion is only as valid as the expert library it was trained
+   *  against. When a regular layer promotes a new champion the library grows
+   *  and the saved selector routes to slots that no longer exist: drop the
+   *  champion so the group starts fresh instead of failing at every respawn. */
+  #invalidateStaleMixed() {
+    const champion = this.state.sortedMixed[MIXED_LEVELS]?.[0];
+    if (!champion) return;
+    const levels = champion.levels || [];
+    const width = levels.length
+      ? levels[levels.length - 1].weights?.[0]?.length
+      : undefined;
+    const savedIds = (champion.expertIds || []).join();
+    if (
+      width !== this.#experts.length ||
+      (savedIds && savedIds !== expertSlotIds(this.#experts).join())
+    )
+      this.state.sortedMixed[MIXED_LEVELS] = [];
   }
 
   #buildPools() {
@@ -304,7 +317,7 @@ export class ClimbRace {
       ? this.state.sortedMixed
       : this.state.sortedModels;
     if (group.isMixed) {
-      saves[group.layer] = [brain];
+      saves[MIXED_LEVELS] = [brain];
       this.#refreshExperts();
     } else {
       // hall of fame: a rolling window of the recent lines, newest first.
@@ -379,7 +392,7 @@ export class ClimbRace {
     this.groups[groupIndex] = group;
     this.#pendingSaves.delete(oldGroup);
 
-    if (group.isMixed) this.state.sortedMixed[group.layer] = [];
+    if (group.isMixed) this.state.sortedMixed[MIXED_LEVELS] = [];
     else this.state.sortedModels[group.layer] = [];
     if (!group.isMixed) this.#refreshExperts();
 

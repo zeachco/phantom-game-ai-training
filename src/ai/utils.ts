@@ -218,9 +218,7 @@ export function fileUtilities(
       'mutationFactor',
       'score',
     ];
-    const label = `${models.length}x ${kind} ${layers}-${models[0]?.version}`;
     const diff = olds[0] ? models[0].score - olds[0].score : models[0].score;
-    const score = `${models[0].score.toFixed(4)} ${diff.toFixed(10)}`;
     if (diff < 0) {
       writeModels(
         namespace,
@@ -235,7 +233,6 @@ export function fileUtilities(
         diff,
         date: new Date(),
       }));
-      console.info(`👍 ${label} scores ${score}`);
       if (writeModels(namespace, save)) onSaved?.(namespace, save);
     }
   }

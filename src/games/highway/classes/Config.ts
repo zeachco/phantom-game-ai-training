@@ -111,9 +111,6 @@ class Config {
       this.CARS_PER_LAYERS[layer] = Math.round(
         (give / totalScore) * this.CAR_NB + 2,
       );
-      console.log(
-        `set layer ${layer} with ${this.CARS_PER_LAYERS[layer]} cars`,
-      );
     });
   }
 }
