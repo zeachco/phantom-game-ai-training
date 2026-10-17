@@ -4,8 +4,9 @@
  * Base models flow down: at boot (and via the "Load base models" buttons)
  * the best community-submitted brain per group is fetched from the server
  * and written to localStorage; there is no bundled preset anymore. Trained
- * brains flow up: whenever a group's top model beats the base reference score
- * for that group, it is submitted once, so the next visitors can start from it.
+ * brains flow up: whenever a group's top model beats the server's current
+ * best for that group — or the server has no model for that group yet — it
+ * is submitted once, so the next visitors can start from it.
  */
 import { showToast } from '../utilities/toast';
 import type { ModelsByLayerCount } from './utils';
@@ -73,9 +74,9 @@ function finiteScore(value: unknown): number | undefined {
 
 /**
  * Best submitted brain per group key, or null when the server is
- * unreachable, answers non-OK, or has nothing for this game yet. Each group
- * keeps only its top-scoring model — that is what a fresh visitor should
- * start from.
+ * unreachable or answers non-OK. An empty record means the server answered
+ * but has no (usable) model for this game yet. Each group keeps only its
+ * top-scoring model — that is what a fresh visitor should start from.
  */
 export async function fetchBaseModels(
   game: string,
@@ -99,7 +100,7 @@ export async function fetchBaseModels(
     data && typeof data === 'object'
       ? (data as { models?: unknown }).models
       : undefined;
-  if (!Array.isArray(docs) || !docs.length) return null;
+  if (!Array.isArray(docs) || !docs.length) return {};
   const best: Record<string, { score: number; model: unknown }> = {};
   for (const raw of docs) {
     if (!raw || typeof raw !== 'object') continue;
@@ -120,7 +121,6 @@ export async function fetchBaseModels(
     if (!best[group] || score > best[group].score)
       best[group] = { score, model };
   }
-  if (!Object.keys(best).length) return null;
   return Object.fromEntries(
     Object.entries(best).map(([group, entry]) => [group, [entry.model]]),
   );
@@ -129,7 +129,12 @@ export async function fetchBaseModels(
 const baseKey = (game: string): string => `phantom_base_${game}`;
 const submittedKey = (game: string): string => `phantom_submitted_${game}`;
 
-/** Reference scores the last base load saw (server or preset), per group key. */
+/**
+ * The server snapshot: the best score known per group key, from the last
+ * successful server query or successful submit. `{}` is a valid snapshot —
+ * the server was reachable and held nothing (yet), which is exactly the
+ * state where a first submit is needed.
+ */
 export function recordBaseScores(
   game: string,
   scores: Record<string, number>,
@@ -165,11 +170,12 @@ function scoresByGroup(
 
 /**
  * Loads the base models from the server and writes them to localStorage.
- * There is no bundled preset fallback: when the server is unreachable or has
- * nothing for this game, the visitor's own localStorage saves are left as-is
- * and `written` is empty. `onlyMissing` skips groups the visitor already has
- * a save for, which is what the boot call uses so local training is never
- * overwritten.
+ * There is no bundled preset fallback: when the server is unreachable, the
+ * visitor's own localStorage saves are left as-is, no snapshot is recorded,
+ * and `written` is empty. A reachable-but-empty server records an empty
+ * snapshot (so first submits are not blocked) but writes nothing. `onlyMissing`
+ * skips groups the visitor already has a save for, which is what the boot
+ * call uses so local training is never overwritten.
  */
 export async function loadBaseModels(
   game: string,
@@ -177,8 +183,9 @@ export async function loadBaseModels(
   onlyMissing = false,
 ): Promise<{ source: 'server' | 'none'; written: string[] }> {
   const models = await fetchBaseModels(game);
-  if (!models) return { source: 'none', written: [] };
+  if (models === null) return { source: 'none', written: [] };
   recordBaseScores(game, scoresByGroup(models));
+  if (!Object.keys(models).length) return { source: 'none', written: [] };
   const toImport = onlyMissing
     ? Object.fromEntries(
         Object.entries(models).filter(([key]) => !localStorage.getItem(key)),
@@ -289,9 +296,12 @@ function enqueue(item: Pending): void {
           backoffUntil = 0;
           backoffStep = 0;
           recordSubmittedSig(item.game, item.sig);
-          console.info(
-            `☁️ submitted ${item.group} score ${item.score.toFixed(4)} to the server`,
+          const snapshot = baseScores(item.game);
+          snapshot[item.group] = Math.max(
+            finiteScore(snapshot[item.group]) ?? item.score,
+            item.score,
           );
+          recordBaseScores(item.game, snapshot);
           showToast(
             `☁️ Uploaded ${item.group} to the server · score ${item.score.toFixed(2)}`,
             { tone: 'success' },
@@ -317,12 +327,26 @@ function enqueue(item: Pending): void {
     .catch(() => undefined);
 }
 
+function removeSubmittedSig(game: string, sig: string): void {
+  const sigs = readSubmittedSigs(game);
+  localStorage.setItem(submittedKey(game), JSON.stringify(sigs.filter((s) => s !== sig)));
+}
+
 function consider(game: string, group: string, item: Pending): void {
-  // Re-validate on the way in: the base may have moved, or the signature
-  // may have been recorded in the meantime.
-  const base = finiteScore(baseScores(game)[group]);
-  if (base === undefined || item.score <= base) return;
-  if (readSubmittedSigs(game).includes(item.sig)) return;
+  // Re-validate on the way in: the server snapshot may have moved, or the
+  // signature may have been recorded in the meantime.
+  const serverBest = finiteScore(baseScores(game)[group]);
+  if (readSubmittedSigs(game).includes(item.sig)) {
+    if (serverBest !== undefined && serverBest >= item.score) return;
+    // The server no longer holds this model (e.g. the DB was reset): the
+    // recorded signature is stale, drop it so the model can go back up.
+    removeSubmittedSig(game, item.sig);
+  } else if (serverBest !== undefined && item.score <= serverBest) {
+    return; // doesn't beat what the server already has
+  }
+  // serverBest === undefined here means either "never queried" or "queried
+  // and the server has nothing for this group yet": both are legitimate
+  // first-submit states, so the model goes up.
   if (inFlightSigs.has(item.sig)) return;
   const k = pairKey(game, group);
   latestPending.set(k, item);

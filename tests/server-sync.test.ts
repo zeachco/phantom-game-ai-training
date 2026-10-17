@@ -164,7 +164,7 @@ test('fetchBaseModels keeps the best model per group, ignores foreign groups', a
   });
 });
 
-test('fetchBaseModels gives up on errors, non-OK answers and empty lists', async () => {
+test('fetchBaseModels gives up on errors and non-OK answers, but a reachable-empty server is a valid (empty) answer', async () => {
   await withStorage(makeStorage().storage as Storage, async () => {
     await withFetch(
       () => {
@@ -183,7 +183,24 @@ test('fetchBaseModels gives up on errors, non-OK answers and empty lists', async
     await withFetch(
       () => json({ count: 0, models: [] }),
       async () => {
-        expect(await fetchBaseModels('cave')).toBeNull();
+        expect(await fetchBaseModels('cave')).toEqual({});
+      },
+    );
+  });
+});
+
+test('loadBaseModels records an empty snapshot for a reachable-empty server', async () => {
+  const { store, storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    await withFetch(
+      () => json({ count: 0, models: [] }),
+      async () => {
+        const res = await loadBaseModels('cave', fileUtilities('cave'));
+        expect(res.source).toBe('none');
+        expect(res.written).toEqual([]);
+        // the server was queried and held nothing: a valid empty snapshot
+        expect(store.get('phantom_base_cave')).toBe('{}');
+        expect(baseScores('cave')).toEqual({});
       },
     );
   });
@@ -304,7 +321,7 @@ test('makeSubmitChecker submits a beating group once, with the client id', async
   });
 });
 
-test('makeSubmitChecker stays quiet without a base', async () => {
+test('makeSubmitChecker bootstraps when the server has no reference yet', async () => {
   const { storage } = makeStorage();
   await withStorage(storage as Storage, async () => {
     let calls = 0;
@@ -315,10 +332,49 @@ test('makeSubmitChecker stays quiet without a base', async () => {
       },
       async () => {
         quickPace();
+        // a fresh visitor never queried the server: the first save goes up
         const checker = makeSubmitChecker('cave');
-        checker('cave_9', [brain(150)]); // no base recorded at all
+        checker('cave_9', [brain(150)]);
         await flush();
-        expect(calls).toBe(0);
+        expect(calls).toBe(1);
+
+        checker('cave_9', [brain(150)]);
+        await flush();
+        expect(calls).toBe(1); // signature recorded, no resubmit
+      },
+    );
+  });
+});
+
+test('makeSubmitChecker resubmits when the server lost the model', async () => {
+  const { storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    let calls = 0;
+    await withFetch(
+      () => {
+        calls += 1;
+        return json({ created: 1, ids: [] });
+      },
+      async () => {
+        quickPace();
+        recordBaseScores('cave', { cave_5: 100 });
+        const checker = makeSubmitChecker('cave');
+        checker('cave_5', [brain(150)]);
+        await flush();
+        expect(calls).toBe(1);
+
+        // the server's best dropped below this model (e.g. the DB was reset):
+        // the recorded signature is stale and the model goes back up
+        recordBaseScores('cave', { cave_5: 80 });
+        checker('cave_5', [brain(150)]);
+        await flush();
+        expect(calls).toBe(2);
+
+        // the server holds at least this score again: quiet
+        recordBaseScores('cave', { cave_5: 150 });
+        checker('cave_5', [brain(150)]);
+        await flush();
+        expect(calls).toBe(2);
       },
     );
   });
