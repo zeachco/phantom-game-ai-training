@@ -34,7 +34,7 @@ Created lazily on first use (via `createIndex`).
 | Collection | Document |
 |---|---|
 | `clients` | `{ _id: uuid, firstSeen, lastSeen, userAgent }` |
-| `models`  | `{ _id: uuid, game, group, clientId, score?, model, submittedAt }` — `model` is the saved brain shape `{ kind, levels: [{ weights: number[][] }], ... }` (same as the localStorage saves) |
+| `models`  | `{ _id: uuid, game, group, clientId, score?, globalScore?, trackCount?, model, submittedAt }` — `model` is the saved brain shape `{ kind, levels: [{ weights: number[][] }], ... }` (same as the localStorage saves). Ranking is by `globalScore`, falling back to `score`. |
 | `scores`  | `{ _id: uuid, game, seed, group?, clientId, score, modelId?, verified, submittedAt, verifiedAt?, verifiedBy?, replayedScore? }` |
 
 `seed` is the normalized seed string (`"live"` for games without a seed),
@@ -50,8 +50,8 @@ All responses are JSON. `POST` bodies are JSON; the client id is read from the
 | `GET /healthz` | `{ ok, mongo: "unconfigured" \| "connecting" \| "connected" \| "error" }` |
 | `POST /api/clients` | Register/touch the client uuid (`{ firstSeen, lastSeen }` upsert) |
 | `GET /api/clients/me` | Fetch the client doc for the `x-client-id` header |
-| `POST /api/models` | Submit weight configs: `{ game, group, model \| models: [...], score? }` |
-| `GET /api/models?game=&group=&limit=` | List submitted weight configs (newest first) |
+| `POST /api/models` | Submit weight configs: `{ game, group, model \| models: [...], score?, globalScore?, trackCount? }` — accepted only when globalScore beats the group's stored best (circuit: trackCount >= 10) |
+| `GET /api/models?game=&group=&limit=&all=1` | Best model per variant (`game`+`group`, e.g. `circuit_4` = 4 hidden layers), ranked by `globalScore`. `all=1` returns the full ranked list (best first) instead |
 | `POST /api/scores` | Upload a score to compete: `{ game, score, seed?, group?, modelId? }` → stored with `verified: false` |
 | `GET /api/scores?game=&seed=&verified=&limit=` | Leaderboard, best score first (`verified=true\|false` filters) |
 | `POST /api/scores/:id/verify` | Verifier process confirms a score: `{ confirmedScore }` |
@@ -90,6 +90,15 @@ bun run reset:models circuit --dry-run
 
 Run it from `server/` so its `.env` (with `MONGO_URL`) is loaded, or pass
 `MONGO_URL=... bun server/scripts/reset-models.ts <game>` from the repo root.
+
+## Migrating legacy models
+
+To backfill `globalScore` on legacy documents where it is not yet present:
+
+```sh
+cd server
+bun run migrate:models [--dry-run]
+```
 
 ## Deployment
 

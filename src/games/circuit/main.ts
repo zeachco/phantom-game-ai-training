@@ -27,11 +27,15 @@ import {
   clearScoreRecords,
   scoreBoardRows,
   type defaultState,
+  globalRecordForGroup,
 } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
-const io = fileUtilities('circuit', makeSubmitChecker('circuit'));
+const io = fileUtilities(
+  'circuit',
+  makeSubmitChecker('circuit', { globalScore: globalRecordForGroup }),
+);
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 

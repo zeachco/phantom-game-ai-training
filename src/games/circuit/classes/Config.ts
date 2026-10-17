@@ -6,6 +6,7 @@ export const isDemo =
   typeof window !== 'undefined' && location.href.includes('demo=true');
 
 export function likelyLagsOnHeavyJs(): boolean {
+  if (typeof window === 'undefined') return true;
   if (isDemo) return true;
   const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
   const memory =
@@ -130,7 +131,8 @@ class Config {
   public CAR_FRICTION = 0.005;
   /** top speed in u/f */
   public CAR_MAX_SPEED = 9;
-  public CLEAR_STORAGE = /clear/.test(window.location.href);
+  public CLEAR_STORAGE =
+    typeof window !== 'undefined' && /clear/.test(window.location.href);
   /** leaving the road kills; score comes from claiming checkpoints */
 
   /** optional browser cap while a human is actively being followed */

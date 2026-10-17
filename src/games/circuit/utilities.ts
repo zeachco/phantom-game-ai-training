@@ -143,6 +143,58 @@ export function foldScores(scores: GroupScores, newSeed: number) {
   scores.seed = 0;
 }
 
+/** The cross-track record of a saved score set: sum of the frozen per-seed
+ *  bests plus the live best on the current seed, and the number of distinct
+ *  tracks that total covers. The current seed is only counted when it has
+ *  not been folded into history yet. */
+export function globalRecordFromScores(scores: {
+  current: number;
+  seed: number;
+  history: Record<string, number>;
+}): { globalScore: number; trackCount: number } {
+  let globalScore = 0;
+  for (const value of Object.values(scores.history)) globalScore += value;
+  const currentKey = String(scores.current);
+  let trackCount = Object.keys(scores.history).length;
+  if (scores.history[currentKey] === undefined) {
+    trackCount += 1;
+    globalScore += scores.seed;
+  }
+  return { globalScore, trackCount };
+}
+
+/** globalRecordFromScores read from localStorage for a server group key
+ *  like 'circuit_3' or 'circuit_mixed_2'; null when the record is missing
+ *  or corrupt. */
+export function globalRecordForGroup(
+  groupKey: string,
+): { globalScore: number; trackCount: number } | null {
+  const suffix = groupKey.startsWith('circuit_')
+    ? groupKey.slice('circuit_'.length)
+    : '';
+  if (!suffix) return null;
+  let scores: { current?: unknown; seed?: unknown; history?: unknown } | null =
+    null;
+  try {
+    scores = JSON.parse(
+      localStorage.getItem(`circuit_score_${suffix}`) || 'null',
+    );
+  } catch {
+    scores = null;
+  }
+  if (!scores || typeof scores !== 'object') return null;
+  if (typeof scores.current !== 'number' || typeof scores.seed !== 'number')
+    return null;
+  if (!scores.history || typeof scores.history !== 'object') return null;
+  return globalRecordFromScores(
+    scores as {
+      current: number;
+      seed: number;
+      history: Record<string, number>;
+    },
+  );
+}
+
 /**
  * The shared left scoreboard rows, best first: frozen group ghosts plus the
  * live cars, current track only. Running cars use their live score, ghosts

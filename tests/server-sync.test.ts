@@ -152,13 +152,58 @@ test('fetchBaseModels keeps the best model per group, ignores foreign groups', a
         return json({ count: docs.length, models: docs });
       },
       async () => {
-        const found = (await fetchBaseModels('cave')) as Record<
-          string,
-          { score: number }[]
-        >;
+        const found = await fetchBaseModels('cave');
+        expect(found).not.toBeNull();
+        if (!found) throw new Error('found is null');
         expect(Object.keys(found).sort()).toEqual(['cave_1', 'cave_5']);
-        expect(found.cave_5[0].score).toBe(150);
-        expect(found.cave_1[0].score).toBe(50);
+        expect(found.cave_5.score).toBe(150);
+        expect(found.cave_1.score).toBe(50);
+      },
+    );
+  });
+});
+
+test('fetchBaseModels ranks by globalScore over score, and falls back to score', async () => {
+  const docs = [
+    {
+      _id: '1',
+      game: 'circuit',
+      group: 'circuit_3',
+      score: 1000,
+      globalScore: 500,
+      model: brain(1000),
+      submittedAt: 1,
+    },
+    {
+      _id: '2',
+      game: 'circuit',
+      group: 'circuit_3',
+      score: 200,
+      globalScore: 2500,
+      model: brain(200),
+      submittedAt: 2,
+    },
+    {
+      _id: '3',
+      game: 'circuit',
+      group: 'circuit_5',
+      score: 800,
+      model: brain(800),
+      submittedAt: 3,
+    },
+  ];
+  await withStorage(makeStorage().storage as Storage, async () => {
+    await withFetch(
+      () => json({ count: docs.length, models: docs }),
+      async () => {
+        const found = await fetchBaseModels('circuit');
+        expect(found).not.toBeNull();
+        if (!found) throw new Error('found is null');
+        // higher globalScore (doc 2) wins even though doc 1 has higher score
+        expect(found.circuit_3.score).toBe(2500);
+        expect((found.circuit_3.model as { score: number }).score).toBe(200);
+        // fallback to doc.score when globalScore missing
+        expect(found.circuit_5.score).toBe(800);
       },
     );
   });
@@ -226,9 +271,8 @@ test('loadBaseModels prefers the server and records the base scores', async () =
         expect(res.written.sort()).toEqual(['cave_1', 'cave_5']);
         expect(baseScores('cave')).toEqual({ cave_1: 50, cave_5: 150 });
         expect(store.get('cave_5')).toBeDefined();
-        expect(store.get('phantom_base_cave')).toBe(
-          JSON.stringify({ cave_5: 150, cave_1: 50 }),
-        );
+        const baseStored = JSON.parse(store.get('phantom_base_cave') || '{}');
+        expect(baseStored).toEqual({ cave_1: 50, cave_5: 150 });
       },
     );
   });
@@ -512,6 +556,83 @@ test('fileUtilities onSaved submits a promoted model that beats the base', async
         io.saveModelList(5, [below]);
         await flush();
         expect(calls).toBe(1); // below the base: no submit
+      },
+    );
+  });
+});
+
+test('a 409-not-better submit is terminal: no retry, signature recorded, snapshot updated', async () => {
+  const { store, storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    let calls = 0;
+    await withFetch(
+      () => {
+        calls += 1;
+        return new Response(
+          JSON.stringify({ error: 'not-better', best: 9000 }),
+          { status: 409, headers: { 'content-type': 'application/json' } },
+        );
+      },
+      async () => {
+        quickPace();
+        recordBaseScores('cave', { cave_5: 100 });
+        const checker = makeSubmitChecker('cave');
+
+        checker('cave_5', [brain(150)]);
+        await flush(30);
+        expect(calls).toBe(1);
+
+        // wait past a delay to confirm no retry
+        await flush(50);
+        expect(calls).toBe(1);
+
+        // signature was recorded in phantom_submitted_cave
+        const sigs = JSON.parse(store.get('phantom_submitted_cave') || '[]');
+        expect(sigs.length).toBe(1);
+
+        // phantom_base_cave snapshot now holds 9000 for cave_5
+        expect(baseScores('cave').cave_5).toBe(9000);
+      },
+    );
+  });
+});
+
+test('makeSubmitChecker with a globalScore hook gates on MIN_TRACKS', async () => {
+  const { storage } = makeStorage();
+  await withStorage(storage as Storage, async () => {
+    const bodies: Record<string, unknown>[] = [];
+    await withFetch(
+      (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return json({ created: 1, ids: [] });
+      },
+      async () => {
+        quickPace();
+        recordBaseScores('circuit', { circuit_3: 100 });
+
+        // hook returning trackCount: 9 -> no POST at all
+        let hookReturn: { globalScore: number; trackCount: number } | null = {
+          globalScore: 5000,
+          trackCount: 9,
+        };
+        const checker = makeSubmitChecker('circuit', {
+          globalScore: () => hookReturn,
+        });
+
+        checker('circuit_3', [brain(150)]);
+        await flush();
+        expect(bodies.length).toBe(0);
+
+        // hook returning trackCount: 10 -> POST body contains globalScore: 5000 and trackCount: 10
+        hookReturn = { globalScore: 5000, trackCount: 10 };
+        checker('circuit_3', [brain(150)]);
+        await flush();
+        expect(bodies.length).toBe(1);
+        expect(bodies[0].game).toBe('circuit');
+        expect(bodies[0].group).toBe('circuit_3');
+        expect(bodies[0].score).toBe(150);
+        expect(bodies[0].globalScore).toBe(5000);
+        expect(bodies[0].trackCount).toBe(10);
       },
     );
   });

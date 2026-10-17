@@ -1,13 +1,14 @@
 {
   "name": "phantom-ai-training-server",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
-    "test": "bun test",
-    "reset:models": "bun scripts/reset-models.ts"
+    "migrate:models": "bun scripts/migrate-models.ts",
+    "reset:models": "bun scripts/reset-models.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "mongodb": "^7.7.0"

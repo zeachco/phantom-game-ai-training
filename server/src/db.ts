@@ -14,6 +14,8 @@ export interface ModelDoc {
   group: string; // storage key, e.g. "cave_5" or "circuit_mixed_2"
   clientId: string;
   score?: number;
+  globalScore?: number; // ranking key: cross-track aggregate (circuit) or the score itself; backfilled from score on legacy docs
+  trackCount?: number; // distinct tracks backing globalScore (circuit)
   model: Record<string, unknown>;
   submittedAt: number;
 }
@@ -63,7 +65,7 @@ export function getDb(): Promise<Db> {
       await client.connect();
       const db = client.db(DB_NAME);
       // createIndex materializes the collections and sets up the lookups.
-      await db.collection<ModelDoc>("models").createIndex({ game: 1, group: 1, submittedAt: -1 });
+      await db.collection<ModelDoc>("models").createIndex({ game: 1, group: 1, globalScore: -1, submittedAt: -1 });
       await db.collection<ScoreDoc>("scores").createIndex({ game: 1, verified: 1, score: -1 });
       await db.collection<ScoreDoc>("scores").createIndex({ clientId: 1, submittedAt: -1 });
       state = "connected";

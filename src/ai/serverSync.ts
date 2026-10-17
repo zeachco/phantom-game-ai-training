@@ -3,13 +3,17 @@
  *
  * Base models flow down: at boot (and via the "Load base models" buttons)
  * the best community-submitted brain per group is fetched from the server
- * and written to localStorage; there is no bundled preset anymore. Trained
- * brains flow up: whenever a group's top model beats the server's current
- * best for that group — or the server has no model for that group yet — it
- * is submitted once, so the next visitors can start from it.
+ * and written to localStorage; base models are ranked by globalScore (a
+ * cross-track aggregate for circuit, plain score elsewhere). Trained brains
+ * flow up: a submit only lands when its global score beats the group's stored
+ * best, and circuit submits need at least MIN_TRACKS distinct tracks backing
+ * the globalScore.
  */
 import { showToast } from '../utilities/toast';
 import type { ModelsByLayerCount } from './utils';
+
+// circuit eligibility gate — must match the server's MIN_CIRCUIT_TRACKS (server/src/acceptance.ts)
+export const MIN_TRACKS = 10;
 
 /** Live server (Railway, see .railway/railway.ts). The games are served from
  *  GitHub Pages, so these fetches cross origins (CORS is open on the server). */
@@ -80,7 +84,7 @@ function finiteScore(value: unknown): number | undefined {
  */
 export async function fetchBaseModels(
   game: string,
-): Promise<Record<string, ModelsByLayerCount[number][]> | null> {
+): Promise<Record<string, { score: number; model: unknown }> | null> {
   let res: Response;
   try {
     res = await timedFetch(
@@ -104,7 +108,12 @@ export async function fetchBaseModels(
   const best: Record<string, { score: number; model: unknown }> = {};
   for (const raw of docs) {
     if (!raw || typeof raw !== 'object') continue;
-    const doc = raw as { group?: unknown; score?: unknown; model?: unknown };
+    const doc = raw as {
+      group?: unknown;
+      score?: unknown;
+      globalScore?: unknown;
+      model?: unknown;
+    };
     const group = doc.group;
     const model = doc.model;
     if (typeof group !== 'string' || !group.startsWith(`${game}_`)) continue;
@@ -115,15 +124,14 @@ export async function fetchBaseModels(
     )
       continue;
     const score =
+      finiteScore(doc.globalScore) ??
       finiteScore(doc.score) ??
       finiteScore((model as { score?: unknown }).score) ??
       0;
     if (!best[group] || score > best[group].score)
       best[group] = { score, model };
   }
-  return Object.fromEntries(
-    Object.entries(best).map(([group, entry]) => [group, [entry.model]]),
-  );
+  return best;
 }
 
 const baseKey = (game: string): string => `phantom_base_${game}`;
@@ -153,21 +161,6 @@ export function baseScores(game: string): Record<string, number> {
   }
 }
 
-function scoresByGroup(
-  models: Record<string, unknown[]>,
-): Record<string, number> {
-  const scores: Record<string, number> = {};
-  for (const [group, list] of Object.entries(models)) {
-    let top = Number.NEGATIVE_INFINITY;
-    for (const model of list) {
-      const score = finiteScore((model as { score?: unknown } | null)?.score);
-      if (score !== undefined && score > top) top = score;
-    }
-    if (top > Number.NEGATIVE_INFINITY) scores[group] = top;
-  }
-  return scores;
-}
-
 /**
  * Loads the base models from the server and writes them to localStorage.
  * There is no bundled preset fallback: when the server is unreachable, the
@@ -184,24 +177,39 @@ export async function loadBaseModels(
 ): Promise<{ source: 'server' | 'none'; written: string[] }> {
   const models = await fetchBaseModels(game);
   if (models === null) return { source: 'none', written: [] };
-  recordBaseScores(game, scoresByGroup(models));
+  recordBaseScores(
+    game,
+    Object.fromEntries(Object.entries(models).map(([g, e]) => [g, e.score])),
+  );
   if (!Object.keys(models).length) return { source: 'none', written: [] };
-  const toImport = onlyMissing
-    ? Object.fromEntries(
-        Object.entries(models).filter(([key]) => !localStorage.getItem(key)),
-      )
-    : models;
+  const keys = onlyMissing
+    ? Object.keys(models).filter((key) => !localStorage.getItem(key))
+    : Object.keys(models);
+  const toImport: Record<string, unknown[]> = {};
+  for (const k of keys) {
+    toImport[k] = [models[k].model];
+  }
   return { source: 'server', written: io.importModels(toImport) };
 }
 
-/** Submits one brain to the server; resolves false on any failure. */
+export type SubmitResult =
+  | { ok: true; notBetter?: false; best?: undefined }
+  | { ok: false; notBetter: boolean; best: number };
+
+/** Submits one brain to the server. */
 export async function submitModel(
   game: string,
   group: string,
   model: ModelsByLayerCount[number],
   score: number,
-): Promise<boolean> {
+  globalScore?: number,
+  trackCount?: number,
+): Promise<SubmitResult> {
   try {
+    const payload: Record<string, unknown> = { game, group, model, score };
+    if (globalScore !== undefined) payload.globalScore = globalScore;
+    if (trackCount !== undefined) payload.trackCount = trackCount;
+
     const res = await timedFetch(
       `${SERVER_URL}/api/models`,
       {
@@ -210,22 +218,37 @@ export async function submitModel(
           'content-type': 'application/json',
           'x-client-id': clientId(),
         },
-        body: JSON.stringify({ game, group, model, score }),
+        body: JSON.stringify(payload),
       },
       SUBMIT_TIMEOUT_MS,
     );
-    return res.ok;
+    if (res.ok) return { ok: true };
+    if (res.status === 409) {
+      let best = 0;
+      try {
+        const data = await res.json();
+        if (typeof (data as { best?: unknown })?.best === 'number') {
+          best = (data as { best: number }).best;
+        }
+      } catch {
+        // default 0
+      }
+      return { ok: false, notBetter: true, best };
+    }
+    return { ok: false, notBetter: false, best: 0 };
   } catch {
-    return false;
+    return { ok: false, notBetter: false, best: 0 };
   }
 }
 
 function signature(
   group: string,
   model: { version?: number; mutationIndex?: number; score?: number },
+  globalScore?: number,
 ): string {
   const score = finiteScore(model.score) ?? 0;
-  return `${group}@${model.version ?? 0}:${model.mutationIndex ?? 0}:${score.toFixed(4)}`;
+  const gStr = `:g${(finiteScore(globalScore) ?? 0).toFixed(4)}`;
+  return `${group}@${model.version ?? 0}:${model.mutationIndex ?? 0}:${score.toFixed(4)}${gStr}`;
 }
 
 interface Pending {
@@ -233,6 +256,8 @@ interface Pending {
   group: string;
   model: ModelsByLayerCount[number];
   score: number;
+  globalScore?: number;
+  trackCount?: number;
   sig: string;
 }
 
@@ -286,25 +311,42 @@ function enqueue(item: Pending): void {
   chain = chain
     .then(async () => {
       try {
-        const ok = await submitModel(
+        const ranking = finiteScore(item.globalScore) ?? item.score;
+        const result = await submitModel(
           item.game,
           item.group,
           item.model,
           item.score,
+          item.globalScore,
+          item.trackCount,
         );
-        if (ok) {
+        if (result.ok) {
           backoffUntil = 0;
           backoffStep = 0;
           recordSubmittedSig(item.game, item.sig);
           const snapshot = baseScores(item.game);
           snapshot[item.group] = Math.max(
-            finiteScore(snapshot[item.group]) ?? item.score,
-            item.score,
+            finiteScore(snapshot[item.group]) ?? ranking,
+            ranking,
+          );
+          recordBaseScores(item.game, snapshot);
+          const toastMsg =
+            item.globalScore !== undefined
+              ? `☁️ Uploaded ${item.group} · global ${ranking.toFixed(2)}`
+              : `☁️ Uploaded ${item.group} · score ${item.score.toFixed(2)}`;
+          showToast(toastMsg, { tone: 'success' });
+        } else if (result.notBetter) {
+          recordSubmittedSig(item.game, item.sig);
+          const snapshot = baseScores(item.game);
+          snapshot[item.group] = Math.max(
+            finiteScore(snapshot[item.group]) ?? Number.NEGATIVE_INFINITY,
+            result.best,
+            ranking,
           );
           recordBaseScores(item.game, snapshot);
           showToast(
-            `☁️ Uploaded ${item.group} to the server · score ${item.score.toFixed(2)}`,
-            { tone: 'success' },
+            `☁️ Server already has a better ${item.group} · best ${result.best.toFixed(2)}`,
+            { tone: 'info' },
           );
         } else {
           backoffStep = Math.min(backoffStep + 1, 16);
@@ -329,19 +371,23 @@ function enqueue(item: Pending): void {
 
 function removeSubmittedSig(game: string, sig: string): void {
   const sigs = readSubmittedSigs(game);
-  localStorage.setItem(submittedKey(game), JSON.stringify(sigs.filter((s) => s !== sig)));
+  localStorage.setItem(
+    submittedKey(game),
+    JSON.stringify(sigs.filter((s) => s !== sig)),
+  );
 }
 
 function consider(game: string, group: string, item: Pending): void {
   // Re-validate on the way in: the server snapshot may have moved, or the
   // signature may have been recorded in the meantime.
+  const ranking = finiteScore(item.globalScore) ?? item.score;
   const serverBest = finiteScore(baseScores(game)[group]);
   if (readSubmittedSigs(game).includes(item.sig)) {
-    if (serverBest !== undefined && serverBest >= item.score) return;
+    if (serverBest !== undefined && serverBest >= ranking) return;
     // The server no longer holds this model (e.g. the DB was reset): the
     // recorded signature is stale, drop it so the model can go back up.
     removeSubmittedSig(game, item.sig);
-  } else if (serverBest !== undefined && item.score <= serverBest) {
+  } else if (serverBest !== undefined && ranking <= serverBest) {
     return; // doesn't beat what the server already has
   }
   // serverBest === undefined here means either "never queried" or "queried
@@ -366,6 +412,14 @@ function consider(game: string, group: string, item: Pending): void {
   enqueue(item);
 }
 
+export interface SubmitHooks {
+  /** Cross-track record for a group; when present the submit is ranked by
+   *  this aggregate and gated on MIN_TRACKS distinct tracks (circuit). */
+  globalScore?: (
+    group: string,
+  ) => { globalScore: number; trackCount: number } | null;
+}
+
 /**
  * onSaved hook for fileUtilities: when a group's top model beats the base
  * reference score for that group, it is submitted to the server once per
@@ -375,6 +429,7 @@ function consider(game: string, group: string, item: Pending): void {
  */
 export function makeSubmitChecker(
   game: string,
+  hooks?: SubmitHooks,
 ): (group: string, models: ModelsByLayerCount[number][]) => void {
   return (group, models) => {
     if (!Array.isArray(models) || !models.length) return;
@@ -383,12 +438,24 @@ export function makeSubmitChecker(
     );
     const topScore = finiteScore(top.score);
     if (topScore === undefined) return;
+
+    let globalScore: number | undefined;
+    let trackCount: number | undefined;
+    if (hooks?.globalScore) {
+      const record = hooks.globalScore(group);
+      if (!record || record.trackCount < MIN_TRACKS) return; // not eligible yet: too few distinct tracks
+      globalScore = record.globalScore;
+      trackCount = record.trackCount;
+    }
+
     consider(game, group, {
       game,
       group,
       model: top,
       score: topScore,
-      sig: signature(group, top),
+      globalScore,
+      trackCount,
+      sig: signature(group, top, globalScore),
     });
   };
 }
