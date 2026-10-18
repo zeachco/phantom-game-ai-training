@@ -36,7 +36,14 @@ test("isSavedModel accepts neural brains of any depth", () => {
   expect(isSavedModel(brain(9))).toBe(true);
 });
 
-test("isSavedModel accepts a mixed brain with expertIds", () => {
+test("isSavedModel accepts a mixed brain with string slot ids", () => {
+  const model = brain();
+  model.kind = "mixed";
+  model.expertIds = ["1.1", "2.1", "3.1"];
+  expect(isSavedModel(model)).toBe(true);
+});
+
+test("isSavedModel still tolerates numeric expertIds", () => {
   const model = brain();
   model.kind = "mixed";
   model.expertIds = [0, 1, 2];
@@ -64,6 +71,13 @@ test("isSavedModel rejects broken shapes", () => {
   const mixedNoExperts = brain();
   mixedNoExperts.kind = "mixed";
   expect(isSavedModel(mixedNoExperts)).toBe(false);
+
+  for (const bad of [[""], [null], [{}], ["1.1", ""]]) {
+    const mixed = brain();
+    mixed.kind = "mixed";
+    mixed.expertIds = bad;
+    expect(isSavedModel(mixed)).toBe(false);
+  }
 
   const weirdKind = brain();
   weirdKind.kind = "weird";

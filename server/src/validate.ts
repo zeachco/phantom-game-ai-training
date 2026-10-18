@@ -17,6 +17,10 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isSlotId(id: unknown): boolean {
+  return (typeof id === "string" && id.length > 0) || isFiniteNumber(id);
+}
+
 function isWeightMatrix(weights: unknown): boolean {
   if (!Array.isArray(weights) || weights.length === 0) return false;
   let rowLength = -1;
@@ -33,6 +37,8 @@ function isWeightMatrix(weights: unknown): boolean {
 // (see src/ai/Network.ts and compactModel() in src/ai/utils.ts):
 // { version, score, mutationFactor, mutationIndex, diff, date, kind,
 //   levels: [{ weights: number[][] }], expertIds? }
+// Mixed brains carry expertIds: string[] of "layer.rank" slot ids (see
+// expertSlotIds() in src/ai/Mixed.ts); finite numbers are tolerated too.
 export function isSavedModel(value: unknown): boolean {
   if (typeof value !== "object" || value === null) return false;
   const model = value as Record<string, unknown>;
@@ -58,7 +64,7 @@ export function isSavedModel(value: unknown): boolean {
     if (
       !Array.isArray(expertIds) ||
       expertIds.length === 0 ||
-      expertIds.some((id) => !isFiniteNumber(id))
+      expertIds.some((id) => !isSlotId(id))
     ) {
       return false;
     }

@@ -215,7 +215,7 @@ async function handleModels(
   const models = rawModels.filter(isSavedModel);
   if (models.length === 0) {
     throw badRequest(
-      'no valid brain found: send "model" or "models" with the saved shape { kind, levels: [{ weights: number[][] }] }',
+      'no valid brain found: send "model" or "models" with the saved shape { kind, levels: [{ weights: number[][] }], expertIds?: string[] (mixed) }',
     );
   }
   const score =
