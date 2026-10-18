@@ -42,7 +42,7 @@ function badRequest(message: string, extra?: Record<string, unknown>) {
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
+  'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
   'access-control-allow-headers': 'content-type, x-client-id',
   'access-control-max-age': '86400',
 };
@@ -180,6 +180,24 @@ async function handleModels(
       .toArray();
     const models = grouped.map((d) => (d as { doc: ModelDoc }).doc);
     return { count: models.length, models };
+  }
+
+  if (req.method === 'DELETE') {
+    // Delete every stored model for one { game, group } pair so the group can
+    // start over (and re-upload) from scratch.
+    const game = url.searchParams.get('game');
+    if (!isGame(game)) throw badRequest(`game must be one of: ${GAMES.join(', ')}`);
+    const group = (url.searchParams.get('group') ?? '').trim();
+    if (group.length === 0 || group.length > 64) {
+      throw badRequest(
+        'group is required (the storage key, e.g. "cave_5" or "circuit_mixed_2")',
+      );
+    }
+    const db = await getDb();
+    const result = await db
+      .collection<ModelDoc>('models')
+      .deleteMany({ game, group });
+    return { deleted: result.deletedCount };
   }
 
   // POST: submit one or more weight configurations.
@@ -379,6 +397,8 @@ async function handle(req: Request): Promise<Response> {
           "submit weight configs { game, group, model | models[], score?, globalScore?, trackCount? } — accepted only when globalScore beats the group's stored best (circuit: trackCount >= 10)",
         'GET /api/models?game=&group=&limit=&all=1':
           'best model per variant (game+group); all=1 returns the full ranked list',
+        'DELETE /api/models?game=&group=':
+          'delete every stored model for one { game, group } pair',
         'POST /api/scores':
           'upload a score { game, score, seed?, group?, modelId? }',
         'GET /api/scores?game=&seed=&verified=&limit=':
@@ -411,7 +431,10 @@ async function handle(req: Request): Promise<Response> {
     return json(doc ?? null);
   }
 
-  if (path === '/api/models' && (method === 'GET' || method === 'POST')) {
+  if (
+    path === '/api/models' &&
+    (method === 'GET' || method === 'POST' || method === 'DELETE')
+  ) {
     return json(
       await handleModels(req, url, body),
       method === 'POST' ? 201 : 200,
