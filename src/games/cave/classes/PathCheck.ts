@@ -9,6 +9,12 @@ export interface PathFix {
   angle: number;
 }
 
+/** landing-zone runout, in arc units: the extra clear span appended behind
+ *  a ramp's back slope (height / launch speed). A ball descending from the
+ *  lip keeps moving along the band after touchdown, so the zone keeps
+ *  that distance free of in-band columns before the next feature may sit */
+const LANDING_RUNOUT = 60;
+
 /**
  * The path guarantee: every stretch of the cave keeps a drivable line.
  * Runs once at construction, before any mesh is built, mutating the cached
@@ -106,7 +112,8 @@ export class PathCheck {
       // column inside the back slope plus a car length of run-out.
       if (cell.ramp) {
         const landingFrom = cell.ramp.centerS;
-        const landingTo = cell.ramp.centerS + cell.ramp.height / 0.35 + 60;
+        const landingTo =
+          cell.ramp.centerS + cell.ramp.height / 0.35 + LANDING_RUNOUT;
         for (const col of cell.columns) {
           if (
             col.centerS + col.halfLen > landingFrom &&
