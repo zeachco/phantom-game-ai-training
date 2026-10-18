@@ -110,10 +110,15 @@ export default async (state: CaveState) => {
   // Wireframe is opt-in: the V key toggles it for mesh debugging.
   let wireframe = false;
 
+  // ?path=1 draws the path check's validated drivable line (dev overlay)
+  const debugPath =
+    new URLSearchParams(location.search).get('path') === '1';
+
   const race = new CaveRace(state, io, seed, scene, {
     onSeedChanged: (nextSeed) => {
       location.hash = `cave=${nextSeed}`;
       state.cave?.setWireframe(wireframe);
+      if (debugPath) state.cave?.debugPath();
     },
   });
 
@@ -438,6 +443,7 @@ export default async (state: CaveState) => {
   // Build the training pools from the saved `cave_` models.
   race.initialize();
   state.cave?.setWireframe(wireframe);
+  if (debugPath) state.cave?.debugPath();
 
   // Rays are a spectator/debug aid: they appear while the camera follows an
   // AI ball and hide as soon as the player's own ball is followed.

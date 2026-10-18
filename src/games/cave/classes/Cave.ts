@@ -3,7 +3,7 @@ import { mulberry32 } from '../../../utilities/math';
 import caveWallTextureUrl from '../assets/cave-wall.jpg';
 import obstacleRockTextureUrl from '../assets/obstacle-rock.jpg';
 import { config } from './Config';
-import { ensureDrivablePath } from './PathCheck';
+import { PathCheck } from './PathCheck';
 import { type WallContact, WallSolid } from './WallSolid';
 
 /** plain 3D point, no allocation churn in the query hot paths */
@@ -274,7 +274,7 @@ export class Cave {
     };
 
     this.#generateControl(0);
-    ensureDrivablePath(
+    this.#pathCheck.run(
       this,
       config.SPAWN_OFFSET +
         config.GATES_PER_SEED * config.GATE_SPACING +
@@ -447,6 +447,11 @@ export class Cave {
   /** cached feature descriptors, one per CAVE_FEATURE_CELL, rebuilt on
    *  demand and trimmed with the meshed window like the floor profiles */
   #featureCells = new Map<number, FeatureCell>();
+
+  /** the path guarantee, run once in the constructor; its result feeds the
+   *  tests and the `?path=1` debug overlay */
+  #pathCheck = new PathCheck();
+  #debugPathGroup: THREE.Group | null = null;
 
   /** the depth factor, public for the HUD and the tests */
   public depthAt(s: number) {
@@ -1310,6 +1315,112 @@ export class Cave {
     return out;
   }
 
+  /** the path-check result: validated line samples, ramp extents, landing
+   *  zones and fixer spots, for tests and the debug overlay */
+  pathCheck() {
+    return this.#pathCheck;
+  }
+
+  /** Dev overlay behind `?path=1`: a bright line along the validated
+   *  drivable line, brackets over each ramp extent and landing zone, and red
+   *  ticks where the path fixer ran. Pure drawing: no gameplay, no AI
+   *  inputs, no mesh changes. */
+  debugPath() {
+    this.#removeDebugPath();
+    const line: number[] = [];
+    for (const s of this.#pathCheck.samples) {
+      const p = this.groundSpawn(s, 0);
+      line.push(p.x, p.y, p.z);
+    }
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(line, 3),
+    );
+    const lineMesh = new THREE.Line(
+      lineGeometry,
+      new THREE.LineBasicMaterial({ color: 0x00e5ff }),
+    );
+    lineMesh.frustumCulled = false;
+
+    // a bracket over a span: a floor line across it plus vertical ticks at
+    // each end, in one color
+    const bracket = (color: number, spans: [number, number][]) => {
+      const positions: number[] = [];
+      for (const [from, to] of spans) {
+        let prev = this.surface(from, Math.PI, { x: 0, y: 0, z: 0 });
+        prev.y *= config.CAVE_VERTICAL_SCALE;
+        for (let s = from + 10; s <= to + 0.01; s += 10) {
+          const next = this.surface(Math.min(s, to), Math.PI, {
+            x: 0,
+            y: 0,
+            z: 0,
+          });
+          next.y *= config.CAVE_VERTICAL_SCALE;
+          positions.push(prev.x, prev.y, prev.z, next.x, next.y, next.z);
+          prev = next;
+        }
+        for (const end of [from, to]) {
+          const p = this.surface(end, Math.PI, { x: 0, y: 0, z: 0 });
+          p.y *= config.CAVE_VERTICAL_SCALE;
+          positions.push(p.x, p.y, p.z, p.x, p.y + 10, p.z);
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(positions, 3),
+      );
+      return new THREE.LineSegments(
+        geometry,
+        new THREE.LineBasicMaterial({ color }),
+      );
+    };
+    const rampMesh = bracket(0x39ff14, this.#pathCheck.ramps);
+    const landingMesh = bracket(0xffd23f, this.#pathCheck.landings);
+
+    // a red tick on the floor where the fixer touched a cell
+    const fixPositions: number[] = [];
+    for (const fix of this.#pathCheck.fixes) {
+      const p = this.surface(fix.s, fix.angle, { x: 0, y: 0, z: 0 });
+      p.y *= config.CAVE_VERTICAL_SCALE;
+      fixPositions.push(p.x, p.y, p.z, p.x, p.y + 14, p.z);
+    }
+    const fixGeometry = new THREE.BufferGeometry();
+    fixGeometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(fixPositions, 3),
+    );
+    const fixMesh = new THREE.LineSegments(
+      fixGeometry,
+      new THREE.LineBasicMaterial({ color: 0xff2d2d }),
+    );
+    rampMesh.frustumCulled = false;
+    landingMesh.frustumCulled = false;
+    fixMesh.frustumCulled = false;
+
+    const group = new THREE.Group();
+    group.add(lineMesh, rampMesh, landingMesh, fixMesh);
+    this.#scene.add(group);
+    this.#debugPathGroup = group;
+  }
+
+  #removeDebugPath() {
+    const group = this.#debugPathGroup;
+    if (!group) return;
+    this.#scene.remove(group);
+    group.traverse((object) => {
+      if (
+        object instanceof THREE.Line ||
+        object instanceof THREE.LineSegments
+      ) {
+        object.geometry.dispose();
+        (object.material as THREE.Material).dispose();
+      }
+    });
+    this.#debugPathGroup = null;
+  }
+
   /** scratch frame, reused by every query so a frame allocates nothing */
   #qt: Pt = { x: 0, y: 0, z: 0 };
   #qn: Pt = { x: 0, y: 0, z: 0 };
@@ -1972,6 +2083,7 @@ export class Cave {
   /** dispose every chunk mesh and material, used when the whole cave is
    *  regenerated. The cave is not reusable after this. */
   dispose() {
+    this.#removeDebugPath();
     for (const chunk of [...this.#chunks.values()]) this.#removeChunk(chunk);
     this.#chunks.clear();
     this.#control.length = 0;

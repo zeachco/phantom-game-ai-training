@@ -83,6 +83,45 @@ test('the path guarantee keeps a drivable line on every seed', () => {
   }
 });
 
+test('the path check stores its validated line, ramp extents and fix spots', () => {
+  const scene = new Scene();
+  const terrain = cave(7, scene);
+  const check = terrain.pathCheck();
+  const maxS =
+    config.SPAWN_OFFSET +
+    config.GATES_PER_SEED * config.GATE_SPACING +
+    config.CAVE_FEATURE_CELL * 2;
+
+  // the validated line samples the band center across the whole validated range
+  expect(check.samples.length).toBeGreaterThan(0);
+  expect(check.samples[0]).toBe(0);
+  expect(check.samples[check.samples.length - 1]).toBeLessThanOrEqual(maxS);
+
+  // every ramp in the validated range carries a bracket extent and a landing
+  // span, and every span has a positive length
+  const cells = Math.ceil(maxS / config.CAVE_FEATURE_CELL) + 1;
+  let ramps = 0;
+  for (let i = 0; i < cells; i++) if (terrain.featureCell(i).ramp) ramps++;
+  expect(check.ramps.length).toBe(ramps);
+  expect(check.landings.length).toBe(ramps);
+  for (const [from, to] of check.ramps) expect(to).toBeGreaterThan(from);
+  for (const [from, to] of check.landings) expect(to).toBeGreaterThan(from);
+
+  // the fixer only touched cells on the driving band
+  for (const fix of check.fixes)
+    expect(angleDist(fix.angle, Math.PI)).toBeLessThan(Math.PI / 2);
+
+  // the overlay is pure drawing: it adds one group to the scene, redrawing
+  // replaces it, and dispose removes it
+  expect(scene.children.length).toBe(0);
+  terrain.debugPath();
+  expect(scene.children.length).toBe(1);
+  terrain.debugPath();
+  expect(scene.children.length).toBe(1);
+  terrain.dispose();
+  expect(scene.children.length).toBe(0);
+});
+
 test('a rewarding line exists: coins and platforms appear on the early cave', () => {
   const terrain = cave(7);
   let coinS = -1;
