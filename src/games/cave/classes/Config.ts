@@ -193,6 +193,11 @@ class Config {
   public COIN_PERMANENT_CAP = 1;
   /** score for collecting a coin */
   public COIN_SCORE = 1;
+  /** explicit score for the temporary boost a coin grants, added at pickup
+   *  alongside COIN_SCORE: half a gate's payout, still well under
+   *  GATE_SCORE, so taking coins is a direct choice, not a speed byproduct
+   */
+  public COIN_BOOST_REWARD = 5;
 
   // cave, a tube along a seeded 3D centerline, streamed in segments
   /** length of one streamed segment, the unit of streaming and of difficulty */

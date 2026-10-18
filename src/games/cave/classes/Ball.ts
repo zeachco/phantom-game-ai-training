@@ -343,7 +343,8 @@ export class Ball {
         config.COIN_PERMANENT_CAP,
         this.permanentBoost + config.COIN_PERMANENT_BONUS,
       );
-      if (this.useAI) this.brain.score += config.COIN_SCORE;
+      if (this.useAI)
+        this.brain.score += config.COIN_SCORE + config.COIN_BOOST_REWARD;
     }
     if (this.brain) this.#updateScore(cave);
     // the section gauge drains every frame and is refreshed on progress, so

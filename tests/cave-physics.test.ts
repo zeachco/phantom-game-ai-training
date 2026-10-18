@@ -162,6 +162,18 @@ describe('cave ball physics', () => {
     expect(ball.speed).toBeGreaterThan(config.BALL_MAX_SPEED);
   });
 
+  test('a collected coin pays its score plus the explicit boost reward', () => {
+    const cave = floor();
+    cave.coinUnder = (s: number) => (s > 150 ? { key: 1, influence: 1 } : null);
+    const ball = new Ball(spawn, ControlType.AI, config.BALL_MAX_SPEED, 't', 1);
+    ball.brain.process = () => [0, 1, 0]; // drive full forward, no jump
+    tick(ball, cave, 80); // reaches the coin, still far from any gate
+    expect(ball.s).toBeLessThan(config.GATE_SPACING);
+    expect(ball.brain.score).toBe(
+      config.COIN_SCORE + config.COIN_BOOST_REWARD,
+    );
+  });
+
   test('a gentle floor contact does not kill the ball, a hard impact does', () => {
     const cave = floor();
     const gentle = new Ball({ ...spawn, y: config.BALL_RADIUS + 0.01 });
