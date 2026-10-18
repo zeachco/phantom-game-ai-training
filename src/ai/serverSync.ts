@@ -136,6 +136,7 @@ export async function fetchBaseModels(
 
 const baseKey = (game: string): string => `phantom_base_${game}`;
 const submittedKey = (game: string): string => `phantom_submitted_${game}`;
+const syncKey = (game: string): string => `phantom_sync_${game}`;
 
 /**
  * The server snapshot: the best score known per group key, from the last
@@ -148,6 +149,23 @@ export function recordBaseScores(
   scores: Record<string, number>,
 ): void {
   localStorage.setItem(baseKey(game), JSON.stringify(scores));
+  stampSync(game);
+}
+
+/**
+ * Timestamp (ms) of the last successful server sync for a game: base load,
+ * upload, 409-not-better snapshot, remote reload or remote delete. Null when
+ * the client never talked to the server for this game.
+ */
+export function lastSyncAt(game: string): number | null {
+  const raw = localStorage.getItem(syncKey(game));
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function stampSync(game: string): void {
+  localStorage.setItem(syncKey(game), String(Date.now()));
 }
 
 export function baseScores(game: string): Record<string, number> {
@@ -190,6 +208,123 @@ export async function loadBaseModels(
     toImport[k] = [models[k].model];
   }
   return { source: 'server', written: io.importModels(toImport) };
+}
+
+/**
+ * Fetches the single best stored model of one group from the server.
+ * Null when the server is unreachable, errors, or holds no model for it.
+ */
+async function fetchGroupModel(
+  game: string,
+  group: string,
+): Promise<{ score: number; model: unknown } | null> {
+  let res: Response;
+  try {
+    res = await timedFetch(
+      `${SERVER_URL}/api/models?game=${encodeURIComponent(game)}&group=${encodeURIComponent(group)}&limit=1`,
+    );
+  } catch {
+    return null; // offline, or aborted by the timeout
+  }
+  if (!res.ok) return null;
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return null;
+  }
+  const docs =
+    data && typeof data === 'object'
+      ? (data as { models?: unknown }).models
+      : undefined;
+  if (!Array.isArray(docs)) return null;
+  for (const raw of docs) {
+    if (!raw || typeof raw !== 'object') continue;
+    const doc = raw as {
+      group?: unknown;
+      score?: unknown;
+      globalScore?: unknown;
+      model?: unknown;
+    };
+    if (doc.group !== group) continue;
+    const model = doc.model;
+    if (
+      !model ||
+      typeof model !== 'object' ||
+      !Array.isArray((model as { levels?: unknown }).levels)
+    )
+      continue;
+    const score =
+      finiteScore(doc.globalScore) ??
+      finiteScore(doc.score) ??
+      finiteScore((model as { score?: unknown }).score) ??
+      0;
+    return { score, model };
+  }
+  return null;
+}
+
+/**
+ * Fetches one group's best stored model from the server and imports it into
+ * localStorage, overwriting the local save of that group. Also refreshes the
+ * group's snapshot score and the sync stamp. Returns the server-side score,
+ * or null when nothing could be imported (offline, no model, bad shape).
+ */
+export async function fetchRemoteModel(
+  game: string,
+  group: string,
+  io: { importModels(models: Record<string, unknown> | null): string[] },
+): Promise<number | null> {
+  const found = await fetchGroupModel(game, group);
+  if (!found) return null;
+  const written = io.importModels({ [group]: [found.model] });
+  if (!written.length) return null;
+  const snapshot = baseScores(game);
+  snapshot[group] = Math.max(finiteScore(snapshot[group]) ?? 0, found.score);
+  recordBaseScores(game, snapshot);
+  return found.score;
+}
+
+/**
+ * Deletes all stored models of one group on the server, then clears the
+ * group's local snapshot score and submitted signatures so it can be
+ * re-uploaded from scratch. The local brain saves are kept. Returns the
+ * number of server docs deleted, or null when the request failed.
+ */
+export async function deleteRemoteModels(
+  game: string,
+  group: string,
+): Promise<number | null> {
+  let res: Response;
+  try {
+    res = await timedFetch(
+      `${SERVER_URL}/api/models?game=${encodeURIComponent(game)}&group=${encodeURIComponent(group)}`,
+      { method: 'DELETE' },
+    );
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  let deleted = 0;
+  try {
+    const data = (await res.json()) as { deleted?: unknown };
+    if (typeof data.deleted === 'number' && data.deleted >= 0)
+      deleted = data.deleted;
+  } catch {
+    // the server always answers JSON; treat an unparseable body as 0 docs
+  }
+  const snapshot = baseScores(game);
+  if (group in snapshot) {
+    delete snapshot[group];
+    localStorage.setItem(baseKey(game), JSON.stringify(snapshot));
+  }
+  const prefix = `${group}@`;
+  const sigs = readSubmittedSigs(game);
+  const kept = sigs.filter((sig) => !sig.startsWith(prefix));
+  if (kept.length !== sigs.length)
+    localStorage.setItem(submittedKey(game), JSON.stringify(kept));
+  stampSync(game);
+  return deleted;
 }
 
 export type SubmitResult =

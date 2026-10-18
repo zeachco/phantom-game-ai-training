@@ -5,7 +5,6 @@ import {
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../ai/Mixed';
-import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
@@ -15,12 +14,15 @@ import { drawGamepadControls } from '../../utilities/driveIndicators';
 import {
   bindSidePanelToggle,
   createCanvas,
+  createCollapsibleSection,
   createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
 import { bindFollowKeys } from '../../utilities/followKeys';
+import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import { bestSavedModelScore } from '../../utilities/scoreRecords';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
@@ -74,69 +76,6 @@ export default async (state: typeof defaultState) => {
   toggleBtn.setAttribute('title', 'F12 to toggle');
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
-  const loadBtn = document.createElement('button');
-  loadBtn.className = 'model-btn';
-  loadBtn.textContent = 'Load base models';
-  loadBtn.title =
-    'Load the base highway models from the server. Overwrites the local saves of the groups it brings.';
-  const importBtn = document.createElement('button');
-  importBtn.className = 'model-btn';
-  importBtn.textContent = 'Import archive';
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'model-btn';
-  saveBtn.textContent = 'Save models';
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'model-btn';
-  clearBtn.textContent = 'Clear training';
-  loadBtn.onclick = async () => {
-    try {
-      loadBtn.disabled = true;
-      loadBtn.textContent = 'Loading…';
-      const { written } = await loadBaseModels('highway', io);
-      if (!written.length)
-        throw new Error('No base model available from the server');
-      console.info(`Loaded base models: ${written.join(', ')}`);
-      initialize();
-    } catch (err) {
-      alert(err?.message || 'Unable to load base models');
-    } finally {
-      loadBtn.disabled = false;
-      loadBtn.textContent = 'Load base models';
-    }
-  };
-  importBtn.onclick = async () => {
-    try {
-      const archive = await pickModelArchive();
-      if (archive.game && archive.game !== 'highway') {
-        alert(`This archive is for \`${archive.game}\`, not "highway"`);
-        return;
-      }
-      const written = io.importModels(archive.models);
-      if (!written.length) {
-        alert('No compatible model in this archive');
-        return;
-      }
-      console.info(`Loaded models: ${written.join(', ')}`);
-      initialize();
-    } catch (err) {
-      if (err && err.message !== 'No file selected') {
-        alert(err?.message || 'Unable to load models');
-      }
-    }
-  };
-  saveBtn.onclick = () => downloadModelArchive('highway');
-  clearBtn.onclick = () => {
-    if (
-      !confirm(
-        'Clear the current training set? This removes the saved models of this game.',
-      )
-    )
-      return;
-    io.discardGameModels();
-    console.info('Cleared the training set of this game');
-    initialize();
-  };
-
   const followKeys = document.createElement('div');
   followKeys.className = 'follow-keys';
   const followLabel = document.createElement('span');
@@ -147,6 +86,7 @@ export default async (state: typeof defaultState) => {
     followKeys.querySelectorAll('button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.follow === String(value));
     });
+    groupPanel.apply(value);
   };
 
   /** car buttons: key 0 any car, 1-9 that brain layer, 'mixed' the mix,
@@ -173,47 +113,16 @@ export default async (state: typeof defaultState) => {
     initialize();
   };
 
-  /** long press (or right click) a car button to reset its saved weights */
-  const armReset = (
-    btn: HTMLButtonElement,
-    value: number | 'mixed',
-    onClick: () => void,
-  ) => {
-    let timer = 0;
-    let swallowClick = false;
-
-    // registered before the follow click, so the click released after a
-    // long press never also switches the camera
-    btn.addEventListener('click', (e) => {
-      if (swallowClick) {
-        swallowClick = false;
-        e.stopImmediatePropagation();
-        return;
-      }
-      onClick();
-    });
-
-    const cancelHold = () => {
-      if (timer) window.clearTimeout(timer);
-      timer = 0;
-    };
-    btn.addEventListener('pointerdown', () => {
-      timer = window.setTimeout(() => {
-        timer = 0;
-        swallowClick = true;
-        resetBrainSaves(value);
-      }, 650);
-    });
-    btn.addEventListener('pointerup', cancelHold);
-    btn.addEventListener('pointerleave', cancelHold);
-    btn.addEventListener('pointercancel', cancelHold);
-    btn.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      cancelHold();
-      if (swallowClick) swallowClick = false;
-      else resetBrainSaves(value);
-    });
-  };
+  // group actions + trainer readouts, shown while a brain group is followed
+  const groupPanel = createGroupActions({
+    game: 'highway',
+    io,
+    label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
+    seedBest: (key) => bestSavedModelScore(key),
+    globalBest: (key) => bestSavedModelScore(key),
+    resetLocal: resetBrainSaves,
+    reinitialize: () => initialize(),
+  });
 
   followKeys.append(followLabel);
   (
@@ -234,7 +143,7 @@ export default async (state: typeof defaultState) => {
     const btn = document.createElement('button');
     btn.textContent = label;
     btn.dataset.follow = String(value);
-    btn.title = 'Click to follow, long press or right-click to reset';
+    btn.title = 'Click to follow';
     const color =
       value === 'mixed'
         ? config.MIXED_COLOR
@@ -248,7 +157,7 @@ export default async (state: typeof defaultState) => {
     }
     followKeys.append(btn);
     followBtns.set(btn, { key: String(value) });
-    armReset(btn, value, () => setFollow(value));
+    btn.onclick = () => setFollow(value);
   });
   setFollow(0);
   // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
@@ -259,23 +168,15 @@ export default async (state: typeof defaultState) => {
     mixed: () => setFollow('mixed'),
   });
 
-  // the brain preview lives in the panel, it grows into whatever is left
+  // the brain preview lives in the panel at a fixed 4:3 shape
   const netWrap = document.createElement('div');
-  netWrap.style.flex = '1';
+  netWrap.style.aspectRatio = '4 / 3';
+  netWrap.style.flex = '0 0 auto';
   netWrap.style.position = 'relative';
-  netWrap.style.minHeight = '0';
   networkCanvas.style.position = 'absolute';
   networkCanvas.style.left = '0';
   networkCanvas.style.top = '0';
   netWrap.append(networkCanvas);
-
-  const statsBtn = document.createElement('button');
-  statsBtn.className = 'model-btn';
-  statsBtn.textContent = 'Stats';
-  statsBtn.setAttribute('aria-pressed', 'true');
-  statsBtn.onclick = () => {
-    neuralVisualizer.renderStats = !neuralVisualizer.renderStats;
-  };
 
   const legend = document.createElement('div');
   legend.className = 'side-panel-legend';
@@ -294,25 +195,15 @@ export default async (state: typeof defaultState) => {
     legend.append(el);
   });
 
-  const footer = document.createElement('div');
-  footer.className = 'side-panel-footer';
-  footer.textContent = 'Long press for reset (right-click also works)';
-
   const frameMeter = createFrameMeter();
-
-  const actions = document.createElement('div');
-  actions.className = 'model-actions';
-  actions.append(loadBtn, saveBtn, importBtn, clearBtn, statsBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
   panelContent.append(
-    actions,
     followKeys,
+    groupPanel.el,
     netWrap,
-    legend,
-    frameMeter.el,
-    footer,
+    createCollapsibleSection(legend),
   );
 
   panel.append(toggleBtn, panelContent);
@@ -321,6 +212,7 @@ export default async (state: typeof defaultState) => {
   const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
+    groupPanel.setOpen(panelOpen);
   };
   toggleBtn.onclick = togglePanel;
   // F12 or L open the panel like the tab button does
@@ -328,6 +220,9 @@ export default async (state: typeof defaultState) => {
 
   const scoreBoard = createScoreBoard();
   stage.appendChild(scoreBoard.el);
+
+  // the frame counter anchors to the stage, not the panel
+  stage.appendChild(frameMeter.el);
 
   // The output box mimics the followed car, display only, and brainStats
   // carries its network / mutation / score readout.
@@ -633,16 +528,6 @@ export default async (state: typeof defaultState) => {
     if (followed) {
       neuralVisualizer.render(networkCtx, followed);
     }
-    // the KeyS shortcut toggles the stats too, keep the button in sync
-    if (domUpdateDue) {
-      const statsOn = neuralVisualizer.renderStats;
-      if (statsBtn.dataset.on !== String(statsOn)) {
-        statsBtn.dataset.on = String(statsOn);
-        statsBtn.classList.toggle('active', statsOn);
-        statsBtn.setAttribute('aria-pressed', String(statsOn));
-      }
-    }
-
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';

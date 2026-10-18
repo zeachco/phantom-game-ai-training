@@ -1,5 +1,4 @@
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
-import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import type { NeuralNetwork } from '../../ai/Network';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
@@ -9,12 +8,18 @@ import { contrastText, getColorScale } from '../../utilities/colors';
 import {
   bindSidePanelToggle,
   createCanvas,
+  createCollapsibleSection,
   createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
 import { bindFollowKeys } from '../../utilities/followKeys';
+import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import {
+  globalRecordFromScores,
+  scoreRecordForGroup,
+} from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Car } from './classes/Car';
 import { CircuitRace } from './classes/CircuitRace';
@@ -24,7 +29,6 @@ import { TimingBoard } from './ui/TimingBoard';
 import { TrackScoreBoard } from './ui/TrackScoreBoard';
 import {
   brainId,
-  clearScoreRecords,
   scoreBoardRows,
   type defaultState,
   globalRecordForGroup,
@@ -89,79 +93,6 @@ export default async (state: typeof defaultState) => {
   toggleBtn.setAttribute('title', 'F12 to toggle');
   toggleBtn.setAttribute('aria-label', 'Toggle models panel');
 
-  const loadBtn = document.createElement('button');
-  loadBtn.className = 'model-btn';
-  loadBtn.textContent = 'Load base models';
-  loadBtn.title = 'Load the base circuit models from the server';
-  const importBtn = document.createElement('button');
-  importBtn.className = 'model-btn';
-  importBtn.textContent = 'Import archive';
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'model-btn';
-  saveBtn.textContent = 'Save models';
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'model-btn';
-  clearBtn.textContent = 'Clear training';
-  const clearScoresBtn = document.createElement('button');
-  clearScoresBtn.className = 'model-btn';
-  clearScoresBtn.textContent = 'Clear records';
-  loadBtn.onclick = async () => {
-    try {
-      loadBtn.disabled = true;
-      const written = await loadDefaultModels();
-      if (!written.length) throw new Error('No compatible default models');
-      console.info(`Loaded default models: ${written.join(', ')}`);
-      race.initialize();
-    } catch (err) {
-      alert(err?.message || 'Unable to load default models');
-    } finally {
-      loadBtn.disabled = false;
-    }
-  };
-  importBtn.onclick = async () => {
-    try {
-      const archive = await pickModelArchive();
-      if (archive.game && archive.game !== 'circuit') {
-        alert(`This archive is for \`${archive.game}\`, not "circuit"`);
-        return;
-      }
-      const written = io.importModels(archive.models);
-      if (!written.length) {
-        alert('No compatible model in this archive');
-        return;
-      }
-      console.info(`Loaded models: ${written.join(', ')}`);
-      race.initialize();
-    } catch (err) {
-      if (err && err.message !== 'No file selected') {
-        alert(err?.message || 'Unable to load models');
-      }
-    }
-  };
-  saveBtn.onclick = () => downloadModelArchive('circuit');
-  clearBtn.onclick = () => {
-    if (
-      !confirm(
-        'Clear the current training set? This removes the saved models of this game.',
-      )
-    )
-      return;
-    io.discardGameModels();
-    console.info('Cleared the training set of this game');
-    race.initialize();
-  };
-  clearScoresBtn.onclick = () => {
-    if (
-      !confirm(
-        'Clear all saved circuit race records? Neural networks are kept.',
-      )
-    )
-      return;
-    clearScoreRecords();
-    console.info('Cleared all circuit race records');
-    race.initialize();
-  };
-
   const followKeys = document.createElement('div');
   followKeys.className = 'follow-keys';
   const followLabel = document.createElement('span');
@@ -198,6 +129,7 @@ export default async (state: typeof defaultState) => {
         ? layerColor(value, config.MAX_NETWORK_LAYERS)
         : '#c4c4c4';
     networkCanvas.style.setProperty('--network-color', color);
+    groupPanel.apply(value);
   };
 
   /** car buttons: key 0 any car, 1-9 that brain layer, 'mixed' the mix,
@@ -231,47 +163,19 @@ export default async (state: typeof defaultState) => {
     }
   };
 
-  /** long press (or right click) a car button to reset its saved weights */
-  const armReset = (
-    btn: HTMLButtonElement,
-    value: number | 'mixed',
-    onClick: () => void,
-  ) => {
-    let timer = 0;
-    let swallowClick = false;
-
-    // registered before the follow click, so the click released after a
-    // long press never also switches the camera
-    btn.addEventListener('click', (e) => {
-      if (swallowClick) {
-        swallowClick = false;
-        e.stopImmediatePropagation();
-        return;
-      }
-      onClick();
-    });
-
-    const cancelHold = () => {
-      if (timer) window.clearTimeout(timer);
-      timer = 0;
-    };
-    btn.addEventListener('pointerdown', () => {
-      timer = window.setTimeout(() => {
-        timer = 0;
-        swallowClick = true;
-        resetBrainSaves(value);
-      }, 650);
-    });
-    btn.addEventListener('pointerup', cancelHold);
-    btn.addEventListener('pointerleave', cancelHold);
-    btn.addEventListener('pointercancel', cancelHold);
-    btn.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      cancelHold();
-      if (swallowClick) swallowClick = false;
-      else resetBrainSaves(value);
-    });
-  };
+  // group actions + trainer readouts, shown while a brain group is followed
+  const groupPanel = createGroupActions({
+    game: 'circuit',
+    io,
+    label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
+    seedBest: (key) => scoreRecordForGroup('circuit', key)?.seed ?? null,
+    globalBest: (key) => {
+      const record = scoreRecordForGroup('circuit', key);
+      return record ? globalRecordFromScores(record).globalScore : null;
+    },
+    resetLocal: resetBrainSaves,
+    reinitialize: () => race.initialize(),
+  });
 
   followKeys.append(followLabel);
   (
@@ -292,7 +196,7 @@ export default async (state: typeof defaultState) => {
     const btn = document.createElement('button');
     btn.textContent = label;
     btn.dataset.follow = String(value);
-    btn.title = 'Click to follow, long press or right-click to reset';
+    btn.title = 'Click to follow';
     // Numbered brains get a stable group color. Mixed and "all" stay light
     // gray because their effective color can change every frame.
     const color =
@@ -304,7 +208,7 @@ export default async (state: typeof defaultState) => {
     btn.style.setProperty('--btn-text', contrastText(color));
     followKeys.append(btn);
     followBtns.set(btn, { key: String(value) });
-    armReset(btn, value, () => setFollow(value));
+    btn.onclick = () => setFollow(value);
   });
   setFollow(0, false);
   // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
@@ -315,11 +219,11 @@ export default async (state: typeof defaultState) => {
     mixed: () => setFollow('mixed'),
   });
 
-  // the brain preview lives in the panel, it grows into whatever is left
+  // the brain preview lives in the panel at a fixed 4:3 shape
   const netWrap = document.createElement('div');
-  netWrap.style.flex = '1';
+  netWrap.style.aspectRatio = '4 / 3';
+  netWrap.style.flex = '0 0 auto';
   netWrap.style.position = 'relative';
-  netWrap.style.minHeight = '0';
   networkCanvas.style.position = 'absolute';
   networkCanvas.style.left = '0';
   networkCanvas.style.top = '0';
@@ -349,15 +253,7 @@ export default async (state: typeof defaultState) => {
   about.className = 'side-panel-about';
   about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; each seed keeps its former score as a HUD reference, but every generated track starts a fresh record so mutated brains have a reachable goal, and groups that already finished it continue with mutation runs only. Finishing a track pays a large one-time bonus, so brains are selected for completing the map, not for being fast on one known track; the last car of a pool is a fresh random explorer while the group is still finding its feet (under 2 laps on the map) and a regular mutation car once it is proven, and a scout re-runs the group's oldest saved line, so the population can never fully converge on one overfit brain.`;
 
-  const footer = document.createElement('div');
-  footer.className = 'side-panel-footer';
-  footer.textContent = 'Long press for reset (right-click also works)';
-
   const frameMeter = createFrameMeter();
-
-  const actions = document.createElement('div');
-  actions.className = 'model-actions';
-  actions.append(loadBtn, saveBtn, importBtn, clearBtn, clearScoresBtn);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -366,12 +262,10 @@ export default async (state: typeof defaultState) => {
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
   panelContent.append(
-    actions,
     followKeys,
+    groupPanel.el,
     netWrap,
-    info,
-    frameMeter.el,
-    footer,
+    createCollapsibleSection(info),
   );
 
   panel.append(toggleBtn, panelContent);
@@ -505,10 +399,14 @@ export default async (state: typeof defaultState) => {
   const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
+    groupPanel.setOpen(panelOpen);
   };
   toggleBtn.onclick = togglePanel;
   // F12 or L open the panel like the tab button does
   bindSidePanelToggle(togglePanel);
+
+  // the frame counter anchors to the stage, not the panel; demo hides both
+  if (!isDemo) stage.appendChild(frameMeter.el);
 
   const loop = new GameLoop();
 

@@ -63,6 +63,34 @@ export function createFrameMeter() {
   return { el, tick };
 }
 
+/** A collapsible text section for the side panel: a small header line
+ *  toggles the body, which starts collapsed and is never persisted. */
+export function createCollapsibleSection(body: HTMLElement) {
+  const section = document.createElement('div');
+  section.className = 'side-panel-section';
+
+  const header = document.createElement('button');
+  header.type = 'button';
+  header.className = 'side-panel-section-toggle';
+  header.textContent = '▸ more';
+  header.setAttribute('aria-expanded', 'false');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'side-panel-section-body';
+  wrap.hidden = true;
+  wrap.append(body);
+
+  const setOpen = (open: boolean) => {
+    wrap.hidden = !open;
+    header.textContent = open ? '▾ less' : '▸ more';
+    header.setAttribute('aria-expanded', String(open));
+  };
+  header.onclick = () => setOpen(wrap.hidden);
+
+  section.append(header, wrap);
+  return section;
+}
+
 /** Returns true only when an update is due, limiting callers to the given FPS. */
 export function createUpdateLimiter(fps: number) {
   const interval = 1000 / fps;

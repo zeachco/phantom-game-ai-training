@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
-import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
@@ -12,16 +11,22 @@ import { createScoreBoard } from '../../utilities/scoreBoard';
 import {
   bindSidePanelToggle,
   createCanvas,
+  createCollapsibleSection,
   createFrameMeter,
   resizeCanvas,
 } from '../../utilities/dom';
+import { createGroupActions } from '../../utilities/groupActions';
+import {
+  globalRecordFromScores,
+  scoreRecordForGroup,
+} from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Ball } from './classes/Ball';
 import { CaveRace } from './classes/CaveRace';
 import { ChaseCamera } from './classes/ChaseCamera';
 import { config, isDemo } from './classes/Config';
 import { SensorViz } from './classes/SensorViz';
-import { clearScoreRecords, type defaultState, type Group } from './utilities';
+import { type defaultState, type Group } from './utilities';
 
 type CaveState = typeof defaultState;
 
@@ -119,7 +124,7 @@ export default async (state: CaveState) => {
   scoreBoard.el.setAttribute('aria-label', 'Best score per brain group');
   stage.appendChild(scoreBoard.el);
 
-  // ---- side panel: model actions, brain follow keys and the live network
+  // ---- side panel: brain follow keys, group actions and the live network
   // visualization ported from the circuit game. It starts hidden. ----
   const networkCanvas = createCanvas();
   networkCanvas.className = 'neural-canvas';
@@ -150,77 +155,11 @@ export default async (state: CaveState) => {
   const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
+    groupPanel.setOpen(panelOpen);
   };
   toggleBtn.onclick = togglePanel;
   // F12 or L open the panel like the tab button does
   bindSidePanelToggle(togglePanel);
-
-  const addModelButton = (text: string, title: string, onClick: () => void) => {
-    const button = document.createElement('button');
-    button.className = 'model-btn';
-    button.textContent = text;
-    button.title = title;
-    button.onclick = onClick;
-    return button;
-  };
-  const modelActions = document.createElement('div');
-  modelActions.className = 'model-actions';
-  modelActions.append(
-    addModelButton(
-      'Load base models',
-      'Load the base cave models from the server. Overwrites the local saves of the groups it brings.',
-      async () => {
-        try {
-          const { source, written } = await loadBaseModels('cave', io);
-          if (!written.length)
-            throw new Error('No base model available from the server');
-          console.info(`Loaded base models (${source}): ${written.join(', ')}`);
-          race.initialize();
-        } catch (err) {
-          alert(err?.message || 'Unable to load base models');
-        }
-      },
-    ),
-    addModelButton('Save models', 'Download the cave training saves', () =>
-      downloadModelArchive('cave'),
-    ),
-    addModelButton('Import archive', 'Load a cave model archive', async () => {
-      try {
-        const archive = await pickModelArchive();
-        if (archive.game && archive.game !== 'cave') {
-          alert(`This archive is for \`${archive.game}\`, not "cave"`);
-          return;
-        }
-        const written = io.importModels(archive.models);
-        if (!written.length) {
-          alert('No compatible model in this archive');
-          return;
-        }
-        console.info(`Loaded models: ${written.join(', ')}`);
-        race.initialize();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '';
-        if (message !== 'No file selected')
-          alert(message || 'Unable to load models');
-      }
-    }),
-    addModelButton('Clear training', 'Delete every saved cave brain', () => {
-      if (
-        !confirm(
-          'Clear the current training set? This removes the saved models of this game.',
-        )
-      )
-        return;
-      io.discardGameModels();
-      race.initialize();
-    }),
-    addModelButton('Clear records', 'Delete saved cave race records', () => {
-      if (!confirm('Clear all saved cave race records? Brains are kept.'))
-        return;
-      clearScoreRecords();
-      race.initialize();
-    }),
-  );
 
   const followKeys = document.createElement('div');
   followKeys.className = 'follow-keys';
@@ -240,6 +179,7 @@ export default async (state: CaveState) => {
         ? layerColor(value, config.MAX_NETWORK_LAYERS)
         : '#c4c4c4';
     networkCanvas.style.setProperty('--network-color', color);
+    groupPanel.apply(value);
   };
 
   /** one entry per follow button: brain 1-9, all AI, mixed */
@@ -266,47 +206,22 @@ export default async (state: CaveState) => {
     followTarget = undefined;
   };
 
-  /** long press (or right click) a brain button to reset its saved weights */
-  const armReset = (
-    btn: HTMLButtonElement,
-    value: number | 'mixed',
-    onClick: () => void,
-  ) => {
-    let timer = 0;
-    let swallowClick = false;
-
-    // registered before the follow click, so the click released after a
-    // long press never also switches the camera
-    btn.addEventListener('click', (e) => {
-      if (swallowClick) {
-        swallowClick = false;
-        e.stopImmediatePropagation();
-        return;
-      }
-      onClick();
-    });
-
-    const cancelHold = () => {
-      if (timer) window.clearTimeout(timer);
-      timer = 0;
-    };
-    btn.addEventListener('pointerdown', () => {
-      timer = window.setTimeout(() => {
-        timer = 0;
-        swallowClick = true;
-        resetBrainSaves(value);
-      }, 650);
-    });
-    btn.addEventListener('pointerup', cancelHold);
-    btn.addEventListener('pointerleave', cancelHold);
-    btn.addEventListener('pointercancel', cancelHold);
-    btn.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      cancelHold();
-      if (swallowClick) swallowClick = false;
-      else resetBrainSaves(value);
-    });
-  };
+  // group actions + trainer readouts, shown while a brain group is followed
+  const groupPanel = createGroupActions({
+    game: 'cave',
+    io,
+    label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
+    seedBest: (key) => scoreRecordForGroup('cave', key)?.seed ?? null,
+    globalBest: (key) => {
+      const record = scoreRecordForGroup('cave', key);
+      return record ? globalRecordFromScores(record).globalScore : null;
+    },
+    resetLocal: resetBrainSaves,
+    reinitialize: () => {
+      race.initialize();
+      followTarget = undefined;
+    },
+  });
 
   followKeys.append(followLabel);
   (
@@ -327,7 +242,7 @@ export default async (state: CaveState) => {
     const btn = document.createElement('button');
     btn.textContent = label;
     btn.dataset.follow = String(value);
-    btn.title = 'Click to follow, long press or right-click to reset';
+    btn.title = 'Click to follow';
     const color =
       typeof value === 'number' && value > 0
         ? layerColor(value, config.MAX_NETWORK_LAYERS)
@@ -337,7 +252,7 @@ export default async (state: CaveState) => {
     btn.style.setProperty('--btn-text', contrastText(color));
     followKeys.append(btn);
     followBtns.set(btn, { key: String(value) });
-    armReset(btn, value, () => setFollow(value));
+    btn.onclick = () => setFollow(value);
   });
   setFollow(0);
   // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
@@ -348,11 +263,11 @@ export default async (state: CaveState) => {
     mixed: () => setFollow('mixed'),
   });
 
-  // the brain preview lives in the panel, it grows into whatever is left
+  // the brain preview lives in the panel at a fixed 4:3 shape
   const netWrap = document.createElement('div');
-  netWrap.style.flex = '1';
+  netWrap.style.aspectRatio = '4 / 3';
+  netWrap.style.flex = '0 0 auto';
   netWrap.style.position = 'relative';
-  netWrap.style.minHeight = '0';
   networkCanvas.style.position = 'absolute';
   networkCanvas.style.left = '0';
   networkCanvas.style.top = '0';
@@ -379,10 +294,6 @@ export default async (state: CaveState) => {
   about.className = 'side-panel-about';
   about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one for the rock ahead (the mixed brain). Each ball is a rolling sphere in a streamed 3D cave: a forward sensor cone feeds its brain, and gravity, jumps and hard wall impacts decide who survives. Gates are claimed in order along the tunnel, and a section gauge kills any ball that stops making forward progress. The cave is infinite: each time a brain completes the last gate the seed advances to a fresh random cave, and groups that already finished a cave return as a mutation-only swarm of their champion, so brains are selected for completing unknown caves, not for shaving frames off one. A random explorer and a scout that re-runs the group's oldest saved line keep the population from converging on a single overfit brain.`;
 
-  const footer = document.createElement('div');
-  footer.className = 'side-panel-footer';
-  footer.textContent = 'Long press for reset (right-click also works)';
-
   const frameMeter = createFrameMeter();
 
   const info = document.createElement('div');
@@ -392,17 +303,18 @@ export default async (state: CaveState) => {
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
   panelContent.append(
-    modelActions,
     followKeys,
+    groupPanel.el,
     netWrap,
-    info,
-    frameMeter.el,
-    footer,
+    createCollapsibleSection(info),
   );
 
   panel.append(toggleBtn, panelContent);
   // the demo profile hides the whole panel instead of starting it collapsed
   if (!isDemo) document.body.appendChild(panel);
+
+  // the frame counter anchors to the stage, not the panel; demo hides it too
+  if (!isDemo) stage.appendChild(frameMeter.el);
 
   const position = document.createElement('div');
   position.className = 'cave-position';

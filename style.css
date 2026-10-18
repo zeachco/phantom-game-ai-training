@@ -307,7 +307,6 @@ canvas {
 }
 
 .side-panel-toggle:focus-visible,
-.model-btn:focus-visible,
 .follow-keys button:focus-visible,
 .seed-controls button:focus-visible {
   outline: 2px solid var(--ui-accent);
@@ -321,15 +320,36 @@ canvas {
   height: 100%;
   box-sizing: border-box;
   padding: 1em;
+  overflow-y: auto;
 }
 
-.model-btn {
-  min-height: 32px;
+/* the group-actions block, shown only while a brain group is followed:
+   divider, three action buttons and four readout rows */
+.group-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.group-panel-divider {
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  margin: 0.15em 0;
+}
+
+.group-panel-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4em;
+}
+
+.group-panel-btn {
+  min-height: 28px;
   border: 1px solid var(--ui-border);
-  border-radius: 0.5em;
-  padding: 0.25em 0.75em;
-  font: 600 0.75rem / 1.25 var(--ui-font);
-  letter-spacing: 0.035em;
+  border-radius: 0.4em;
+  padding: 0.25em 0.2em;
+  font: 600 0.68rem / 1.2 var(--ui-font);
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--ui-text);
   background: #222832;
@@ -339,27 +359,49 @@ canvas {
     border-color var(--ui-motion);
 }
 
-.model-btn:hover:not(:disabled) {
+.group-panel-btn:hover:not(:disabled) {
   border-color: #687587;
   background: #303a48;
 }
 
-.model-btn:disabled {
+.group-panel-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.model-btn.active {
-  border-color: var(--ui-accent);
-  background: #56dcf51a;
-  color: var(--ui-accent);
+.group-panel-btn:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
 }
 
-/* the load / save / clear / stats buttons share a compact 2-column grid */
-.model-actions {
+.group-panel-readouts {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.4em;
+  gap: 0.25em;
+}
+
+.group-panel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font: 0.72rem var(--ui-font);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.group-panel-name {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.group-panel-value {
+  font-family:
+    ui-monospace,
+    "Cascadia Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-accent);
 }
 
 /* the network canvas is transparent, this only paints behind the brain */
@@ -466,17 +508,16 @@ canvas {
   color: rgba(255, 255, 255, 0.6);
 }
 
-.side-panel-footer {
-  margin-top: auto;
-  font:
-    0.7em Arial,
-    sans-serif;
-  color: rgba(255, 255, 255, 0.6);
-  text-align: center;
-}
-
+/* the frame counter left the panel and anchors to the bottom-right corner
+   of the game stage, over the canvas */
 .side-panel-frames {
-  margin-top: 0.6em;
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 10;
+  padding: 0.25em 0.6em;
+  border-radius: 0.4em;
+  background: #10141a99;
   font:
     0.72em / 1.2 ui-monospace,
     "Cascadia Mono",
@@ -484,9 +525,39 @@ canvas {
     Consolas,
     monospace;
   color: var(--ui-accent);
-  text-align: center;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
+}
+
+/* the collapsible description section: a small header line toggles the body,
+   which starts collapsed */
+.side-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.side-panel-section-toggle {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 0;
+  font:
+    bold 0.7em Arial,
+    sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.side-panel-section-toggle:hover {
+  color: #fff;
+}
+
+.side-panel-section-toggle:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
 }
 
 /* race selector embedded in the current-race board header */
@@ -932,8 +1003,7 @@ canvas {
   .game-menu li,
   .game-menu a,
   .side-panel,
-  .side-panel-toggle,
-  .model-btn {
+  .side-panel-toggle {
     transition: none;
   }
 

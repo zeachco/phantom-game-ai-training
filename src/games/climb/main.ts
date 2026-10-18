@@ -1,5 +1,4 @@
 import { MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
-import { downloadModelArchive, pickModelArchive } from '../../ai/modelTransfer';
 import type { NeuralNetwork } from '../../ai/Network';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
@@ -12,10 +11,16 @@ import { createScoreBoard } from '../../utilities/scoreBoard';
 import {
   bindSidePanelToggle,
   createCanvas,
+  createCollapsibleSection,
   createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
+import { createGroupActions } from '../../utilities/groupActions';
+import {
+  globalRecordFromScores,
+  scoreRecordForGroup,
+} from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { CAMERA_LERP, climbCameraCenterY } from './camera';
 import { ClimbRace } from './classes/ClimbRace';
@@ -23,7 +28,6 @@ import { config, isDemo } from './classes/Config';
 import type { Player } from './classes/Player';
 import {
   brainId,
-  clearScoreRecords,
   scoreBoardRows,
   type defaultState,
 } from './utilities';
@@ -69,79 +73,11 @@ export default async (state: typeof defaultState) => {
   const togglePanel = () => {
     panelOpen = panel.classList.toggle('open');
     toggleBtn.textContent = panelOpen ? '❯' : '❮';
+    groupPanel.setOpen(panelOpen);
   };
   toggleBtn.onclick = togglePanel;
   // F12 or L open the panel like the tab button does
   bindSidePanelToggle(togglePanel);
-
-  const importBtn = document.createElement('button');
-  importBtn.className = 'model-btn';
-  importBtn.textContent = 'Import archive';
-  const baseBtn = document.createElement('button');
-  baseBtn.className = 'model-btn';
-  baseBtn.textContent = 'Load base models';
-  baseBtn.title =
-    'Load the base climb models from the server. Overwrites the local saves of the groups it brings.';
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'model-btn';
-  saveBtn.textContent = 'Save models';
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'model-btn';
-  clearBtn.textContent = 'Clear training';
-  const clearScoresBtn = document.createElement('button');
-  clearScoresBtn.className = 'model-btn';
-  clearScoresBtn.textContent = 'Clear records';
-
-  importBtn.onclick = async () => {
-    try {
-      const archive = await pickModelArchive();
-      if (archive.game && archive.game !== 'climb') {
-        alert(`This archive is for \`${archive.game}\`, not "climb"`);
-        return;
-      }
-      const written = io.importModels(archive.models);
-      if (!written.length) {
-        alert('No compatible model in this archive');
-        return;
-      }
-      console.info(`Loaded models: ${written.join(', ')}`);
-      race.initialize();
-    } catch (err) {
-      if (err && err.message !== 'No file selected') {
-        alert(err?.message || 'Unable to load models');
-      }
-    }
-  };
-  baseBtn.onclick = async () => {
-    try {
-      const { source, written } = await loadBaseModels('climb', io);
-      if (!written.length)
-        throw new Error('No base model available from the server');
-      console.info(`Loaded base models (${source}): ${written.join(', ')}`);
-      race.initialize();
-    } catch (err) {
-      alert(err?.message || 'Unable to load base models');
-    }
-  };
-  saveBtn.onclick = () => downloadModelArchive('climb');
-  clearBtn.onclick = () => {
-    if (
-      !confirm(
-        'Clear the current training set? This removes the saved models of this game.',
-      )
-    )
-      return;
-    io.discardGameModels();
-    console.info('Cleared the training set of this game');
-    race.initialize();
-  };
-  clearScoresBtn.onclick = () => {
-    if (!confirm('Clear all saved climb records? Neural networks are kept.'))
-      return;
-    clearScoreRecords();
-    console.info('Cleared all climb records');
-    race.initialize();
-  };
 
   const followKeys = document.createElement('div');
   followKeys.className = 'follow-keys';
@@ -166,6 +102,7 @@ export default async (state: typeof defaultState) => {
         ? layerColor(value, config.MAX_NETWORK_LAYERS)
         : '#c4c4c4';
     networkCanvas.style.setProperty('--network-color', color);
+    groupPanel.apply(value);
   };
 
   const resetBrainSaves = (value: number | 'mixed') => {
@@ -180,6 +117,20 @@ export default async (state: typeof defaultState) => {
     }
     race.resetBrainGroup(value);
   };
+
+  // group actions + trainer readouts, shown while a brain group is followed
+  const groupPanel = createGroupActions({
+    game: 'climb',
+    io,
+    label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
+    seedBest: (key) => scoreRecordForGroup('climb', key)?.seed ?? null,
+    globalBest: (key) => {
+      const record = scoreRecordForGroup('climb', key);
+      return record ? globalRecordFromScores(record).globalScore : null;
+    },
+    resetLocal: resetBrainSaves,
+    reinitialize: () => race.initialize(),
+  });
 
   const followBtns = new Map<
     HTMLButtonElement,
@@ -198,26 +149,9 @@ export default async (state: typeof defaultState) => {
     btn.style.setProperty('--btn-color', color);
     btn.style.setProperty('--btn-text', contrastText(color));
     btn.textContent = label;
-    btn.title = `${title} (hold to reset its saves)`;
+    btn.title = title;
     btn.dataset.follow = key;
-    let holdTimer = 0;
-    let held = false;
-    const start = () => {
-      held = true;
-      holdTimer = window.setTimeout(
-        () => resetBrainSaves(Number(key) || (key === 'mixed' ? 'mixed' : 0)),
-        600,
-      );
-    };
-    const stop = (fire: boolean) => {
-      if (!held) return;
-      held = false;
-      window.clearTimeout(holdTimer);
-      if (fire) setFollow(key === 'mixed' ? 'mixed' : Number(key) || 0);
-    };
-    btn.addEventListener('pointerdown', start);
-    btn.addEventListener('pointerup', () => stop(true));
-    btn.addEventListener('pointerleave', () => stop(false));
+    btn.onclick = () => setFollow(key === 'mixed' ? 'mixed' : Number(key) || 0);
     followBtns.set(btn, { key });
     return btn;
   };
@@ -229,13 +163,11 @@ export default async (state: typeof defaultState) => {
   followKeys.append(makeFollowBtn('0', 'all', 'follow the best climber'));
   followKeys.append(makeFollowBtn('mixed', 'mixed', 'follow the mixed brain'));
 
-  // Match the circuit/cave panel layout: the wrapper owns the available
-  // height and the canvas is absolute, so resizing the canvas cannot enlarge
-  // its own parent on the next frame.
+  // the brain preview lives in the panel at a fixed 4:3 shape
   const netWrap = document.createElement('div');
-  netWrap.style.flex = '1';
+  netWrap.style.aspectRatio = '4 / 3';
+  netWrap.style.flex = '0 0 auto';
   netWrap.style.position = 'relative';
-  netWrap.style.minHeight = '0';
   networkCanvas.style.position = 'absolute';
   networkCanvas.style.left = '0';
   networkCanvas.style.top = '0';
@@ -250,30 +182,23 @@ export default async (state: typeof defaultState) => {
     'Space or the gamepad primary button jumps. 1-9 and ` follow a line, ' +
     '0 the best climber, R jumps to a random seed, < and > step the seed.';
 
-  const footer = document.createElement('div');
-  footer.className = 'side-panel-footer';
-  footer.textContent = 'Long press for reset (right-click also works)';
-
   const frameMeter = createFrameMeter();
-
-  const actions = document.createElement('div');
-  actions.className = 'model-actions';
-  actions.append(baseBtn, saveBtn, importBtn, clearBtn, clearScoresBtn);
 
   const panelContent = document.createElement('div');
   panelContent.className = 'side-panel-content';
   panelContent.append(
-    actions,
     followKeys,
+    groupPanel.el,
     netWrap,
-    about,
-    frameMeter.el,
-    footer,
+    createCollapsibleSection(about),
   );
 
   panel.append(toggleBtn, panelContent);
   // the demo profile hides the whole panel instead of starting it collapsed
   if (!isDemo) document.body.appendChild(panel);
+
+  // the frame counter anchors to the stage, not the panel; demo hides it too
+  if (!isDemo) stage.appendChild(frameMeter.el);
 
   // The output boxes mimic the followed climber, display only.
   const steerOverlay = document.createElement('div');
