@@ -582,7 +582,8 @@ export class CaveRace {
     )
       return;
 
-    if (group.pool.some((ball) => ball.finished)) group.mutationOnly = true;
+    if (!group.distillRun && group.pool.some((ball) => ball.finished))
+      group.mutationOnly = true;
     const corpses = new Set(group.pool);
     this.state.balls = this.state.balls.filter((ball) => !corpses.has(ball));
     group.pool = this.#spawnSlots(group).map((slot) =>

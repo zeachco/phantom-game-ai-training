@@ -607,7 +607,8 @@ export class CircuitRace {
     )
       return;
 
-    if (group.pool.some((car) => car.finished)) group.mutationOnly = true;
+    if (!group.distillRun && group.pool.some((car) => car.finished))
+      group.mutationOnly = true;
     const corpses = new Set(group.pool);
     this.state.cars = this.state.cars.filter((car) => !corpses.has(car));
     group.pool = this.#spawnSlots(group).map((slot) =>
