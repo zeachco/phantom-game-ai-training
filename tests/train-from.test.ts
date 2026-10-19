@@ -10,7 +10,9 @@ import {
   saveTrainFrom,
   studentLabel,
   TRAINING_EMOJI,
+  trainedBrain,
   trainFromKey,
+  withTrainedBrain,
 } from '../src/utilities/trainFrom';
 
 /** Minimal localStorage so the train-from persistence can run headless. */
@@ -429,4 +431,98 @@ test('the end of a run resets the selection to free training', () => {
   } finally {
     env.restore();
   }
+});
+
+test('a trained brain keeps its weights but not its disqualified score', () => {
+  const source = new NeuralNetwork(2, 2, 1);
+  for (const level of source.levels)
+    for (const row of level.weights) row.fill(0.5);
+  source.score = 999;
+
+  const trained = trainedBrain(source, 40);
+  // the weights are the student's, the score is the group's previous one
+  expect(trained.score).toBe(40);
+  expect(trained.levels.map((level) => level.weights)).toEqual(
+    source.levels.map((level) => level.weights),
+  );
+  // it is a copy: the live student is not the saved model
+  expect(trained).not.toBe(source);
+  trained.levels[0].weights[0][0] = 1;
+  expect(source.levels[0].weights[0][0]).toBe(0.5);
+
+  // the trained brain heads the group's save list, inside the window
+  const saved = [source, source, new NeuralNetwork(2, 2, 1)];
+  const list = withTrainedBrain(saved, trained, 2);
+  expect(list.length).toBe(2);
+  expect(list[0]).toBe(trained);
+});
+
+test('the next generation starts from the weights the student just learned', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+
+    const group1 = race.groups.find((g) => g.layer === 1)!;
+    const teacher = new NeuralNetwork(10, 3, 1);
+    teacher.process = () => [1, 0, 0];
+    teacher.score = 500;
+    group1.best = { brain: teacher, score: 500 };
+
+    expect(race.setTrainFrom(2, 1)).toBe(true);
+    const group2 = race.groups.find((g) => g.layer === 2)!;
+    // train for a while, then remember what the student learned
+    for (let now = 0; now < 30; now++) race.update(now * 16);
+    const learned = JSON.stringify(
+      group2.pool[0].brain!.levels.map((level) => level.weights),
+    );
+
+    // the run ends on a new seed and hands the trained weights to group 2
+    race.applyUserSeed(99);
+    const trainedGroup = race.groups.find((g) => g.layer === 2)!;
+    expect(trainedGroup.trainFrom).toBeNull();
+    expect(trainedGroup.distillRun).toBe(false);
+    expect(
+      JSON.stringify(
+        trainedGroup.best?.brain.levels.map((level) => level.weights),
+      ),
+    ).toBe(learned);
+    // the score stays where the group was, the run sets no record
+    expect(trainedGroup.best?.score).toBe(0);
+    expect(
+      JSON.stringify(
+        state.sortedModels[2][0].levels.map((level) => level.weights),
+      ),
+    ).toBe(learned);
+
+    // the freshly spawned first slot mutates with a zero factor: an exact copy
+    expect(
+      JSON.stringify(
+        trainedGroup.pool[0].brain!.levels.map((level) => level.weights),
+      ),
+    ).toBe(learned);
+  } finally {
+    env.restore();
+  }
+});
+
+test('a long distillation stays finite instead of overflowing', () => {
+  // a wide fan-in against a loud teacher: the raw step used to grow with every
+  // frame until the weights reached Infinity, and a saved brain kept that
+  const inputs = new Array(25).fill(0.8);
+  const teacher = new NeuralNetwork(25, 3, 1);
+  teacher.process = () => [1, 1, 1];
+  const student = new NeuralNetwork(25, 3, 1);
+  for (let i = 0; i < 2000; i++) student.train(inputs, teacher.process(inputs));
+
+  const weights = student.levels.flatMap((level) =>
+    level.weights.flatMap((row) => row),
+  );
+  expect(weights.every((weight) => Number.isFinite(weight))).toBe(true);
+  expect(Math.max(...weights.map(Math.abs))).toBeLessThan(1000);
+  // and it did learn: the outputs follow the teacher
+  for (const value of student.process(inputs))
+    expect(Math.abs(value - 1)).toBeLessThan(0.2);
 });

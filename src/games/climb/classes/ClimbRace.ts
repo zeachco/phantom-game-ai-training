@@ -17,6 +17,8 @@ import {
   loadTrainFroms,
   saveTrainFrom,
   studentLabel,
+  trainedBrain,
+  withTrainedBrain,
 } from '../../../utilities/trainFrom';
 import { ControlType } from '../types';
 import {
@@ -397,10 +399,39 @@ export class ClimbRace {
   #endDistillRuns() {
     for (const group of this.groups) {
       if (group.trainFrom === null) continue;
+      this.#keepTrainedBrain(group);
       group.trainFrom = null;
       group.distillRun = false;
       saveTrainFrom('climb', group.isMixed ? 'mixed' : group.layer, null);
     }
+  }
+
+  /**
+   * Hand the student's trained weights to the next generation: the brain takes
+   * the place of the group's base model, so the next run mutates from what the
+   * student learned. Its score is the one the group already had, a disjoint
+   * run never sets a record.
+   */
+  #keepTrainedBrain(group: Group) {
+    const brain = group.pool[0]?.brain;
+    if (!brain) return;
+    const trained = trainedBrain(brain, group.best?.score ?? 0);
+    group.best = { brain: trained, score: trained.score };
+    if (group.isMixed) {
+      this.state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(
+        this.state.sortedMixed[MIXED_LEVELS] ?? [],
+        trained,
+        config.HALL_OF_FAME_SIZE,
+      );
+    } else {
+      this.state.sortedModels[group.layer] = withTrainedBrain(
+        this.state.sortedModels[group.layer] ?? [],
+        trained,
+        config.HALL_OF_FAME_SIZE,
+      );
+    }
+    this.#persistGroup(group);
+    saveScores(group);
   }
 
   /** The score of the brain the group is distilling from, null for free

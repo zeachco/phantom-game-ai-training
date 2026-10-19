@@ -156,6 +156,13 @@ export class NeuralNetwork {
       const into = activations[levelIndex];
       const nextDeltas =
         levelIndex > 0 ? new Array<number>(into.length).fill(0) : null;
+      // Scale the step by the layer's activation energy (normalised LMS). With
+      // a raw rate a wide sensor fan-in makes the step grow with every frame
+      // until the weights overflow; divided by the norm the same rate is
+      // stable whatever the input magnitudes are.
+      let energy = 1;
+      for (let i = 0; i < into.length; i++) energy += into[i] * into[i];
+      const step = learningRate / energy;
       for (let input = 0; input < level.inputs.length; input++) {
         const activation = into[input];
         if (!activation) continue; // zero input: no gradient on this row
@@ -164,7 +171,9 @@ export class NeuralNetwork {
           const delta = deltas[output];
           if (!delta) continue;
           if (nextDeltas) nextDeltas[input] += weights[output] * delta;
-          weights[output] -= learningRate * delta * activation;
+          const correction = step * delta * activation;
+          // a non finite correction would poison the brain for good
+          if (Number.isFinite(correction)) weights[output] -= correction;
         }
       }
       if (nextDeltas) deltas = nextDeltas;

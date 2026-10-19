@@ -1,4 +1,5 @@
 import { MIXED_KIND } from '../ai/Mixed';
+import type { NeuralNetwork } from '../ai/Network';
 
 /**
  * A group's distillation target ("train from"): which other group's champion
@@ -15,6 +16,35 @@ export const TRAINING_EMOJI = '🎓';
  */
 export function studentLabel(label: string, training: boolean): string {
   return training ? `${label} ${TRAINING_EMOJI}` : label;
+}
+
+/**
+ * The brain a training run hands over to the next generation: the student's
+ * trained weights, carrying the score of the group's previous base model. A
+ * disqualified run never moves a record, but its learning still carries over.
+ */
+export function trainedBrain(
+  brain: NeuralNetwork,
+  previousScore: number,
+): NeuralNetwork {
+  const clone = JSON.parse(JSON.stringify(brain)) as NeuralNetwork;
+  clone.score = previousScore;
+  return clone;
+}
+
+/**
+ * The group's saved brains with the trained one first, so the next generation
+ * mutates from it, trimmed to the hall-of-fame window.
+ */
+export function withTrainedBrain(
+  saved: NeuralNetwork[],
+  trained: NeuralNetwork,
+  size: number,
+): NeuralNetwork[] {
+  return [
+    trained,
+    ...saved.filter((model) => model !== trained && model !== undefined),
+  ].slice(0, Math.max(1, size));
 }
 
 const prefix = (game: string) => `${game}_trainFrom_`;

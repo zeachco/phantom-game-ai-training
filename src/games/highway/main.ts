@@ -28,6 +28,8 @@ import {
   loadTrainFroms,
   saveTrainFrom,
   studentLabel,
+  trainedBrain,
+  withTrainedBrain,
 } from '../../utilities/trainFrom';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
@@ -776,17 +778,41 @@ export default async (state: typeof defaultState) => {
     }
   }
 
+  /**
+   * Hand a trained student's weights to the next generation: the brain becomes
+   * the group's saved base model, so the next run mutates from what the
+   * student learned. It keeps the score the group already had, a teacher-driven
+   * run never sets a record.
+   */
+  function keepTrainedBrain(car: Car) {
+    const value = groupKeyOf(car);
+    const saved =
+      value === 'mixed'
+        ? (state.sortedMixed[MIXED_LEVELS] ?? [])
+        : (state.sortedModels[value] ?? []);
+    const trained = trainedBrain(car.brain, saved[0]?.score ?? 0);
+    if (value === 'mixed') {
+      state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(saved, trained, 1);
+      io.saveBestModels([trained], 1);
+      return;
+    }
+    state.sortedModels[value] = withTrainedBrain(saved, trained, 7);
+    io.saveModelList(value, state.sortedModels[value]);
+  }
+
   function endExperiment() {
     if (state.playing) {
-      // teacher-driven cars are disqualified: saving them would only store the
-      // teacher's behavior under the student's name
-      const finalSort = state.sortedCars.filter(
-        (c) => c.useAI && !isDistilling(groupKeyOf(c)),
-      );
+      // teacher-driven cars are disqualified as records, but their weights
+      // carry over to the next run
+      const finalSort = state.sortedCars.filter((c) => c.useAI);
+      const trained = finalSort.filter((c) => isDistilling(groupKeyOf(c)));
       io.saveBestModels(
-        finalSort.map((c) => c.brain),
+        finalSort
+          .filter((c) => !isDistilling(groupKeyOf(c)))
+          .map((c) => c.brain),
         7,
       );
+      for (const car of trained) keepTrainedBrain(car);
       // the run is over: back to free training for every group
       endDistillRuns();
       state.playing = false;
