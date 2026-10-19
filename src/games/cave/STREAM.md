@@ -20,7 +20,9 @@ its brain.
   keep their rough skin. The seed anneals the difficulty (a seed of 100+ is
   full difficulty, lower seeds are easier), and the variation compounds with
   depth, so the deeper sections are wilder than the first ones a ball ever
-  sees.
+  sees. The difficulty also narrows the driving band (half-width 0.36 rad
+  down to 0.28) and adds launch dice (ramp chance 0.85 up to 0.95), so the
+  wilder caves drive a tighter lane with more launches over rough ground.
 - A path check runs once at construction, before any mesh is built, so every
   stretch keeps a drivable line: in-band rock columns keep a minimum gap on
   one side, every rough stretch with columns carries a launch ramp over the

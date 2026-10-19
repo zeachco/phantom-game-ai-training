@@ -226,8 +226,14 @@ class Config {
   /** angular cell of the fine bumps around the circumference */
   public CAVE_BUMP_ANGLE = 0.35;
   /** angular half-width of the flat driving band around the cave floor
-   *  (a = PI): the bump skin is gone there and the long waves are damped */
+   *  (a = PI) at difficulty 0: the bump skin is gone there and the long
+   *  waves are damped; it narrows to CAVE_BAND_HALF_WIDTH_MIN as the
+   *  annealed difficulty rises */
   public CAVE_BAND_HALF_WIDTH = 0.36;
+  /** angular half-width of the driving band at full difficulty: the lane
+   *  shrinks with the annealed difficulty, so the sides roughen faster in
+   *  the wilder caves */
+  public CAVE_BAND_HALF_WIDTH_MIN = 0.28;
   /** fraction of the long wave undulation the driving band keeps, so the
    *  plateau rides a slow residual instead of the full tube breathing */
   public CAVE_BAND_WAVE_DAMP = 0.85;
@@ -261,8 +267,13 @@ class Config {
   public CAVE_ROAD_WIDTH = 0.4;
   /** how far the road lane raises the floor at full terrain progress */
   public CAVE_ROAD_RISE = 8;
-  /** fixed dice on a jump ramp before a volatile stretch at volatility 1 */
+  /** fixed dice on a jump ramp before a volatile stretch at volatility 1,
+   *  at difficulty 0; it grows to CAVE_RAMP_CHANCE_MAX with the annealed
+   *  difficulty */
   public CAVE_RAMP_CHANCE = 0.85;
+  /** ramp dice at full difficulty: launch opportunities over rough ground
+   *  get more frequent in the wilder caves */
+  public CAVE_RAMP_CHANCE_MAX = 0.95;
   /** how far the ramp lip sits before the volatile stretch it launches over */
   public CAVE_RAMP_LEAD = 76;
   /** ramp approach length; the floor limiter turns it into a smooth climb */

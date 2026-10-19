@@ -248,6 +248,30 @@ test('a straight-driving ball still survives the opening', () => {
   expect(ball.s).toBeGreaterThan(400);
 });
 
+test('the driving band narrows and the ramp dice grow with difficulty', () => {
+  const easy = cave(0);
+  const wild = cave(config.CAVE_DIFFICULTY_SEED_BASE);
+  const mid = cave(Math.round(config.CAVE_DIFFICULTY_SEED_BASE / 2));
+
+  // the per-cave values interpolate linearly with the annealed difficulty
+  expect(easy.bandHalfWidth).toBeCloseTo(config.CAVE_BAND_HALF_WIDTH, 10);
+  expect(wild.bandHalfWidth).toBeCloseTo(config.CAVE_BAND_HALF_WIDTH_MIN, 10);
+  expect(mid.bandHalfWidth).toBeCloseTo(
+    (config.CAVE_BAND_HALF_WIDTH + config.CAVE_BAND_HALF_WIDTH_MIN) / 2,
+    10,
+  );
+  expect(easy.rampChance).toBeCloseTo(config.CAVE_RAMP_CHANCE, 10);
+  expect(wild.rampChance).toBeCloseTo(config.CAVE_RAMP_CHANCE_MAX, 10);
+  expect(mid.rampChance).toBeCloseTo(
+    (config.CAVE_RAMP_CHANCE + config.CAVE_RAMP_CHANCE_MAX) / 2,
+    10,
+  );
+
+  // the wild lane is strictly narrower with strictly more ramp dice
+  expect(wild.bandHalfWidth).toBeLessThan(easy.bandHalfWidth);
+  expect(wild.rampChance).toBeGreaterThan(easy.rampChance);
+});
+
 test('the driving band is flat while the sides stay rough', () => {
   for (const seed of [0, 50, 100]) {
     const terrain = cave(seed);

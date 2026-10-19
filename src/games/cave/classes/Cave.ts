@@ -161,6 +161,14 @@ interface WallBounds {
 export class Cave {
   public seed: number;
   public difficulty: number;
+  /** driving band half-width (rad) for this cave: CAVE_BAND_HALF_WIDTH at
+   *  difficulty 0, narrowing to CAVE_BAND_HALF_WIDTH_MIN as the annealed
+   *  difficulty rises, so the sides roughen faster in the wilder caves */
+  public bandHalfWidth: number;
+  /** jump ramp dice for this cave: CAVE_RAMP_CHANCE at difficulty 0, rising
+   *  to CAVE_RAMP_CHANCE_MAX, so the wilder caves launch more over rough
+   *  ground */
+  public rampChance: number;
   /** arc position of every gate, gate i sits at (i + 1) * GATE_SPACING */
   public gatePositions: number[] = [];
   /** gate meshes by gate index, created with the chunk that owns the gate */
@@ -195,6 +203,14 @@ export class Cave {
     this.difficulty =
       Math.min(1, Math.max(0, seed) / config.CAVE_DIFFICULTY_SEED_BASE) *
       config.CAVE_DIFFICULTY;
+    this.bandHalfWidth =
+      config.CAVE_BAND_HALF_WIDTH -
+      (config.CAVE_BAND_HALF_WIDTH - config.CAVE_BAND_HALF_WIDTH_MIN) *
+        this.difficulty;
+    this.rampChance =
+      config.CAVE_RAMP_CHANCE +
+      (config.CAVE_RAMP_CHANCE_MAX - config.CAVE_RAMP_CHANCE) *
+        this.difficulty;
 
     const rng = mulberry32(seed >>> 0);
     for (let k = 0; k < config.CAVE_HARMONICS; k++) {
@@ -564,7 +580,7 @@ export class Cave {
     // A single jump ramp, placed just before the volatile stretch and more
     // probable the rougher that stretch is.
     let ramp: FeatureCell['ramp'] = null;
-    if (rng() < volatility * config.CAVE_RAMP_CHANCE) {
+    if (rng() < volatility * this.rampChance) {
       const targetS = columns.length > 0 ? columns[0].centerS : featureS;
       ramp = {
         centerS: Math.max(
@@ -948,8 +964,8 @@ export class Cave {
       // a car driving beside its center), falling away into the banks.
       const angular = this.#plateauAcross(
         a,
-        config.CAVE_BAND_HALF_WIDTH * 0.9,
-        config.CAVE_BAND_HALF_WIDTH + 0.25,
+        this.bandHalfWidth * 0.9,
+        this.bandHalfWidth + 0.25,
       );
       delta -= progress * along * angular * ramp.height;
     }
@@ -997,8 +1013,8 @@ export class Cave {
    *  (a = PI): one at the center, zero at the band edge and beyond. */
   #bandInfluence(a: number) {
     const d = this.#angleDistance(a, Math.PI);
-    if (d >= config.CAVE_BAND_HALF_WIDTH) return 0;
-    const t = 1 - d / config.CAVE_BAND_HALF_WIDTH;
+    if (d >= this.bandHalfWidth) return 0;
+    const t = 1 - d / this.bandHalfWidth;
     return t * t * (3 - 2 * t);
   }
 
@@ -1007,9 +1023,9 @@ export class Cave {
    *  a flat plateau and the sides read as cliffs. */
   #bankRise(a: number) {
     const d = this.#angleDistance(a, Math.PI);
-    const x = d - config.CAVE_BAND_HALF_WIDTH;
+    const x = d - this.bandHalfWidth;
     if (x <= 0) return 0;
-    const edge = Math.PI / 2 - config.CAVE_BAND_HALF_WIDTH;
+    const edge = Math.PI / 2 - this.bandHalfWidth;
     const t = Math.min(1, x / edge);
     return config.CAVE_BANK_RISE * t * t;
   }
@@ -1054,8 +1070,8 @@ export class Cave {
       if (along <= 0) continue;
       const angular = this.#plateauAcross(
         a,
-        config.CAVE_BAND_HALF_WIDTH * 0.9,
-        config.CAVE_BAND_HALF_WIDTH + 0.25,
+        this.bandHalfWidth * 0.9,
+        this.bandHalfWidth + 0.25,
       );
       influence = Math.max(influence, along * angular);
     }
@@ -1075,9 +1091,9 @@ export class Cave {
     // tube is a gentle shoulder instead of a step that tips slow cars.
     const d = this.#angleDistance(a, Math.PI);
     let waveKeep = 1 - config.CAVE_BAND_WAVE_DAMP;
-    const x = d - config.CAVE_BAND_HALF_WIDTH;
+    const x = d - this.bandHalfWidth;
     if (x > 0) {
-      const edge = Math.PI / 2 - config.CAVE_BAND_HALF_WIDTH;
+      const edge = Math.PI / 2 - this.bandHalfWidth;
       waveKeep = Math.min(
         1,
         waveKeep + (1 - waveKeep) * ((x / edge) * (x / edge)),
@@ -1155,8 +1171,8 @@ export class Cave {
   #rampCutDrop(s: number, a: number) {
     const plateau = this.#plateauAcross(
       a,
-      config.CAVE_BAND_HALF_WIDTH * 0.9,
-      config.CAVE_BAND_HALF_WIDTH + 0.25,
+      this.bandHalfWidth * 0.9,
+      this.bandHalfWidth + 0.25,
     );
     if (plateau <= 0) return 0;
     const ramp = this.#featureCell(

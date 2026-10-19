@@ -9,6 +9,7 @@ import {
   Vector3,
 } from 'three';
 import { Cave } from '../src/games/cave/classes/Cave';
+import { LANDING_RUNOUT } from '../src/games/cave/classes/PathCheck';
 import { config } from '../src/games/cave/classes/Config';
 import { Ball } from '../src/games/cave/classes/Ball';
 
@@ -33,7 +34,9 @@ const angleDist = (a: number, b: number) => {
 test('the path guarantee keeps a drivable line on every seed', () => {
   for (const seed of [0, 1, 7, 25, 50, 100]) {
     const terrain = cave(seed);
-    const band = config.CAVE_BAND_HALF_WIDTH;
+    // the guarantee works on the cave's own band, which narrows with the
+    // annealed difficulty
+    const band = terrain.bandHalfWidth;
     const cells = Math.ceil(
       (config.SPAWN_OFFSET +
         config.GATES_PER_SEED * config.GATE_SPACING +
@@ -70,7 +73,8 @@ test('the path guarantee keeps a drivable line on every seed', () => {
       if (cell.volatility >= 0.7 && cell.columns.length > 0)
         expect(cell.ramp).not.toBeNull();
       if (cell.ramp) {
-        const landingTo = cell.ramp.centerS + cell.ramp.height / 0.35 + 60;
+        const landingTo =
+          cell.ramp.centerS + cell.ramp.height / 0.35 + LANDING_RUNOUT;
         for (const col of cell.columns) {
           const inLanding =
             col.centerS + col.halfLen > cell.ramp.centerS &&

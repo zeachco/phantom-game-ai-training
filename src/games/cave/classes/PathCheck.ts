@@ -13,7 +13,7 @@ export interface PathFix {
  *  a ramp's back slope (height / launch speed). A ball descending from the
  *  lip keeps moving along the band after touchdown, so the zone keeps
  *  that distance free of in-band columns before the next feature may sit */
-const LANDING_RUNOUT = 60;
+export const LANDING_RUNOUT = 60;
 
 /**
  * The path guarantee: every stretch of the cave keeps a drivable line.
@@ -45,7 +45,9 @@ export class PathCheck {
   readonly fixes: PathFix[] = [];
 
   run(cave: Cave, maxS: number): void {
-    const band = config.CAVE_BAND_HALF_WIDTH;
+    // the band the guarantee keeps clear is the cave's own: it narrows with
+    // the annealed difficulty, and the fixer works on that lane
+    const band = cave.bandHalfWidth;
     const radius = config.CAVE_RADIUS;
     const cells = Math.ceil(maxS / config.CAVE_FEATURE_CELL) + 1;
 
