@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { NeuralNetwork, teachingRate } from '../../../ai/Network';
+import { NeuralNetwork } from '../../../ai/Network';
+import { type Distiller, distillStep } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import { lerp } from '../../../utilities/math';
@@ -93,6 +94,8 @@ export class Ball {
   public teacher: NeuralNetwork | null = null;
   /** frames this ball has been distilling, the step decays over them */
   public teacherFrames = 0;
+  /** the probe data of its training run, built on the first distilled frame */
+  public distiller: Distiller | null = null;
   public controls: Controls;
   /** render accent, and the brain category it belongs to */
   public color: string;
@@ -458,9 +461,16 @@ export class Ball {
           // distillation: the teacher drives the ball, the own brain
           // backpropagates toward the teacher's output on the same inputs
           outputs = this.teacher.process(inputs);
-          this.brain.train(inputs, outputs, teachingRate(this.teacherFrames++));
+          this.distiller = distillStep(
+            this.distiller,
+            this.brain,
+            this.teacher,
+            inputs,
+            this.teacherFrames++,
+          );
         } else {
           this.teacherFrames = 0;
+          this.distiller = null;
           outputs = this.brain.process(inputs);
         }
         const [moveX, moveY, jump] = outputs;

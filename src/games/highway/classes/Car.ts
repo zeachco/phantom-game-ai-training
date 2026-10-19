@@ -1,4 +1,5 @@
-import { NeuralNetwork, teachingRate } from '../../../ai/Network';
+import { NeuralNetwork } from '../../../ai/Network';
+import { type Distiller, distillStep } from '../../../ai/distill';
 import { getRandomColor } from '../../../utilities/colors';
 import {
   type AABB,
@@ -27,6 +28,8 @@ export class Car {
   public teacher: NeuralNetwork | null = null;
   /** frames this car has been distilling, the step decays over them */
   public teacherFrames = 0;
+  /** the probe data of its training run, built on the first distilled frame */
+  public distiller: Distiller | null = null;
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -148,9 +151,16 @@ export class Car {
         // distillation: the teacher drives the car, the own brain
         // backpropagates toward the teacher's output on the same inputs
         outputs = this.teacher.process(inputs);
-        this.brain.train(inputs, outputs, teachingRate(this.teacherFrames++));
+        this.distiller = distillStep(
+          this.distiller,
+          this.brain,
+          this.teacher,
+          inputs,
+          this.teacherFrames++,
+        );
       } else {
         this.teacherFrames = 0;
+        this.distiller = null;
         outputs = this.brain.process(inputs);
       }
 

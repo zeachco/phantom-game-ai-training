@@ -1,4 +1,5 @@
-import { NeuralNetwork, teachingRate } from '../../../ai/Network';
+import { NeuralNetwork } from '../../../ai/Network';
+import { type Distiller, distillStep } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import { ControlType } from '../types';
@@ -54,6 +55,8 @@ export class Player {
   public teacher: NeuralNetwork | null = null;
   /** frames this climber has been distilling, the step decays over them */
   public teacherFrames = 0;
+  /** the probe data of its training run, built on the first distilled frame */
+  public distiller: Distiller | null = null;
 
   #prevFeet: number;
   #prevJumpHeld = false;
@@ -266,13 +269,16 @@ export class Player {
           // distillation: the teacher drives the climber, the own brain
           // backpropagates toward the teacher's output on the same inputs
           outputs = this.teacher.process(readings);
-          this.brain.train(
+          this.distiller = distillStep(
+            this.distiller,
+            this.brain,
+            this.teacher,
             readings,
-            outputs,
-            teachingRate(this.teacherFrames++),
+            this.teacherFrames++,
           );
         } else {
           this.teacherFrames = 0;
+          this.distiller = null;
           outputs = this.brain.process(readings);
         }
         this.controls.left = clamp(0, 1, outputs[0]);
