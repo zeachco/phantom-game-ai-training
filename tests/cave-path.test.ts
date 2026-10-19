@@ -9,7 +9,6 @@ import {
   Vector3,
 } from 'three';
 import { Cave } from '../src/games/cave/classes/Cave';
-import { LANDING_RUNOUT } from '../src/games/cave/classes/PathCheck';
 import { config } from '../src/games/cave/classes/Config';
 import { Ball } from '../src/games/cave/classes/Ball';
 
@@ -74,7 +73,9 @@ test('the path guarantee keeps a drivable line on every seed', () => {
         expect(cell.ramp).not.toBeNull();
       if (cell.ramp) {
         const landingTo =
-          cell.ramp.centerS + cell.ramp.height / 0.35 + LANDING_RUNOUT;
+          cell.ramp.centerS +
+          cell.ramp.height / 0.35 +
+          config.CAVE_LANDING_RUNOUT;
         for (const col of cell.columns) {
           const inLanding =
             col.centerS + col.halfLen > cell.ramp.centerS &&

@@ -278,6 +278,12 @@ class Config {
   public CAVE_RAMP_LEAD = 76;
   /** ramp approach length; the floor limiter turns it into a smooth climb */
   public CAVE_RAMP_LENGTH = 40;
+  /** landing-zone runout, in arc units: the extra clear span appended
+   *  behind a ramp's back slope (height / launch speed) — the landing-zone
+   *  minimum. A ball descending from the lip keeps moving along the band
+   *  after touchdown, so the zone keeps that distance free of in-band
+   *  columns before the next feature may sit */
+  public CAVE_LANDING_RUNOUT = 60;
   /** ramp lip height at full terrain progress (also its launch size) */
   public CAVE_RAMP_HEIGHT = 18;
   /** forward distance of the abrupt back cut behind a ramp lip: the deck
