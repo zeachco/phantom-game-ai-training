@@ -65,6 +65,22 @@ function nodePositions(count: number, left: number, right: number) {
   return positions;
 }
 
+/** no values at all, a brain without that hidden row */
+const NO_VALUES: number[] = [];
+
+/** a radius that leaves a visible gap between the neighbours of one row */
+function rowRadius(width: number, count: number) {
+  if (count <= 1) return Math.min(RADIUS, Math.max(2, width * 0.4));
+  return Math.min(RADIUS, (width / (count - 1)) * 0.35);
+}
+
+/** one hidden row of the distillation view: a trainee and a guide cluster side by side */
+interface SplitHiddenRow {
+  y: number;
+  trainee: { x: number[]; radius: number; values: number[] };
+  guide: { x: number[]; radius: number; values: number[] };
+}
+
 /** `0`, `1`, ... reused across frames, a mixed brain relabels its experts on each one */
 const indexLabelsCache: string[][] = [];
 function indexLabels(count: number) {
@@ -172,16 +188,20 @@ class LinkLayer {
   #canvas = document.createElement('canvas');
   #ctx = this.#canvas.getContext('2d') as CanvasRenderingContext2D;
   #network: NeuralNetwork | undefined;
+  #variant = '';
   #left = NaN;
   #width = 0;
   #height = 0;
 
+  /** `variant` names the view the layouts belong to: the same brain is drawn
+   *  at different places in the solo, mixed and split views */
   draw(
     ctx: CanvasRenderingContext2D,
     network: NeuralNetwork,
     layouts: LevelLayout[],
     left: number,
     width: number,
+    variant = '',
   ) {
     const stripWidth = Math.ceil(width) + LinkLayer.PAD * 2;
     const stripHeight = ctx.canvas.height;
@@ -189,11 +209,12 @@ class LinkLayer {
 
     if (
       this.#network !== network ||
+      this.#variant !== variant ||
       this.#left !== left ||
       this.#width !== stripWidth ||
       this.#height !== stripHeight
     ) {
-      this.#rasterize(network, layouts, left, stripWidth, stripHeight);
+      this.#rasterize(network, layouts, left, stripWidth, stripHeight, variant);
     }
 
     ctx.drawImage(this.#canvas, left - LinkLayer.PAD, 0);
@@ -205,6 +226,7 @@ class LinkLayer {
     left: number,
     width: number,
     height: number,
+    variant: string,
   ) {
     const ctx = this.#ctx;
     // assigning a size clears the strip and resets its context
@@ -218,6 +240,7 @@ class LinkLayer {
     for (let i = 0; i < layouts.length; i++) drawLinks(ctx, layouts[i]);
 
     this.#network = network;
+    this.#variant = variant;
     this.#left = left;
     this.#width = width;
     this.#height = height;
@@ -286,29 +309,12 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     network: NeuralNetwork,
     guide: NeuralNetwork | null,
   ) {
-    // distillation: the same sensors and the same controls, drawn twice. Only
-    // the hidden neurons differ, so the two halves mirror each other and the
-    // outputs carry the red delta of what the trainee has left to learn.
+    // distillation: one brain drawn as two. The sensors are the same, the
+    // controls are the same, only the hidden neurons are split, trainee on the
+    // left and guide on the right, and the outputs carry the red delta of what
+    // the trainee has left to learn.
     if (guide && !(network instanceof MixedNetwork)) {
-      const half = (ctx.canvas.width - MARGIN * 3) / 2;
-      const trainee = this.#drawNetwork(
-        ctx,
-        network,
-        MARGIN,
-        half,
-        CONTROL_LABELS,
-        this.#mainLinks,
-      );
-      const trained = this.#drawNetwork(
-        ctx,
-        guide,
-        MARGIN * 2 + half,
-        half,
-        CONTROL_LABELS,
-        this.#guideLinks,
-      );
-      this.#drawOutputDeltas(ctx, trainee, trained);
-      this.#drawOutputDeltas(ctx, trained, trainee);
+      this.#drawDistillationView(ctx, network, guide);
       return;
     }
 
@@ -355,48 +361,13 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     width: number,
     outputLabels: string[],
     links: LinkLayer,
+    variant = '',
   ) {
     const layouts = this.#layout(ctx, network, left, width, outputLabels);
-    if (this.renderLines) links.draw(ctx, network, layouts, left, width);
+    if (this.renderLines)
+      links.draw(ctx, network, layouts, left, width, variant);
     this.#drawNodes(ctx, layouts);
     return layouts;
-  }
-
-  /**
-   * The gap between the two answers, drawn in red around `from`'s outputs: an
-   * arc whose sweep is how far the target's output is, one direction for a
-   * target above the current value, the other one for below.
-   */
-  #drawOutputDeltas(
-    ctx: CanvasRenderingContext2D,
-    trainee: LevelLayout[],
-    guide: LevelLayout[],
-  ) {
-    const mine = trainee[0];
-    const theirs = guide[0];
-    if (!mine || !theirs) return;
-    const outputs = mine.level.outputs;
-    const target = theirs.level.outputs;
-    // just outside the socket ring, so the arc is readable next to the node
-    const radius = Math.max(5, mine.radius * 1.25);
-
-    ctx.setLineDash(NO_DASH);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = 'red';
-    for (let i = 0; i < mine.outputX.length; i++) {
-      const delta = (target[i] ?? 0) - (outputs[i] ?? 0);
-      if (!Number.isFinite(delta) || Math.abs(delta) < 0.01) continue;
-      const sweep = TAU * Math.max(-1, Math.min(1, delta));
-      ctx.beginPath();
-      ctx.arc(
-        mine.outputX[i],
-        mine.top,
-        radius,
-        -Math.PI / 2,
-        -Math.PI / 2 + sweep,
-      );
-      ctx.stroke();
-    }
   }
 
   #layout(
@@ -479,50 +450,334 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       const { level, top, bottom, radius, inputX, outputX, labels } =
         layouts[i];
 
-      ctx.beginPath();
-      for (let n = 0; n < inputX.length; n++) {
-        traceCircle(ctx, inputX[n], bottom, radius);
-      }
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.stroke();
-
-      strokeGauges(
+      this.#drawRow(
         ctx,
         inputX,
         bottom,
-        radius * 0.55,
+        radius,
         level.inputs,
+        'rgba(0, 0, 0, 0.65)',
         'orange',
         'green',
         true,
       );
-
-      ctx.beginPath();
-      for (let n = 0; n < outputX.length; n++) {
-        traceCircle(ctx, outputX[n], top, radius);
-      }
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.stroke();
-
-      strokeGauges(
+      this.#drawRow(
         ctx,
         outputX,
         top,
-        radius * 0.8,
+        radius,
         level.outputs,
+        'rgba(255, 255, 255, 0.4)',
+        '#def',
+        '#86f',
+        false,
+        labels,
+      );
+    }
+  }
+
+  /** one row of sockets and their gauges, the unit every view is built from */
+  #drawRow(
+    ctx: CanvasRenderingContext2D,
+    positions: number[],
+    y: number,
+    radius: number,
+    values: number[],
+    ringColor: string,
+    positiveColor: string,
+    negativeColor: string,
+    absolute: boolean,
+    labels: string[] = NO_LABELS,
+  ) {
+    ctx.beginPath();
+    for (let n = 0; n < positions.length; n++) {
+      traceCircle(ctx, positions[n], y, radius);
+    }
+    ctx.strokeStyle = ringColor;
+    ctx.stroke();
+
+    strokeGauges(
+      ctx,
+      positions,
+      y,
+      radius * (absolute ? 0.55 : 0.8),
+      values,
+      positiveColor,
+      negativeColor,
+      absolute,
+    );
+
+    if (!labels.length) return;
+    ctx.font = `${Math.max(9, Math.round(radius))}px Arial`;
+    ctx.fillStyle = 'white';
+    for (let n = 0; n < positions.length; n++) {
+      if (labels[n]) ctx.fillText(labels[n], positions[n], y + radius * 0.1);
+    }
+  }
+
+  /**
+   * The distillation view: a single brain-like diagram where the sensors and
+   * the controls are shared and only the hidden layers are split, the trainee
+   * on the left and the guide on the right of every hidden row. Both brains
+   * keep their own links (sensors to their first hidden row, their hidden rows
+   * to each other, their last hidden row to the shared controls).
+   */
+  #drawDistillationView(
+    ctx: CanvasRenderingContext2D,
+    trainee: NeuralNetwork,
+    guide: NeuralNetwork,
+  ) {
+    const layout = this.#splitLayout(ctx, trainee, guide);
+    ctx.setLineDash(NO_DASH);
+    ctx.lineWidth = 2;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (this.renderLines) {
+      this.#mainLinks.draw(
+        ctx,
+        trainee,
+        layout.traineeLevels,
+        MARGIN,
+        ctx.canvas.width - MARGIN * 2,
+        'split',
+      );
+      this.#guideLinks.draw(
+        ctx,
+        guide,
+        layout.guideLevels,
+        MARGIN,
+        ctx.canvas.width - MARGIN * 2,
+        'split',
+      );
+    }
+
+    // the shared sensor row, read by both brains
+    this.#drawRow(
+      ctx,
+      layout.inputs,
+      layout.inputY,
+      layout.inputRadius,
+      trainee.levels[0]?.inputs ?? [],
+      'rgba(0, 0, 0, 0.65)',
+      'orange',
+      'green',
+      true,
+    );
+
+    // every hidden row holds two clusters: trainee left, guide right
+    for (const row of layout.hiddenRows) {
+      this.#drawRow(
+        ctx,
+        row.trainee.x,
+        row.y,
+        row.trainee.radius,
+        row.trainee.values,
+        'rgba(255, 255, 255, 0.4)',
         '#def',
         '#86f',
         false,
       );
+      this.#drawRow(
+        ctx,
+        row.guide.x,
+        row.y,
+        row.guide.radius,
+        row.guide.values,
+        'rgba(255, 255, 255, 0.4)',
+        '#dfd',
+        '#6d6',
+        false,
+      );
+    }
 
-      if (!labels.length) continue;
-      ctx.font = `${Math.max(9, Math.round(radius))}px Arial`;
-      ctx.fillStyle = 'white';
-      for (let n = 0; n < outputX.length; n++) {
-        if (labels[n]) {
-          ctx.fillText(labels[n], outputX[n], top + radius * 0.1);
-        }
-      }
+    // the shared control row, answered by both brains
+    const last = trainee.levels[trainee.levels.length - 1];
+    this.#drawRow(
+      ctx,
+      layout.outputs,
+      layout.outputY,
+      layout.outputRadius,
+      last?.outputs ?? [],
+      'rgba(255, 255, 255, 0.4)',
+      '#def',
+      '#86f',
+      false,
+      CONTROL_LABELS,
+    );
+
+    this.#drawOutputDeltas2(
+      ctx,
+      layout.outputs,
+      layout.outputY,
+      layout.outputRadius,
+      last?.outputs ?? [],
+      guide.levels[guide.levels.length - 1]?.outputs ?? [],
+    );
+  }
+
+  /**
+   * The merged layout: rows are sensors at the bottom, controls at the top and
+   * the hidden rows in between. A brain with fewer hidden layers starts closer
+   * to the controls, so both last hidden rows sit next to the outputs they
+   * feed. Hidden clusters are spaced inside their half so a wide layer never
+   * overlaps its neighbour.
+   */
+  #splitLayout(
+    ctx: CanvasRenderingContext2D,
+    trainee: NeuralNetwork,
+    guide: NeuralNetwork,
+  ) {
+    const left = MARGIN;
+    const width = Math.max(1, ctx.canvas.width - MARGIN * 2);
+    const height = Math.max(1, ctx.canvas.height - MARGIN * 2);
+    const traineeHidden = Math.max(0, trainee.levels.length - 1);
+    const guideHidden = Math.max(0, guide.levels.length - 1);
+    const hiddenRowsNb = Math.max(1, traineeHidden, guideHidden);
+    const rowsNb = hiddenRowsNb + 2;
+    const step = height / (rowsNb - 1);
+    const yOf = (row: number) => MARGIN + height - row * step;
+
+    const center = left + width / 2;
+    const splitGap = Math.max(MARGIN, width * 0.06);
+    const traineeLeft = left;
+    const traineeRight = center - splitGap;
+    const guideLeft = center + splitGap;
+    const guideRight = left + width;
+
+    const inputsNb = Math.max(
+      trainee.levels[0]?.inputs.length ?? 0,
+      guide.levels[0]?.inputs.length ?? 0,
+    );
+    const lastTrainee = trainee.levels[trainee.levels.length - 1];
+    const lastGuide = guide.levels[guide.levels.length - 1];
+    const outputsNb = Math.max(
+      lastTrainee?.outputs.length ?? 0,
+      lastGuide?.outputs.length ?? 0,
+    );
+    const inputRadius = rowRadius(width, inputsNb);
+    const outputRadius = rowRadius(width, outputsNb);
+    const inputs = nodePositions(
+      inputsNb,
+      left + inputRadius,
+      left + width - inputRadius,
+    );
+    const outputs = nodePositions(
+      outputsNb,
+      left + outputRadius,
+      left + width - outputRadius,
+    );
+
+    // the hidden row index of a brain, aligned to the top of the hidden block
+    const rowOf = (hiddenIndex: number, hiddenNb: number) =>
+      hiddenRowsNb - hiddenNb + hiddenIndex;
+
+    /** a hidden row of one brain: values, positions and a radius that fits */
+    const cluster = (
+      values: number[],
+      clusterLeft: number,
+      clusterRight: number,
+      radius: number,
+    ) => ({
+      x: nodePositions(
+        values.length,
+        clusterLeft + radius,
+        clusterRight - radius,
+      ),
+      radius,
+      values,
+    });
+
+    const hiddenRows: SplitHiddenRow[] = [];
+    for (let row = 1; row <= hiddenRowsNb; row++) {
+      const traineeLevel =
+        trainee.levels[row - (hiddenRowsNb - traineeHidden) - 1];
+      const guideLevel = guide.levels[row - (hiddenRowsNb - guideHidden) - 1];
+      const traineeValues = traineeLevel ? traineeLevel.outputs : NO_VALUES;
+      const guideValues = guideLevel ? guideLevel.outputs : NO_VALUES;
+      // one node size per row, so the two clusters read as the same layer
+      const radius = Math.min(
+        rowRadius(traineeRight - traineeLeft, traineeValues.length),
+        rowRadius(guideRight - guideLeft, guideValues.length),
+      );
+      hiddenRows.push({
+        y: yOf(row),
+        trainee: cluster(traineeValues, traineeLeft, traineeRight, radius),
+        guide: cluster(guideValues, guideLeft, guideRight, radius),
+      });
+    }
+
+    const rowsAt = (
+      net: NeuralNetwork,
+      hiddenNb: number,
+      xOf: (hiddenIndex: number) => number[],
+    ): LevelLayout[] =>
+      net.levels.map((level, i) => {
+        const isFirst = i === 0;
+        const isLast = i === net.levels.length - 1;
+        const inputRow = isFirst
+          ? { y: yOf(0), x: inputs }
+          : {
+              y: yOf(rowOf(i, hiddenNb)),
+              x: xOf(i),
+            };
+        const outputRow = isLast
+          ? { y: yOf(rowsNb - 1), x: outputs }
+          : { y: yOf(rowOf(i + 1, hiddenNb)), x: xOf(i + 1) };
+        return {
+          level,
+          top: outputRow.y,
+          bottom: inputRow.y,
+          radius: inputRadius,
+          inputX: inputRow.x,
+          outputX: outputRow.x,
+          labels: NO_LABELS,
+        };
+      });
+
+    const traineeX = (hiddenIndex: number) =>
+      hiddenRows[rowOf(hiddenIndex, traineeHidden) - 1].trainee.x;
+    const guideX = (hiddenIndex: number) =>
+      hiddenRows[rowOf(hiddenIndex, guideHidden) - 1].guide.x;
+
+    return {
+      inputs,
+      inputY: yOf(0),
+      inputRadius,
+      outputs,
+      outputY: yOf(rowsNb - 1),
+      outputRadius,
+      hiddenRows,
+      traineeLevels: rowsAt(trainee, traineeHidden, traineeX),
+      guideLevels: rowsAt(guide, guideHidden, guideX),
+    };
+  }
+
+  /**
+   * The gap between the two answers, drawn in red around the shared outputs:
+   * an arc whose sweep is how far the guide's answer is, one direction for a
+   * target above the current value, the other one for below.
+   */
+  #drawOutputDeltas2(
+    ctx: CanvasRenderingContext2D,
+    positions: number[],
+    y: number,
+    radius: number,
+    outputs: number[],
+    target: number[],
+  ) {
+    // just outside the socket ring, so the arc is readable next to the node
+    const arcRadius = Math.max(5, radius * 1.25);
+    ctx.setLineDash(NO_DASH);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'red';
+    for (let i = 0; i < positions.length; i++) {
+      const delta = (target[i] ?? 0) - (outputs[i] ?? 0);
+      if (!Number.isFinite(delta) || Math.abs(delta) < 0.01) continue;
+      const sweep = TAU * Math.max(-1, Math.min(1, delta));
+      ctx.beginPath();
+      ctx.arc(positions[i], y, arcRadius, -Math.PI / 2, -Math.PI / 2 + sweep);
+      ctx.stroke();
     }
   }
 }
