@@ -1,5 +1,4 @@
 import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
-import { roundRect } from '../../utilities/canvas';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { MixedNetwork } from '../Mixed';
@@ -9,8 +8,6 @@ const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
 const FH = 18;
 const CONTROL_LABELS = ['F', 'L', 'R', 'B'];
-/** bars height plus the row of expert indexes under them */
-const SELECTION_HEIGHT = FH * 4;
 
 const TAU = Math.PI * 2;
 /** dash patterns are reused instead of rebuilt, setLineDash copies them anyway */
@@ -239,12 +236,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
   constructor(public config: T) {}
 
-  render(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    this.renderNetwork(ctx, network);
-    if (this.renderStats) this.renderStatsOverlay(ctx, network);
-  }
-
-  /** Draw only the network, allowing a game to place its stats elsewhere. */
   renderNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
     if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
@@ -254,11 +245,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     if (network instanceof MixedNetwork) network.replay();
 
     this.#drawBrain(ctx, network);
-  }
-
-  /** Draw only the network information card on a separate canvas. */
-  renderStatsOverlay(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    this.#drawStats(ctx, network);
   }
 
   #layerColor(layer: number) {
@@ -272,14 +258,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       this.config.MAX_NETWORK_LAYERS,
       '#808080',
     );
-  }
-
-  #createCursor(ctx: CanvasRenderingContext2D, width: number, fontHeight = FH) {
-    return function print(text: string, height = fontHeight) {
-      ctx.font = `${height}px Arial`;
-      ctx.fillText(text, 0, 0, width);
-      ctx.translate(0, height);
-    };
   }
 
   /**
@@ -322,98 +300,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
         this.#expertLinks,
       );
     }
-  }
-
-  /**
-   * One bar per expert, filled with the share of the run it has been driving.
-   * Drawn from the current origin, centered on it.
-   */
-  #drawSelection(
-    ctx: CanvasRenderingContext2D,
-    network: MixedNetwork,
-    width: number,
-  ) {
-    const shares = network.selectionShares;
-    const height = SELECTION_HEIGHT - FH;
-    const barWidth = width / shares.length;
-    const left = width * -0.5;
-
-    ctx.save();
-    ctx.setLineDash(NO_DASH);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'hanging';
-    ctx.font = `${RADIUS * 0.7}px Arial`;
-    network.expertLayers.forEach((layer, i) => {
-      // each bar wears the color of its brain, so the blended car accent can be
-      // read straight off the distribution
-      const color = this.#layerColor(layer);
-      const isActive = i === network.selectedIndex;
-      const x = left + i * barWidth;
-      ctx.globalAlpha = isActive ? 1 : 0.45;
-      ctx.fillStyle = color;
-      ctx.fillRect(
-        x + 1,
-        height * (1 - shares[i]),
-        barWidth - 2,
-        height * shares[i],
-      );
-      ctx.fillText(`${i}`, x + barWidth * 0.5, height + 2);
-      ctx.globalAlpha = 1;
-    });
-    ctx.restore();
-  }
-
-  #drawStats(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
-    const mixed = network instanceof MixedNetwork ? network : undefined;
-    const lines = [`Network ${network.id}`];
-
-    if (network.mutationIndex === 0) {
-      lines.push('Original model');
-    } else {
-      lines.push(`Mutation ${(network.mutationFactor * 100).toFixed(4)}%`);
-      lines.push(`MutationIndex ${network.mutationIndex}`);
-    }
-    lines.push(`Score ${Math.round(network.score)}`);
-
-    if (mixed) {
-      const expert = mixed.activeExpert;
-      lines.push(`Driving #${mixed.selectedIndex} of ${mixed.experts.length}`);
-      const slot = mixed.expertIds[mixed.selectedIndex];
-      lines.push(`Expert ${slot || '?'} ${expert ? expert.id : 'none'}`);
-      lines.push(`Switches ${mixed.switches}`);
-    }
-
-    // the usage bars live inside the panel, the canvas around it is taken by
-    // the two networks
-    const barsHeight = mixed ? SELECTION_HEIGHT : 0;
-    const pWidth = Math.min(200, ctx.canvas.width - MARGIN * 2);
-    /** the lines are squeezed to the content box, not to the border */
-    const contentWidth = pWidth - MARGIN * 2;
-    const levelColor = mixed
-      ? this.#blendedColor(mixed)
-      : this.#layerColor(network.levels.length);
-    const print = this.#createCursor(ctx, contentWidth);
-    ctx.save();
-    ctx.setLineDash(NO_DASH);
-    ctx.translate(ctx.canvas.width * 0.5 + MARGIN, MARGIN * 2);
-    ctx.strokeStyle = levelColor;
-    ctx.fillStyle = 'rgba(32, 32, 32, .76)';
-    roundRect(
-      ctx,
-      pWidth * -0.5,
-      0,
-      pWidth,
-      lines.length * FH + barsHeight + MARGIN * 2,
-      MARGIN,
-      true,
-    );
-    ctx.translate(0, MARGIN);
-    ctx.fillStyle = levelColor;
-    ctx.textBaseline = 'hanging';
-    ctx.textAlign = 'center';
-    for (const line of lines) print(line);
-    if (mixed) this.#drawSelection(ctx, mixed, contentWidth);
-    ctx.restore();
   }
 
   #drawNetwork(
