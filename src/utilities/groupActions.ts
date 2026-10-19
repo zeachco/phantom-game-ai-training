@@ -293,9 +293,13 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     apply(v: number | 'mixed'): void {
       value = v;
       el.hidden = v === 0;
-      rebuildTrainOptions();
-      refresh();
-      ensureTimer();
+      // nothing to train from while no group is followed, and the games create
+      // this panel before their race exists: don't call back into them yet
+      if (v !== 0) {
+        rebuildTrainOptions();
+        refresh();
+        ensureTimer();
+      }
     },
     setOpen(o: boolean): void {
       open = o;

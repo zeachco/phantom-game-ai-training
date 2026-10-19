@@ -163,6 +163,11 @@ export default async (state: typeof defaultState) => {
     }
   };
 
+  // the race is built further down, but the panel below is already wired to it
+  // and the first setFollow() runs before the constructor: keep the binding
+  // assignable so those callbacks can no-op until it exists
+  let race: CircuitRace;
+
   // group actions + trainer readouts, shown while a brain group is followed
   const groupPanel = createGroupActions({
     game: 'circuit',
@@ -174,16 +179,17 @@ export default async (state: typeof defaultState) => {
       return record ? globalRecordFromScores(record).globalScore : null;
     },
     resetLocal: resetBrainSaves,
-    reinitialize: () => race.initialize(),
+    reinitialize: () => race?.initialize(),
     groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],
     trainFrom: (v) => {
+      if (!race) return null;
       const key = v === 'mixed' ? 'mixed' : String(v);
       return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
     },
     setTrainFrom: (v, target) => {
-      race.setTrainFrom(v, target);
+      race?.setTrainFrom(v, target);
     },
-    teacherScore: (v) => race.teacherScore(v),
+    teacherScore: (v) => (race ? race.teacherScore(v) : null),
   });
 
   followKeys.append(followLabel);
@@ -461,7 +467,7 @@ export default async (state: typeof defaultState) => {
     humanCelebration.classList.remove('visible');
   };
 
-  const race = new CircuitRace(state, io, seed, {
+  race = new CircuitRace(state, io, seed, {
     onReset: () => {
       camSet = false;
       followTarget = undefined;
