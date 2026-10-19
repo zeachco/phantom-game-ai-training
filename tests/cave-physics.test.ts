@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { Vector3 } from 'three';
 import { Ball, getCaveBrainDimensions } from '../src/games/cave/classes/Ball';
 import type { Cave, RadialHit } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
-import { ControlType } from '../src/games/cave/types';
-import { Vector3 } from 'three';
 import { WallSolid } from '../src/games/cave/classes/WallSolid';
+import { ControlType } from '../src/games/cave/types';
 
 // An infinite plane isolates ball dynamics from procedural cave geometry.
 function floor(height = (_x: number, _z: number) => 0, grade = 0) {
@@ -169,9 +169,7 @@ describe('cave ball physics', () => {
     ball.brain.process = () => [0, 1, 0]; // drive full forward, no jump
     tick(ball, cave, 80); // reaches the coin, still far from any gate
     expect(ball.s).toBeLessThan(config.GATE_SPACING);
-    expect(ball.brain.score).toBe(
-      config.COIN_SCORE + config.COIN_BOOST_REWARD,
-    );
+    expect(ball.brain.score).toBe(config.COIN_SCORE + config.COIN_BOOST_REWARD);
   });
 
   test('a gentle floor contact does not kill the ball, a hard impact does', () => {

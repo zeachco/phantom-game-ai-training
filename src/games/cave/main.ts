@@ -5,9 +5,6 @@ import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText, getColorScale } from '../../utilities/colors';
-import { drawGamepadControls } from '../../utilities/driveIndicators';
-import { bindFollowKeys } from '../../utilities/followKeys';
-import { createScoreBoard } from '../../utilities/scoreBoard';
 import {
   bindSidePanelToggle,
   createCanvas,
@@ -15,7 +12,10 @@ import {
   createFrameMeter,
   resizeCanvas,
 } from '../../utilities/dom';
+import { drawGamepadControls } from '../../utilities/driveIndicators';
+import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
+import { createScoreBoard } from '../../utilities/scoreBoard';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -26,7 +26,7 @@ import { CaveRace } from './classes/CaveRace';
 import { ChaseCamera } from './classes/ChaseCamera';
 import { config, isDemo } from './classes/Config';
 import { SensorViz } from './classes/SensorViz';
-import { type defaultState, type Group } from './utilities';
+import type { defaultState, Group } from './utilities';
 
 type CaveState = typeof defaultState;
 
@@ -111,8 +111,7 @@ export default async (state: CaveState) => {
   let wireframe = false;
 
   // ?path=1 draws the path check's validated drivable line (dev overlay)
-  const debugPath =
-    new URLSearchParams(location.search).get('path') === '1';
+  const debugPath = new URLSearchParams(location.search).get('path') === '1';
 
   const race = new CaveRace(state, io, seed, scene, {
     onSeedChanged: (nextSeed) => {
