@@ -1,5 +1,5 @@
 import { rand } from '../utilities/math';
-import { Level, NeuralNetwork, TEACHING_RATE } from './Network';
+import { clampOutput, Level, NeuralNetwork, TEACHING_RATE } from './Network';
 import type { ModelsByLayerCount } from './utils';
 
 /** storage namespace, mixed brains stay apart from the regular ones */
@@ -156,8 +156,9 @@ export class MixedNetwork extends NeuralNetwork {
     }
 
     let loss = 0;
+    // the same clamped error plain brains use: only [-1, 1] is ever applied
     for (let k = 0; k < outCount; k++) {
-      const error = blended[k] - (targets[k] ?? 0);
+      const error = clampOutput(blended[k]) - clampOutput(targets[k] ?? 0);
       loss += error * error;
     }
 
@@ -170,7 +171,9 @@ export class MixedNetwork extends NeuralNetwork {
       const outputs = expertOutputs[j];
       let acc = 0;
       for (let k = 0; k < outCount; k++) {
-        acc += (blended[k] - (targets[k] ?? 0)) * (outputs[k] - blended[k]);
+        acc +=
+          (clampOutput(blended[k]) - clampOutput(targets[k] ?? 0)) *
+          (outputs[k] - blended[k]);
       }
       deltas[j] = (2 * share * acc) / outCount;
     }

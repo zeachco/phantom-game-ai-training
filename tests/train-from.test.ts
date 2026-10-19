@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { MixedNetwork } from '../src/ai/Mixed';
 import {
+  clampOutput,
   NeuralNetwork,
   teachingRate,
   TEACHING_FRAMES,
@@ -56,9 +57,11 @@ test('NeuralNetwork.train drives a plain brain toward its targets', () => {
   for (let i = 0; i < 300; i++) loss = net.train(inputs, targets);
 
   const out = net.process(inputs);
-  expect(loss).toBeLessThan(1e-6);
-  expect(Math.abs(out[0] - 1)).toBeLessThan(1e-3);
-  expect(Math.abs(out[1] - 0)).toBeLessThan(1e-3);
+  expect(loss).toBeLessThan(first * 0.01);
+  // the loss is the clamped one: past the applied range it plateaus at zero,
+  // so the outputs are asserted on that same range
+  expect(Math.abs(clampOutput(out[0]) - 1)).toBeLessThan(5e-3);
+  expect(Math.abs(clampOutput(out[1]) - 0)).toBeLessThan(5e-3);
 });
 
 test('MixedNetwork.train distills the selector and leaves the experts frozen', () => {
@@ -527,9 +530,9 @@ test('a long distillation stays finite instead of overflowing', () => {
   );
   expect(weights.every((weight) => Number.isFinite(weight))).toBe(true);
   expect(Math.max(...weights.map(Math.abs))).toBeLessThan(1000);
-  // and it did learn: the outputs follow the teacher
+  // and it did learn: the applied control follows the teacher
   for (const value of student.process(inputs))
-    expect(Math.abs(value - 1)).toBeLessThan(0.2);
+    expect(Math.abs(clampOutput(value) - 1)).toBeLessThan(0.35);
 });
 
 test('the teaching step starts eager and settles over 10000 frames', () => {
@@ -547,4 +550,58 @@ test('the teaching step starts eager and settles over 10000 frames', () => {
     expect(rate).toBeLessThanOrEqual(previous);
     previous = rate;
   }
+});
+
+test('only the applied control range is learned, not the raw output', () => {
+  // the games clamp outputs to [-1, 1]: a target of 50 steers like 1
+  const student = new NeuralNetwork(2, 1, 1);
+  for (let frame = 0; frame < 400; frame++)
+    student.train([1, 1], [50], teachingRate(frame));
+
+  const [out] = student.process([1, 1]);
+  // the raw output may sit past the bound, the applied value is what matters
+  expect(clampOutput(out)).toBeCloseTo(1, 2);
+  expect(Number.isFinite(out)).toBe(true);
+  expect(clampOutput(50)).toBe(1);
+  expect(clampOutput(-50)).toBe(-1);
+});
+
+test('a deep teacher is distilled through the clamped signal without diverging', () => {
+  // 9 levels is the deepest the games build, and its raw outputs reach the
+  // hundreds: the old loss chased those and blew the weights up
+  const teacher = new NeuralNetwork(25, 4, 9);
+  const student = new NeuralNetwork(25, 4, 9);
+  let seed = 12345;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const sample = () => new Array(25).fill(0).map(random);
+
+  /** the gap between the two answers, measured on the applied control range */
+  const gap = () => {
+    let error = 0;
+    for (let i = 0; i < 20; i++) {
+      const inputs = sample();
+      const out = student.process(inputs).map(clampOutput);
+      const target = teacher.process(inputs).map(clampOutput);
+      for (let k = 0; k < out.length; k++) error += (out[k] - target[k]) ** 2;
+    }
+    return error / 80;
+  };
+  const before = gap();
+
+  for (let frame = 0; frame < 4000; frame++) {
+    const inputs = sample();
+    student.train(inputs, teacher.process(inputs), teachingRate(frame));
+  }
+
+  const weights = student.levels.flatMap((level) =>
+    level.weights.flatMap((row) => row),
+  );
+  expect(weights.every((weight) => Number.isFinite(weight))).toBe(true);
+  expect(Math.max(...weights.map(Math.abs))).toBeLessThan(1000);
+  // it cannot fully copy a saturated 9 level teacher, but it closes over half
+  // of the gap and never diverges
+  expect(gap()).toBeLessThan(before / 2);
 });

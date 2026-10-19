@@ -2,7 +2,7 @@ import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { MixedNetwork } from '../Mixed';
-import type { Level, NeuralNetwork } from '../Network';
+import { clampOutput, type Level, type NeuralNetwork } from '../Network';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
@@ -772,7 +772,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = 'red';
     for (let i = 0; i < positions.length; i++) {
-      const delta = (target[i] ?? 0) - (outputs[i] ?? 0);
+      // what the games apply, so the gap reads like the difference it is
+      const delta = clampOutput(target[i] ?? 0) - clampOutput(outputs[i] ?? 0);
       if (!Number.isFinite(delta) || Math.abs(delta) < 0.01) continue;
       const sweep = TAU * Math.max(-1, Math.min(1, delta));
       ctx.beginPath();
