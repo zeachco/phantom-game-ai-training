@@ -781,7 +781,11 @@ export default async (state: CaveState) => {
       ? followed
       : state.balls.find((ball) => ball.useAI && !ball.damaged);
     if (panelOpen && visualized?.brain)
-      neuralVisualizer.renderNetwork(networkCtx, visualized.brain);
+      neuralVisualizer.renderNetwork(
+        networkCtx,
+        visualized.brain,
+        visualized.teacher,
+      );
     if (now - lastHud > 50) {
       lastHud = now;
       updateFollowButtons();

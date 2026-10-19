@@ -231,20 +231,36 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   /** the selector half and the expert half go stale on their own */
   #mainLinks = new LinkLayer();
   #expertLinks = new LinkLayer();
+  /** the guide of a distilling brain is rasterized on its own strip */
+  #guideLinks = new LinkLayer();
   /** a layout only depends on the network shape and the canvas size */
   #layoutCache = new WeakMap<NeuralNetwork, Map<string, LevelLayout[]>>();
 
   constructor(public config: T) {}
 
-  renderNetwork(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+  /**
+   * Draw a brain. `guide` is its teacher while it distils: the two are then
+   * drawn back to back, trainee on the left and guide on the right, and the red
+   * arc on the outputs is how far the guide would have answered from the
+   * trainee.
+   */
+  renderNetwork(
+    ctx: CanvasRenderingContext2D,
+    network: NeuralNetwork,
+    guide: NeuralNetwork | null = null,
+  ) {
     if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
     // experts are shared between the mixed cars, replaying the last pass
     // puts back the activations of the brain we are about to draw
     if (network instanceof MixedNetwork) network.replay();
+    if (guide instanceof MixedNetwork && guide.activeExpert) {
+      // a guide mixed brain answers through the expert it routed to
+      guide = guide.activeExpert;
+    }
 
-    this.#drawBrain(ctx, network);
+    this.#drawBrain(ctx, network, guide);
   }
 
   #layerColor(layer: number) {
@@ -265,7 +281,37 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
    * decision: the selector that reads the sensors on the left, the expert it
    * routed those same sensors to on the right.
    */
-  #drawBrain(ctx: CanvasRenderingContext2D, network: NeuralNetwork) {
+  #drawBrain(
+    ctx: CanvasRenderingContext2D,
+    network: NeuralNetwork,
+    guide: NeuralNetwork | null,
+  ) {
+    // distillation: the same sensors and the same controls, drawn twice. Only
+    // the hidden neurons differ, so the two halves mirror each other and the
+    // outputs carry the red delta of what the trainee has left to learn.
+    if (guide && !(network instanceof MixedNetwork)) {
+      const half = (ctx.canvas.width - MARGIN * 3) / 2;
+      const trainee = this.#drawNetwork(
+        ctx,
+        network,
+        MARGIN,
+        half,
+        CONTROL_LABELS,
+        this.#mainLinks,
+      );
+      const trained = this.#drawNetwork(
+        ctx,
+        guide,
+        MARGIN * 2 + half,
+        half,
+        CONTROL_LABELS,
+        this.#guideLinks,
+      );
+      this.#drawOutputDeltas(ctx, trainee, trained);
+      this.#drawOutputDeltas(ctx, trained, trainee);
+      return;
+    }
+
     if (!(network instanceof MixedNetwork)) {
       const width = ctx.canvas.width - MARGIN * 2;
       return this.#drawNetwork(
@@ -313,6 +359,44 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     const layouts = this.#layout(ctx, network, left, width, outputLabels);
     if (this.renderLines) links.draw(ctx, network, layouts, left, width);
     this.#drawNodes(ctx, layouts);
+    return layouts;
+  }
+
+  /**
+   * The gap between the two answers, drawn in red around `from`'s outputs: an
+   * arc whose sweep is how far the target's output is, one direction for a
+   * target above the current value, the other one for below.
+   */
+  #drawOutputDeltas(
+    ctx: CanvasRenderingContext2D,
+    trainee: LevelLayout[],
+    guide: LevelLayout[],
+  ) {
+    const mine = trainee[0];
+    const theirs = guide[0];
+    if (!mine || !theirs) return;
+    const outputs = mine.level.outputs;
+    const target = theirs.level.outputs;
+    // just outside the socket ring, so the arc is readable next to the node
+    const radius = Math.max(5, mine.radius * 1.25);
+
+    ctx.setLineDash(NO_DASH);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'red';
+    for (let i = 0; i < mine.outputX.length; i++) {
+      const delta = (target[i] ?? 0) - (outputs[i] ?? 0);
+      if (!Number.isFinite(delta) || Math.abs(delta) < 0.01) continue;
+      const sweep = TAU * Math.max(-1, Math.min(1, delta));
+      ctx.beginPath();
+      ctx.arc(
+        mine.outputX[i],
+        mine.top,
+        radius,
+        -Math.PI / 2,
+        -Math.PI / 2 + sweep,
+      );
+      ctx.stroke();
+    }
   }
 
   #layout(

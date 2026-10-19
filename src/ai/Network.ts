@@ -9,6 +9,20 @@ export const DEFAULT_KIND = 'neural';
  * so every student brain chases its teacher at the same pace.
  */
 export const TEACHING_RATE = 0.1;
+/** a whole distillation run decays over this many frames */
+export const TEACHING_FRAMES = 10_000;
+
+/**
+ * The step coefficient of a distillation run at `frames` into it. It starts
+ * eager, four times the base rate, and settles linearly back to the base rate
+ * over TEACHING_FRAMES: early frames move the brain fast, later ones polish it
+ * instead of oscillating around the teacher.
+ */
+export function teachingRate(frames: number, base = TEACHING_RATE): number {
+  if (!Number.isFinite(frames) || frames <= 0) return base * 4;
+  const decay = Math.min(1, frames / TEACHING_FRAMES);
+  return base * (1 + 3 * (1 - decay));
+}
 
 export class NeuralNetwork {
   /** amount of generation passed */

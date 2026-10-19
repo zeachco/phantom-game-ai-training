@@ -1,4 +1,4 @@
-import { NeuralNetwork } from '../../../ai/Network';
+import { NeuralNetwork, teachingRate } from '../../../ai/Network';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import {
@@ -55,6 +55,8 @@ export class Car {
   /** the teacher brain driving this car while its own brain distills, null
    *  for free training; set by the race every frame */
   public teacher: NeuralNetwork | null = null;
+  /** frames this car has been distilling, the step decays over them */
+  public teacherFrames = 0;
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -284,8 +286,9 @@ export class Car {
           // distillation: the teacher drives the car, the own brain
           // backpropagates toward the teacher's output on the same inputs
           outputs = this.teacher.process(inputs);
-          this.brain.train(inputs, outputs);
+          this.brain.train(inputs, outputs, teachingRate(this.teacherFrames++));
         } else {
+          this.teacherFrames = 0;
           outputs = this.brain.process(inputs);
         }
         const [throttle, left, right] = outputs;

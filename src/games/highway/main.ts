@@ -620,7 +620,12 @@ export default async (state: typeof defaultState) => {
 
     const followed = camTarget?.brain;
     if (followed) {
-      neuralVisualizer.renderNetwork(networkCtx, followed);
+      // a distilling car shows its brain next to its teacher
+      neuralVisualizer.renderNetwork(
+        networkCtx,
+        followed,
+        camTarget?.teacher ?? null,
+      );
     }
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';

@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { MixedNetwork } from '../src/ai/Mixed';
-import { NeuralNetwork } from '../src/ai/Network';
+import {
+  NeuralNetwork,
+  teachingRate,
+  TEACHING_FRAMES,
+  TEACHING_RATE,
+} from '../src/ai/Network';
 import type { ModelsByLayerCount } from '../src/ai/utils';
 import { ClimbRace } from '../src/games/climb/classes/ClimbRace';
 import type { defaultState } from '../src/games/climb/utilities';
@@ -525,4 +530,21 @@ test('a long distillation stays finite instead of overflowing', () => {
   // and it did learn: the outputs follow the teacher
   for (const value of student.process(inputs))
     expect(Math.abs(value - 1)).toBeLessThan(0.2);
+});
+
+test('the teaching step starts eager and settles over 10000 frames', () => {
+  // higher at first, then only decreasing until it reaches the base rate
+  expect(teachingRate(0)).toBeCloseTo(TEACHING_RATE * 4, 6);
+  expect(teachingRate(0)).toBeGreaterThan(teachingRate(1));
+  expect(teachingRate(TEACHING_FRAMES / 2)).toBeCloseTo(TEACHING_RATE * 2.5, 6);
+  expect(teachingRate(TEACHING_FRAMES)).toBeCloseTo(TEACHING_RATE, 6);
+  // the schedule is over: a long run keeps polishing at the base rate
+  expect(teachingRate(TEACHING_FRAMES * 3)).toBeCloseTo(TEACHING_RATE, 6);
+
+  let previous = teachingRate(0);
+  for (let frame = 100; frame <= TEACHING_FRAMES; frame += 100) {
+    const rate = teachingRate(frame);
+    expect(rate).toBeLessThanOrEqual(previous);
+    previous = rate;
+  }
 });

@@ -563,7 +563,11 @@ export default async (state: typeof defaultState) => {
 
       const followedBrain = followed?.brain;
       if (panelOpen && followedBrain)
-        neuralVisualizer.renderNetwork(networkCtx, followedBrain);
+        neuralVisualizer.renderNetwork(
+          networkCtx,
+          followedBrain,
+          followed?.teacher ?? null,
+        );
     },
     {
       maxFps: config.HUMAN_FPS_CAP,
