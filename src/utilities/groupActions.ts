@@ -17,10 +17,7 @@ import {
 import { showToast } from './toast';
 
 /** The server group key for a follow value: '1'..'9' or 'mixed'. */
-export function groupKeyFor(
-  game: string,
-  value: number | 'mixed',
-): string {
+export function groupKeyFor(game: string, value: number | 'mixed'): string {
   return value === 'mixed'
     ? `${game}_${MIXED_KIND}_${MIXED_LEVELS}`
     : `${game}_${value}`;
@@ -59,6 +56,17 @@ export interface GroupActionsOptions {
   resetLocal: (value: number | 'mixed') => void;
   /** restart the race so an imported remote brain is picked up */
   reinitialize: () => void;
+  /** every group value the game runs, e.g. [1..9, 'mixed'] */
+  groups: (number | 'mixed')[];
+  /** the group's stored distillation target, null for free training */
+  trainFrom: (value: number | 'mixed') => number | 'mixed' | null;
+  /** point the group at a teacher brain group, or null to free it */
+  setTrainFrom: (
+    value: number | 'mixed',
+    target: number | 'mixed' | null,
+  ) => void;
+  /** score of the brain the group distills from, null for free or none yet */
+  teacherScore: (value: number | 'mixed') => number | null;
 }
 
 export interface GroupActions {
@@ -72,11 +80,20 @@ export interface GroupActions {
   refresh(): void;
 }
 
-export function createGroupActions(
-  options: GroupActionsOptions,
-): GroupActions {
-  const { game, io, label, seedBest, globalBest, resetLocal, reinitialize } =
-    options;
+export function createGroupActions(options: GroupActionsOptions): GroupActions {
+  const {
+    game,
+    io,
+    label,
+    seedBest,
+    globalBest,
+    resetLocal,
+    reinitialize,
+    groups,
+    trainFrom,
+    setTrainFrom,
+    teacherScore,
+  } = options;
 
   const el = document.createElement('div');
   el.className = 'group-panel';
@@ -127,6 +144,19 @@ export function createGroupActions(
     readouts.appendChild(row);
     return val;
   };
+  // the distillation control: which other group's champion brain drives this
+  // group while its own brains backpropagate toward it
+  const trainRow = document.createElement('div');
+  trainRow.className = 'group-panel-row';
+  const trainName = document.createElement('span');
+  trainName.className = 'group-panel-name';
+  trainName.textContent = 'train from';
+  const trainSelect = document.createElement('select');
+  trainSelect.className = 'group-panel-select';
+  trainRow.appendChild(trainName);
+  trainRow.appendChild(trainSelect);
+  readouts.appendChild(trainRow);
+  const teacherVal = mkRow('teacher');
   const seedVal = mkRow('seed best');
   const globalVal = mkRow('global');
   const remoteVal = mkRow('remote');
@@ -140,6 +170,7 @@ export function createGroupActions(
   function refresh(): void {
     if (el.hidden || value === 0) return;
     const key = groupKeyFor(game, value);
+    teacherVal.textContent = fmt(teacherScore(value));
     seedVal.textContent = fmt(seedBest(key));
     globalVal.textContent = fmt(globalBest(key));
     remoteVal.textContent = fmt(baseScores(game)[key]);
@@ -219,11 +250,45 @@ export function createGroupActions(
     }
   });
 
+  /**
+   * Rebuild the selector's options: free training plus every other group the
+   * game runs (a group cannot distill from itself), then restore the stored
+   * selection.
+   */
+  function rebuildTrainOptions(): void {
+    trainSelect.length = 0;
+    const free = document.createElement('option');
+    free.value = '';
+    free.textContent = 'free (own brains)';
+    trainSelect.appendChild(free);
+    for (const group of groups) {
+      if (group === value) continue;
+      const option = document.createElement('option');
+      option.value = group === 'mixed' ? 'mixed' : String(group);
+      option.textContent = label(group);
+      trainSelect.appendChild(option);
+    }
+    const stored = trainFrom(value);
+    trainSelect.value =
+      stored === null ? '' : stored === 'mixed' ? 'mixed' : String(stored);
+  }
+
+  trainSelect.addEventListener('change', () => {
+    if (value === 0) return;
+    const raw = trainSelect.value;
+    setTrainFrom(
+      value,
+      raw === '' ? null : raw === 'mixed' ? 'mixed' : Number(raw),
+    );
+    refresh();
+  });
+
   return {
     el,
     apply(v: number | 'mixed'): void {
       value = v;
       el.hidden = v === 0;
+      rebuildTrainOptions();
       refresh();
       ensureTimer();
     },

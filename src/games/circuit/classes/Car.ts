@@ -52,6 +52,9 @@ export class Car {
   public useAI: boolean;
   public sensor?: Sensor;
   public brain: NeuralNetwork;
+  /** the teacher brain driving this car while its own brain distills, null
+   *  for free training; set by the race every frame */
+  public teacher: NeuralNetwork | null = null;
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -273,7 +276,15 @@ export class Car {
         inputs.push(this.gateDelta);
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
-        const outputs = this.brain.process(inputs);
+        let outputs: number[];
+        if (this.teacher) {
+          // distillation: the teacher drives the car, the own brain
+          // backpropagates toward the teacher's output on the same inputs
+          outputs = this.teacher.process(inputs);
+          this.brain.train(inputs, outputs);
+        } else {
+          outputs = this.brain.process(inputs);
+        }
         const [throttle, left, right] = outputs;
         // one signed float: gas positive, brake / reverse negative
         this.controls.throttle = Math.max(-1, Math.min(1, throttle));

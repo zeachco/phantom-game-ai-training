@@ -88,6 +88,9 @@ export class Ball {
   public useAI: boolean;
   public sensor?: Sensor;
   public brain: NeuralNetwork;
+  /** the teacher brain driving this ball while its own brain distills, null
+   *  for free training; set by the race every frame */
+  public teacher: NeuralNetwork | null = null;
   public controls: Controls;
   /** render accent, and the brain category it belongs to */
   public color: string;
@@ -445,7 +448,15 @@ export class Ball {
         inputs.push(this.gateDelta);
         inputs.push(this.gateHeading);
         inputs.push(this.gatePitch);
-        const outputs = this.brain.process(inputs);
+        let outputs: number[];
+        if (this.teacher) {
+          // distillation: the teacher drives the ball, the own brain
+          // backpropagates toward the teacher's output on the same inputs
+          outputs = this.teacher.process(inputs);
+          this.brain.train(inputs, outputs);
+        } else {
+          outputs = this.brain.process(inputs);
+        }
         const [moveX, moveY, jump] = outputs;
         this.controls.moveX = clamp(-1, 1, moveX);
         this.controls.moveY = clamp(-1, 1, moveY);

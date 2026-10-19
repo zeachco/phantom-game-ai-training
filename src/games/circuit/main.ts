@@ -16,6 +16,7 @@ import {
 import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import { saveTrainFrom } from '../../utilities/trainFrom';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -175,6 +176,15 @@ export default async (state: typeof defaultState) => {
     },
     resetLocal: resetBrainSaves,
     reinitialize: () => race.initialize(),
+    groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],
+    trainFrom: (v) => {
+      const key = v === 'mixed' ? 'mixed' : String(v);
+      return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
+    },
+    setTrainFrom: (v, target) => {
+      if (race.setTrainFrom(v, target)) saveTrainFrom('circuit', v, target);
+    },
+    teacherScore: (v) => race.teacherScore(v),
   });
 
   followKeys.append(followLabel);

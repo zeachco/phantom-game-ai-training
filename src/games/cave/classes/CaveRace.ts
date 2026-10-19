@@ -13,6 +13,7 @@ import {
   PLAYER_COLOR,
 } from '../../../ai/utils';
 import { lerp } from '../../../utilities/math';
+import { loadTrainFroms } from '../../../utilities/trainFrom';
 import { ControlType } from '../types';
 import {
   brainId,
@@ -238,6 +239,10 @@ export class CaveRace {
   }
 
   #buildPools() {
+    // a distilling group keeps its teacher across cave rebuilds
+    const trainFroms = new Map(
+      this.groups.map((group) => [group.key, group.trainFrom]),
+    );
     this.groups.length = 0;
     const hydrated = this.#refreshExperts();
 
@@ -248,6 +253,8 @@ export class CaveRace {
         isMixed: true,
         pool: [],
         mutationOnly: false,
+        trainFrom: trainFroms.get('mixed') ?? null,
+        teacher: null,
         best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
           ? {
               brain: this.state.sortedMixed[MIXED_LEVELS][0],
@@ -275,6 +282,8 @@ export class CaveRace {
         isMixed: false,
         pool: [],
         mutationOnly: false,
+        trainFrom: trainFroms.get(String(layer)) ?? null,
+        teacher: null,
         best: this.state.sortedModels[layer]?.[0]
           ? {
               brain: this.state.sortedModels[layer][0],
@@ -303,7 +312,21 @@ export class CaveRace {
         this.#spawnBall(group, slot),
       );
     }
+    this.#restoreTrainFroms();
     this.state.groups = this.groups;
+  }
+
+  /** Restore the persisted distillation targets the in-memory carryover did
+   *  not cover, on a fresh page load every group starts free. */
+  #restoreTrainFroms() {
+    for (const [student, target] of loadTrainFroms('cave')) {
+      if (student === target) continue;
+      const group = this.groups.find((candidate) =>
+        student === 'mixed' ? candidate.isMixed : candidate.layer === student,
+      );
+      if (!group || group.trainFrom !== null) continue;
+      group.trainFrom = target;
+    }
   }
 
   #groupOf(ball: Ball) {
@@ -311,6 +334,41 @@ export class CaveRace {
     const key =
       ball.brain instanceof MixedNetwork ? 'mixed' : String(ball.brainLayers);
     return this.groups.find((group) => group.key === key);
+  }
+
+  /**
+   * Point a group at another one for distillation: the group's balls are
+   * driven by the target's champion brain while their own brains
+   * backpropagate toward it. Pass null to free the group back to its own
+   * line. A group cannot distill from itself.
+   */
+  public setTrainFrom(
+    value: number | 'mixed',
+    target: number | 'mixed' | null,
+  ): boolean {
+    const group = this.groups.find((candidate) =>
+      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
+    );
+    if (!group || (target !== null && value === target)) return false;
+    group.trainFrom = target;
+    return true;
+  }
+
+  /** The score of the brain the group is distilling from, null for free
+   *  training or while the target has no champion yet. */
+  public teacherScore(value: number | 'mixed'): number | null {
+    const group = this.groups.find((candidate) =>
+      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
+    );
+    if (!group || group.trainFrom === null) return null;
+    return this.#teacherBrain(group.trainFrom)?.score ?? null;
+  }
+
+  /** The brain a distilling group imitates: the target group's champion,
+   *  null while the target has none yet. */
+  #teacherBrain(target: number | 'mixed'): NeuralNetwork | null {
+    const key = target === 'mixed' ? 'mixed' : String(target);
+    return this.groups.find((group) => group.key === key)?.best?.brain ?? null;
   }
 
   /** Record a gate split before it can become the new reference. */
@@ -593,10 +651,14 @@ export class CaveRace {
       ranked[i].brain.score += config.POSITION_SCORE_SCALE / (i + 1);
     }
 
+    for (const group of this.groups)
+      group.teacher =
+        group.trainFrom === null ? null : this.#teacherBrain(group.trainFrom);
     let savePoint = false;
     for (const ball of this.state.balls) {
       const alive = !ball.damaged;
       const racing = !ball.finished;
+      ball.teacher = this.#groupOf(ball)?.teacher ?? null;
       ball.update(this.cave);
       if (racing && ball.finished && !ball.damaged)
         this.#recordFinishTiming(ball);

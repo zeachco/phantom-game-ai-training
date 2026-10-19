@@ -49,6 +49,9 @@ export class Player {
   public controls: Controls;
   public sensor?: Sensor;
   public brain?: NeuralNetwork;
+  /** the teacher brain driving this climber while its own brain distills,
+   *  null for free training; set by the race every frame */
+  public teacher: NeuralNetwork | null = null;
 
   #prevFeet: number;
   #prevJumpHeld = false;
@@ -252,7 +255,16 @@ export class Player {
         this.comboValue,
       );
       if (this.useAI) {
-        const outputs = this.brain.process(this.sensor.readings);
+        const readings = this.sensor.readings;
+        let outputs: number[];
+        if (this.teacher && this.brain) {
+          // distillation: the teacher drives the climber, the own brain
+          // backpropagates toward the teacher's output on the same inputs
+          outputs = this.teacher.process(readings);
+          this.brain.train(readings, outputs);
+        } else {
+          outputs = this.brain.process(readings);
+        }
         this.controls.left = clamp(0, 1, outputs[0]);
         this.controls.right = clamp(0, 1, outputs[1]);
         this.controls.writeJump(outputs[2]);

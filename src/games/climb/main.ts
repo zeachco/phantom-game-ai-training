@@ -17,6 +17,7 @@ import {
   resizeCanvas,
 } from '../../utilities/dom';
 import { createGroupActions } from '../../utilities/groupActions';
+import { saveTrainFrom } from '../../utilities/trainFrom';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -26,11 +27,7 @@ import { CAMERA_LERP, climbCameraCenterY } from './camera';
 import { ClimbRace } from './classes/ClimbRace';
 import { config, isDemo } from './classes/Config';
 import type { Player } from './classes/Player';
-import {
-  brainId,
-  scoreBoardRows,
-  type defaultState,
-} from './utilities';
+import { brainId, scoreBoardRows, type defaultState } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -130,6 +127,15 @@ export default async (state: typeof defaultState) => {
     },
     resetLocal: resetBrainSaves,
     reinitialize: () => race.initialize(),
+    groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],
+    trainFrom: (v) => {
+      const key = v === 'mixed' ? 'mixed' : String(v);
+      return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
+    },
+    setTrainFrom: (v, target) => {
+      if (race.setTrainFrom(v, target)) saveTrainFrom('climb', v, target);
+    },
+    teacherScore: (v) => race.teacherScore(v),
   });
 
   const followBtns = new Map<

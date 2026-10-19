@@ -1,5 +1,5 @@
 import { rand } from '../utilities/math';
-import { Level, NeuralNetwork } from './Network';
+import { Level, NeuralNetwork, TEACHING_RATE } from './Network';
 import type { ModelsByLayerCount } from './utils';
 
 /** storage namespace, mixed brains stay apart from the regular ones */
@@ -126,6 +126,65 @@ export class MixedNetwork extends NeuralNetwork {
   }
 
   /**
+   * Distills the selector: the student's output is the softmax-weighted blend
+   * of the experts' outputs on the same inputs, pulled toward `targets`. The
+   * experts stay frozen (they are shared), only the routing weights move, so
+   * each state learns to hand the controls to the expert whose behavior the
+   * teacher showed there. Returns the pre-step loss.
+   */
+  public train(
+    inputs: number[],
+    targets: number[],
+    learningRate: number = TEACHING_RATE,
+  ): number {
+    const activations: number[][] = [inputs];
+    let selection = inputs;
+    for (const level of this.levels) {
+      selection = Level.feedForward(selection, level);
+      activations.push(selection);
+    }
+
+    const shares = softmax(selection);
+    const expertOutputs = this.#experts.map((expert) => expert.process(inputs));
+    const outCount = this.#outputNb;
+    const blended = new Array<number>(outCount).fill(0);
+    for (let i = 0; i < shares.length; i++) {
+      const share = shares[i];
+      if (!share) continue;
+      const outputs = expertOutputs[i];
+      for (let k = 0; k < outCount; k++) blended[k] += share * outputs[k];
+    }
+
+    let loss = 0;
+    for (let k = 0; k < outCount; k++) {
+      const error = blended[k] - (targets[k] ?? 0);
+      loss += error * error;
+    }
+
+    // softmax blend: the raw selector output j owns the share (E_j - y) of the
+    // output-space error, exactly as for a weighted mixture of experts
+    const deltas = new Array<number>(selection.length).fill(0);
+    for (let j = 0; j < selection.length; j++) {
+      const share = shares[j];
+      if (!share) continue;
+      const outputs = expertOutputs[j];
+      let acc = 0;
+      for (let k = 0; k < outCount; k++) {
+        acc += (blended[k] - (targets[k] ?? 0)) * (outputs[k] - blended[k]);
+      }
+      deltas[j] = (2 * share * acc) / outCount;
+    }
+
+    NeuralNetwork.applyGradients(
+      this.levels,
+      activations,
+      deltas,
+      learningRate,
+    );
+    return loss;
+  }
+
+  /**
    * Replays the last pass. Experts are shared between every mixed car so
    * their activations belong to whoever ran last, the visualizer calls this to
    * get the ones of the brain it is about to draw.
@@ -198,6 +257,14 @@ export class MixedNetwork extends NeuralNetwork {
       throw new Error(`Expert library changed since the mixed brain was saved`);
     }
   }
+}
+
+/** Softmax over the selector's raw outputs, numerically stable */
+function softmax(values: number[]): number[] {
+  const peak = Math.max(...values, 0);
+  const weights = values.map((value) => Math.exp(value - peak));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  return weights.map((weight) => weight / total);
 }
 
 /**

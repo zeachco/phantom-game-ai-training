@@ -4,6 +4,12 @@ import type { ModelsByLayerCount } from './utils';
 /** namespace of the regular brains, kept as-is to stay compatible with old saves */
 export const DEFAULT_KIND = 'neural';
 
+/**
+ * Learning rate for one distillation step (brain.train). Shared by all games
+ * so every student brain chases its teacher at the same pace.
+ */
+export const TEACHING_RATE = 0.1;
+
 export class NeuralNetwork {
   /** amount of generation passed */
   public version = 0;
@@ -96,6 +102,72 @@ export class NeuralNetwork {
           );
         }
       }
+    }
+  }
+
+  /**
+   * One gradient-descent step that pulls the network's outputs toward
+   * `targets` for `inputs` (MSE, backpropagated through every level). The
+   * brain is a pure linear map, so the gradients are exact. Returns the
+   * pre-step loss; watch it shrink while a distilling brain converges on its
+   * teacher.
+   */
+  public train(
+    inputs: number[],
+    targets: number[],
+    learningRate = TEACHING_RATE,
+  ): number {
+    const activations: number[][] = [inputs];
+    let current = inputs;
+    for (const level of this.levels) {
+      current = Level.feedForward(current, level);
+      activations.push(current);
+    }
+    const output = current;
+    let loss = 0;
+    const deltas = new Array<number>(output.length);
+    for (let i = 0; i < output.length; i++) {
+      const error = output[i] - (targets[i] ?? 0);
+      loss += error * error;
+      deltas[i] = (2 * error) / output.length;
+    }
+    NeuralNetwork.applyGradients(
+      this.levels,
+      activations,
+      deltas,
+      learningRate,
+    );
+    return loss;
+  }
+
+  /**
+   * Walk `deltas` (output-space) back through `levels`, applying one descent
+   * step per weight and propagating the input-space deltas. Shared by train
+   * and MixedNetwork's selector distillation.
+   */
+  public static applyGradients(
+    levels: Level[],
+    activations: number[][],
+    deltas: number[],
+    learningRate: number,
+  ): void {
+    for (let levelIndex = levels.length - 1; levelIndex >= 0; levelIndex--) {
+      const level = levels[levelIndex];
+      const into = activations[levelIndex];
+      const nextDeltas =
+        levelIndex > 0 ? new Array<number>(into.length).fill(0) : null;
+      for (let input = 0; input < level.inputs.length; input++) {
+        const activation = into[input];
+        if (!activation) continue; // zero input: no gradient on this row
+        const weights = level.weights[input];
+        for (let output = 0; output < level.outputs.length; output++) {
+          const delta = deltas[output];
+          if (!delta) continue;
+          if (nextDeltas) nextDeltas[input] += weights[output] * delta;
+          weights[output] -= learningRate * delta * activation;
+        }
+      }
+      if (nextDeltas) deltas = nextDeltas;
     }
   }
 }

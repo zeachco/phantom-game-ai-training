@@ -7,6 +7,7 @@ import {
 } from '../../ai/Mixed';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
+import type { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText, getColorScale } from '../../utilities/colors';
@@ -23,6 +24,7 @@ import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import { bestSavedModelScore } from '../../utilities/scoreRecords';
+import { loadTrainFroms, saveTrainFrom } from '../../utilities/trainFrom';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
@@ -113,6 +115,18 @@ export default async (state: typeof defaultState) => {
     initialize();
   };
 
+  // distillation targets: which group each group imitates, per group key
+  const trainFroms = new Map<string, number | 'mixed'>();
+  for (const [student, target] of loadTrainFroms('highway'))
+    trainFroms.set(String(student), target);
+  const groupKeyOf = (car: Car): number | 'mixed' =>
+    car.brain instanceof MixedNetwork ? 'mixed' : car.brainLayers;
+  /** the champion of a group: its best saved brain, null while it has none */
+  const championOf = (value: number | 'mixed'): NeuralNetwork | null =>
+    value === 'mixed'
+      ? (state.sortedMixed[MIXED_LEVELS]?.[0] ?? null)
+      : (state.sortedModels[value]?.[0] ?? null);
+
   // group actions + trainer readouts, shown while a brain group is followed
   const groupPanel = createGroupActions({
     game: 'highway',
@@ -122,6 +136,20 @@ export default async (state: typeof defaultState) => {
     globalBest: (key) => bestSavedModelScore(key),
     resetLocal: resetBrainSaves,
     reinitialize: () => initialize(),
+    groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],
+    trainFrom: (value) => trainFroms.get(String(value)) ?? null,
+    setTrainFrom: (value, target) => {
+      if (target !== null && value === target) return false;
+      if (target === null) trainFroms.delete(String(value));
+      else trainFroms.set(String(value), target);
+      saveTrainFrom('highway', value, target);
+      return true;
+    },
+    teacherScore: (v) => {
+      const target = trainFroms.get(String(v));
+      if (target === undefined) return null;
+      return championOf(target)?.score ?? null;
+    },
   });
 
   followKeys.append(followLabel);
@@ -421,6 +449,11 @@ export default async (state: typeof defaultState) => {
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
       const alive = !car.damaged;
+      // distillation: the teacher drives the car, the own brain backpropagates
+      const target = car.useAI
+        ? trainFroms.get(String(groupKeyOf(car)))
+        : undefined;
+      car.teacher = target === undefined ? null : championOf(target);
       car.update(road.borders, state.traffic, deathRays);
       if (alive && performance.now() - car.bornAt > config.CAR_LIFETIME_CAP) {
         car.damaged = true;

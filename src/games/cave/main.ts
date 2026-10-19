@@ -16,6 +16,7 @@ import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import { saveTrainFrom } from '../../utilities/trainFrom';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -225,6 +226,15 @@ export default async (state: CaveState) => {
       race.initialize();
       followTarget = undefined;
     },
+    groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],
+    trainFrom: (v) => {
+      const key = v === 'mixed' ? 'mixed' : String(v);
+      return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
+    },
+    setTrainFrom: (v, target) => {
+      if (race.setTrainFrom(v, target)) saveTrainFrom('cave', v, target);
+    },
+    teacherScore: (v) => race.teacherScore(v),
   });
 
   followKeys.append(followLabel);

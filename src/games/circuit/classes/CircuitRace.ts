@@ -12,6 +12,7 @@ import {
   PLAYER_COLOR,
 } from '../../../ai/utils';
 import { lerp } from '../../../utilities/math';
+import { loadTrainFroms } from '../../../utilities/trainFrom';
 import { ControlType } from '../types';
 import {
   brainId,
@@ -250,6 +251,10 @@ export class CircuitRace {
   }
 
   #buildPools() {
+    // a distilling group keeps its teacher across map rebuilds
+    const trainFroms = new Map(
+      this.groups.map((group) => [group.key, group.trainFrom]),
+    );
     this.groups.length = 0;
     const hydrated = this.#refreshExperts();
 
@@ -260,6 +265,8 @@ export class CircuitRace {
         isMixed: true,
         pool: [],
         mutationOnly: false,
+        trainFrom: trainFroms.get('mixed') ?? null,
+        teacher: null,
         best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
           ? {
               brain: this.state.sortedMixed[MIXED_LEVELS][0],
@@ -286,6 +293,8 @@ export class CircuitRace {
         isMixed: false,
         pool: [],
         mutationOnly: false,
+        trainFrom: trainFroms.get(String(layer)) ?? null,
+        teacher: null,
         best: this.state.sortedModels[layer]?.[0]
           ? {
               brain: this.state.sortedModels[layer][0],
@@ -315,7 +324,21 @@ export class CircuitRace {
         this.#spawnCar(group, slot),
       );
     }
+    this.#restoreTrainFroms();
     this.state.groups = this.groups;
+  }
+
+  /** Restore the persisted distillation targets the in-memory carryover did
+   *  not cover, on a fresh page load every group starts free. */
+  #restoreTrainFroms() {
+    for (const [student, target] of loadTrainFroms('circuit')) {
+      if (student === target) continue;
+      const group = this.groups.find((candidate) =>
+        student === 'mixed' ? candidate.isMixed : candidate.layer === student,
+      );
+      if (!group || group.trainFrom !== null) continue;
+      group.trainFrom = target;
+    }
   }
 
   #groupOf(car: Car) {
@@ -325,6 +348,41 @@ export class CircuitRace {
     const key =
       car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers);
     return this.groups.find((group) => group.key === key);
+  }
+
+  /**
+   * Point a group at another one for distillation: the group's cars are
+   * driven by the target's champion brain while their own brains
+   * backpropagate toward it. Pass null to free the group back to its own
+   * line. A group cannot distill from itself.
+   */
+  public setTrainFrom(
+    value: number | 'mixed',
+    target: number | 'mixed' | null,
+  ): boolean {
+    const group = this.groups.find((candidate) =>
+      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
+    );
+    if (!group || (target !== null && value === target)) return false;
+    group.trainFrom = target;
+    return true;
+  }
+
+  /** The score of the brain the group is distilling from, null for free
+   *  training or while the target has no champion yet. */
+  public teacherScore(value: number | 'mixed'): number | null {
+    const group = this.groups.find((candidate) =>
+      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
+    );
+    if (!group || group.trainFrom === null) return null;
+    return this.#teacherBrain(group.trainFrom)?.score ?? null;
+  }
+
+  /** The brain a distilling group imitates: the target group's champion,
+   *  null while the target has none yet. */
+  #teacherBrain(target: number | 'mixed'): NeuralNetwork | null {
+    const key = target === 'mixed' ? 'mixed' : String(target);
+    return this.groups.find((group) => group.key === key)?.best?.brain ?? null;
   }
 
   /** Record a checkpoint split before it can become the new reference. */
@@ -596,10 +654,14 @@ export class CircuitRace {
   /** Advance one simulation frame, leaving rendering and HUD updates outside. */
   public update(now: number) {
     this.circuit.updateObstacles();
+    for (const group of this.groups)
+      group.teacher =
+        group.trainFrom === null ? null : this.#teacherBrain(group.trainFrom);
     let savePoint = false;
     for (const car of this.state.cars) {
       const alive = !car.damaged;
       const racing = !car.finished;
+      car.teacher = this.#groupOf(car)?.teacher ?? null;
       car.update(this.state.obstacles, this.circuit);
       this.#recordCheckpointTiming(car);
       if (car.completedLap) this.#recordLapTiming(car);

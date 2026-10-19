@@ -40,6 +40,12 @@ export interface Group {
   seedBest: { brain: NeuralNetwork; score: number } | null;
   /** score frozen when the record holder died, shown for this group's ghost */
   ghostScore: number;
+  /** distillation target: the group whose champion brain drives this one
+   *  while its own brains backpropagate; null for free training */
+  trainFrom: number | 'mixed' | null;
+  /** the live teacher brain, refreshed every frame; null while the target
+   *  group has no champion yet or the group trains free */
+  teacher: NeuralNetwork | null;
   scores: GroupScores;
 }
 

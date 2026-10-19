@@ -22,6 +22,9 @@ export class Car {
   public bornAt: number;
   public sensor?: Sensor;
   public brain: NeuralNetwork;
+  /** the teacher brain driving this car while its own brain distills, null
+   *  for free training; set by the game loop every frame */
+  public teacher: NeuralNetwork | null = null;
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -136,7 +139,15 @@ export class Car {
         inputs.push(s == null ? 0 : 1 - s.offset);
       }
       inputs.push(this.speed / this.maxSpeed);
-      const outputs = this.brain.process(inputs);
+      let outputs: number[];
+      if (this.useAI && this.teacher) {
+        // distillation: the teacher drives the car, the own brain
+        // backpropagates toward the teacher's output on the same inputs
+        outputs = this.teacher.process(inputs);
+        this.brain.train(inputs, outputs);
+      } else {
+        outputs = this.brain.process(inputs);
+      }
 
       if (this.useAI) {
         const [forward, left, right, reverse] = outputs;
