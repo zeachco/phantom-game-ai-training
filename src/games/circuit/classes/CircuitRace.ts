@@ -12,7 +12,11 @@ import {
   PLAYER_COLOR,
 } from '../../../ai/utils';
 import { lerp } from '../../../utilities/math';
-import { loadTrainFroms } from '../../../utilities/trainFrom';
+import {
+  loadTrainFroms,
+  saveTrainFrom,
+  studentLabel,
+} from '../../../utilities/trainFrom';
 import { ControlType } from '../types';
 import {
   brainId,
@@ -184,7 +188,7 @@ export class CircuitRace {
       spawn.angle,
       ControlType.AI,
       config.CAR_MAX_SPEED,
-      brainId(group.layer, slot),
+      studentLabel(brainId(group.layer, slot), group.distillRun),
       '',
       group.layer,
       group.isMixed
@@ -266,6 +270,7 @@ export class CircuitRace {
         pool: [],
         mutationOnly: false,
         trainFrom: trainFroms.get('mixed') ?? null,
+        distillRun: false,
         teacher: null,
         hydratedTeacher: null,
         best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
@@ -295,6 +300,7 @@ export class CircuitRace {
         pool: [],
         mutationOnly: false,
         trainFrom: trainFroms.get(String(layer)) ?? null,
+        distillRun: false,
         teacher: null,
         hydratedTeacher: null,
         best: this.state.sortedModels[layer]?.[0]
@@ -316,6 +322,9 @@ export class CircuitRace {
       });
     }
 
+    // restored selections must be known before the pools spawn: a distilling
+    // group only fields its single student car
+    this.#restoreTrainFroms();
     for (const group of this.groups) {
       group.scores = loadScores(group, this.seed);
       // Every generated track starts with a fresh active comparison. Earlier
@@ -326,13 +335,16 @@ export class CircuitRace {
         this.#spawnCar(group, slot),
       );
     }
-    this.#restoreTrainFroms();
     this.state.groups = this.groups;
   }
 
   /** Restore the persisted distillation targets the in-memory carryover did
    *  not cover, on a fresh page load every group starts free. */
   #restoreTrainFroms() {
+    // a group carried over with a target is mid-training: single student car,
+    // disqualified score
+    for (const group of this.groups)
+      group.distillRun = group.trainFrom !== null;
     for (const [student, target] of loadTrainFroms('circuit')) {
       if (student === target) continue;
       const group = this.groups.find((candidate) =>
@@ -340,6 +352,9 @@ export class CircuitRace {
       );
       if (!group || group.trainFrom !== null) continue;
       group.trainFrom = target;
+      // a restored selection is an active training run: one student car and a
+      // disqualified score until the run ends
+      group.distillRun = true;
     }
   }
 
@@ -367,7 +382,42 @@ export class CircuitRace {
     );
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
+    group.distillRun = target !== null;
+    saveTrainFrom('circuit', value, target);
+    // a training run needs exactly one student car, so restart the group with
+    // a single fresh one instead of leaving its whole swarm on the teacher
+    this.#restartAsStudent(group);
     return true;
+  }
+
+  /**
+   * Replace a group's pool with the single student car a training run drives,
+   * marking it with the training emoji so the panel and the track agree.
+   */
+  #restartAsStudent(group: Group) {
+    const corpses = new Set(group.pool);
+    const oldLiving = group.pool.filter((car) => !car.damaged).length;
+    this.state.cars = this.state.cars.filter((car) => !corpses.has(car));
+    group.pool = this.#spawnSlots(group).map((slot) =>
+      this.#spawnCar(group, slot),
+    );
+    this.state.cars.push(...group.pool);
+    this.state.living += group.pool.length - oldLiving;
+    this.state.sortedCars = this.state.cars.slice();
+  }
+
+  /**
+   * The end of a run: every distillation selection goes back to free training
+   * and its disqualification flag is dropped, together with the persisted
+   * choice so a reload starts from a clean, measurable run.
+   */
+  #endDistillRuns() {
+    for (const group of this.groups) {
+      if (group.trainFrom === null) continue;
+      group.trainFrom = null;
+      group.distillRun = false;
+      saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
+    }
   }
 
   /** The score of the brain the group is distilling from, null for free
@@ -444,6 +494,9 @@ export class CircuitRace {
   }
 
   #promote(group: Group, car: Car) {
+    // a teacher-driven run is disqualified: it would only save the teacher's
+    // behavior under the student's name
+    if (group.distillRun) return;
     const brain = JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork;
     group.best = { brain, score: car.brain.score };
     this.#pendingSaves.add(group);
@@ -464,12 +517,15 @@ export class CircuitRace {
   }
 
   #settle(group: Group, car: Car) {
+    // a teacher-driven run is not the student's own output: it never settles
+    if (group.distillRun) return;
     if (!car.useAI || car.brain.score <= group.scores.seed) return;
     group.scores.seed = car.brain.score;
     this.#promote(group, car);
   }
 
   #markFinished(group: Group) {
+    if (group.distillRun) return;
     group.mutationOnly = true;
     group.scores.finished[String(this.seed)] = true;
     this.#pendingSaves.add(group);
@@ -530,6 +586,8 @@ export class CircuitRace {
   }
 
   #spawnSlots(group: Group) {
+    // a teacher-driven run needs a single student, nothing more
+    if (group.distillRun) return [0];
     if (group.mutationOnly)
       return Array.from(
         { length: config.FINISHED_CARS_PER_GROUP },
@@ -568,6 +626,7 @@ export class CircuitRace {
       if (group) {
         this.#settle(group, car);
         if (
+          !group.distillRun &&
           group.scores.seed > 0 &&
           car.brain.score >= group.scores.seed - Number.EPSILON
         ) {
@@ -587,6 +646,9 @@ export class CircuitRace {
   }
 
   #regenerateMap() {
+    // a new map ends the training run: the selection goes back to free
+    // training so the next run measures the student itself
+    this.#endDistillRuns();
     history.replaceState(
       null,
       '',

@@ -236,6 +236,9 @@ export class Car {
 
   update(obstacles: Obstacle[], circuit: Circuit) {
     if (this.damaged) return;
+    // a teacher-driven run is not the student's own output, so its score is
+    // not updated: whatever the frame earns is written back below
+    const frozenScore = this.teacher && this.brain ? this.brain.score : null;
     this.controls.update();
     this.checkpointFramesRemaining--;
     this.prevX = this.x;
@@ -292,6 +295,7 @@ export class Car {
         this.controls.right = right;
       }
     }
+    if (frozenScore !== null) this.brain.score = frozenScore;
   }
 
   /** a car that misses its next gate for the frame budget dies, exactly like

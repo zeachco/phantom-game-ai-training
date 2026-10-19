@@ -16,7 +16,6 @@ import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
-import { saveTrainFrom } from '../../utilities/trainFrom';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -232,7 +231,7 @@ export default async (state: CaveState) => {
       return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
     },
     setTrainFrom: (v, target) => {
-      if (race.setTrainFrom(v, target)) saveTrainFrom('cave', v, target);
+      race.setTrainFrom(v, target);
     },
     teacherScore: (v) => race.teacherScore(v),
   });
@@ -297,6 +296,7 @@ export default async (state: CaveState) => {
     '🪙 a spinning coin adds score and a temporary speed boost',
     '🧭 V toggles the wireframe view',
     '📉 the section gauge kills a ball that stops progressing',
+    '🎓 ball is being trained by another brain group (one student, score disqualified)',
   ].forEach((line, i) => {
     const el = document.createElement('span');
     el.textContent = line;

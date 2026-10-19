@@ -13,7 +13,11 @@ import {
   PLAYER_COLOR,
 } from '../../../ai/utils';
 import { lerp } from '../../../utilities/math';
-import { loadTrainFroms } from '../../../utilities/trainFrom';
+import {
+  loadTrainFroms,
+  saveTrainFrom,
+  studentLabel,
+} from '../../../utilities/trainFrom';
 import { ControlType } from '../types';
 import {
   brainId,
@@ -172,7 +176,7 @@ export class CaveRace {
       spawn,
       ControlType.AI,
       config.BALL_MAX_SPEED,
-      brainId(group.layer, slot),
+      studentLabel(brainId(group.layer, slot), group.distillRun),
       '',
       group.layer,
       group.isMixed
@@ -254,6 +258,7 @@ export class CaveRace {
         pool: [],
         mutationOnly: false,
         trainFrom: trainFroms.get('mixed') ?? null,
+        distillRun: false,
         teacher: null,
         hydratedTeacher: null,
         best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
@@ -284,6 +289,7 @@ export class CaveRace {
         pool: [],
         mutationOnly: false,
         trainFrom: trainFroms.get(String(layer)) ?? null,
+        distillRun: false,
         teacher: null,
         hydratedTeacher: null,
         best: this.state.sortedModels[layer]?.[0]
@@ -306,6 +312,9 @@ export class CaveRace {
       });
     }
 
+    // restored selections must be known before the pools spawn: a distilling
+    // group only fields its single student car
+    this.#restoreTrainFroms();
     for (const group of this.groups) {
       group.scores = loadScores(group, this.seed);
       group.ghostScore = group.scores.seed;
@@ -314,13 +323,16 @@ export class CaveRace {
         this.#spawnBall(group, slot),
       );
     }
-    this.#restoreTrainFroms();
     this.state.groups = this.groups;
   }
 
   /** Restore the persisted distillation targets the in-memory carryover did
    *  not cover, on a fresh page load every group starts free. */
   #restoreTrainFroms() {
+    // a group carried over with a target is mid-training: single student car,
+    // disqualified score
+    for (const group of this.groups)
+      group.distillRun = group.trainFrom !== null;
     for (const [student, target] of loadTrainFroms('cave')) {
       if (student === target) continue;
       const group = this.groups.find((candidate) =>
@@ -328,6 +340,9 @@ export class CaveRace {
       );
       if (!group || group.trainFrom !== null) continue;
       group.trainFrom = target;
+      // a restored selection is an active training run: one student car and a
+      // disqualified score until the run ends
+      group.distillRun = true;
     }
   }
 
@@ -353,7 +368,41 @@ export class CaveRace {
     );
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
+    group.distillRun = target !== null;
+    saveTrainFrom('cave', value, target);
+    // a training run needs exactly one student ball, so restart the group with
+    // a single fresh one instead of leaving its whole swarm on the teacher
+    this.#restartAsStudent(group);
     return true;
+  }
+
+  /**
+   * Replace a group's pool with the single student ball a training run drives,
+   * marking it with the training emoji so the panel and the cave agree.
+   */
+  #restartAsStudent(group: Group) {
+    const corpses = new Set(group.pool);
+    const oldLiving = group.pool.filter((ball) => !ball.damaged).length;
+    this.state.balls = this.state.balls.filter((ball) => !corpses.has(ball));
+    group.pool = this.#spawnSlots(group).map((slot) =>
+      this.#spawnBall(group, slot),
+    );
+    this.state.balls.push(...group.pool);
+    this.state.living += group.pool.length - oldLiving;
+  }
+
+  /**
+   * The end of a run: every distillation selection goes back to free training
+   * and its disqualification flag is dropped, together with the persisted
+   * choice so a reload starts from a clean, measurable run.
+   */
+  #endDistillRuns() {
+    for (const group of this.groups) {
+      if (group.trainFrom === null) continue;
+      group.trainFrom = null;
+      group.distillRun = false;
+      saveTrainFrom('cave', group.isMixed ? 'mixed' : group.layer, null);
+    }
   }
 
   /** The score of the brain the group is distilling from, null for free
@@ -419,6 +468,9 @@ export class CaveRace {
   }
 
   #promote(group: Group, ball: Ball) {
+    // a teacher-driven run is disqualified: it would only save the teacher's
+    // behavior under the student's name
+    if (group.distillRun) return;
     const brain = JSON.parse(JSON.stringify(ball.brain)) as NeuralNetwork;
     group.best = { brain, score: ball.brain.score };
     this.#pendingSaves.add(group);
@@ -437,6 +489,8 @@ export class CaveRace {
   }
 
   #settle(group: Group, ball: Ball) {
+    // a teacher-driven run is not the student's own output: it never settles
+    if (group.distillRun) return;
     if (!ball.useAI || ball.brain.score <= group.scores.seed) return;
     group.scores.seed = ball.brain.score;
     group.seedBest = {
@@ -447,6 +501,7 @@ export class CaveRace {
   }
 
   #markFinished(group: Group) {
+    if (group.distillRun) return;
     group.mutationOnly = true;
     group.scores.finished[String(this.seed)] = true;
     this.#pendingSaves.add(group);
@@ -506,6 +561,8 @@ export class CaveRace {
   }
 
   #spawnSlots(group: Group) {
+    // a teacher-driven run needs a single student, nothing more
+    if (group.distillRun) return [0];
     if (group.mutationOnly)
       return Array.from(
         { length: config.FINISHED_CARS_PER_GROUP },
@@ -547,6 +604,7 @@ export class CaveRace {
         this.#settle(group, ball);
         if (ball.deathCause === 'gauge') this.#pendingSaves.add(group);
         if (
+          !group.distillRun &&
           group.scores.seed > 0 &&
           ball.brain.score >= group.scores.seed - Number.EPSILON
         ) {
@@ -566,6 +624,9 @@ export class CaveRace {
   }
 
   #regenerateCave() {
+    // a new cave ends the training run: the selection goes back to free
+    // training so the next run measures the student itself
+    this.#endDistillRuns();
     this.cave.dispose();
     this.cave = new Cave(this.seed, this.scene);
     this.#completedBrainIndices.clear();
@@ -672,7 +733,9 @@ export class CaveRace {
     ranked.sort((a, b) => b.s - a.s);
     for (let i = 0; i < ranked.length; i++) {
       ranked[i].racePosition = i + 1;
-      ranked[i].brain.score += config.POSITION_SCORE_SCALE / (i + 1);
+      // a teacher-driven run is not the student's own output: no score
+      if (!this.#groupOf(ranked[i])?.distillRun)
+        ranked[i].brain.score += config.POSITION_SCORE_SCALE / (i + 1);
     }
 
     for (const group of this.groups)

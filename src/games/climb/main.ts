@@ -17,7 +17,6 @@ import {
   resizeCanvas,
 } from '../../utilities/dom';
 import { createGroupActions } from '../../utilities/groupActions';
-import { saveTrainFrom } from '../../utilities/trainFrom';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -133,7 +132,7 @@ export default async (state: typeof defaultState) => {
       return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
     },
     setTrainFrom: (v, target) => {
-      if (race.setTrainFrom(v, target)) saveTrainFrom('climb', v, target);
+      race.setTrainFrom(v, target);
     },
     teacherScore: (v) => race.teacherScore(v),
   });

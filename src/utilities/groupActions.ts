@@ -167,8 +167,15 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   let open = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
+  /** the select value for a stored target, '' standing for free training */
+  const targetValue = (target: number | 'mixed' | null): string =>
+    target === null ? '' : target === 'mixed' ? 'mixed' : String(target);
+
   function refresh(): void {
     if (el.hidden || value === 0) return;
+    // a run ending resets the group to free training without a follow change
+    const stored = targetValue(trainFrom(value));
+    if (trainSelect.value !== stored) trainSelect.value = stored;
     const key = groupKeyFor(game, value);
     teacherVal.textContent = fmt(teacherScore(value));
     seedVal.textContent = fmt(seedBest(key));
@@ -268,9 +275,7 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
       option.textContent = label(group);
       trainSelect.appendChild(option);
     }
-    const stored = trainFrom(value);
-    trainSelect.value =
-      stored === null ? '' : stored === 'mixed' ? 'mixed' : String(stored);
+    trainSelect.value = targetValue(trainFrom(value));
   }
 
   trainSelect.addEventListener('change', () => {

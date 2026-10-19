@@ -6,6 +6,17 @@ import { MIXED_KIND } from '../ai/Mixed';
  * per group so a refresh keeps every group on its teacher.
  */
 
+/** the marker shown on a car whose own brain is being trained by a teacher */
+export const TRAINING_EMOJI = '🎓';
+
+/**
+ * The label of a group's car: a training run appends the training emoji, the
+ * same way the first generation carries the baby emoji.
+ */
+export function studentLabel(label: string, training: boolean): string {
+  return training ? `${label} ${TRAINING_EMOJI}` : label;
+}
+
 const prefix = (game: string) => `${game}_trainFrom_`;
 
 const parse = (value: string | null): number | 'mixed' | null =>

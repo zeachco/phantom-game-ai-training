@@ -93,6 +93,9 @@ export class Player {
   }
 
   update(now: number): void {
+    // a teacher-driven run is not the student's own output, so its score is
+    // not updated: whatever the frame earns is written back before returning
+    const frozenScore = this.teacher && this.brain ? this.brain.score : null;
     if (this.damaged) {
       // Corpses ignore platforms and controls until they reach the ground.
       this.vy -= config.GRAVITY;
@@ -270,6 +273,7 @@ export class Player {
         this.controls.writeJump(outputs[2]);
       }
     }
+    if (frozenScore !== null && this.brain) this.brain.score = frozenScore;
     this.#updateParticles();
   }
 

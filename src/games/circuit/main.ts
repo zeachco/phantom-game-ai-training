@@ -16,7 +16,6 @@ import {
 import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
-import { saveTrainFrom } from '../../utilities/trainFrom';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -182,7 +181,7 @@ export default async (state: typeof defaultState) => {
       return race.groups.find((group) => group.key === key)?.trainFrom ?? null;
     },
     setTrainFrom: (v, target) => {
-      if (race.setTrainFrom(v, target)) saveTrainFrom('circuit', v, target);
+      race.setTrainFrom(v, target);
     },
     teacherScore: (v) => race.teacherScore(v),
   });
@@ -250,6 +249,7 @@ export default async (state: typeof defaultState) => {
     '👻 track record, frozen when its holder died',
     '🕹 human car, driven with arrows/WASD or a DualShock (left stick + L2/R2)',
     '🧭 ` follows the mixed brain',
+    '🎓 car is being trained by another brain group (one student, score disqualified)',
     '🏁 next checkpoint glows',
     '🚧 gray obstacle (circle or wall)',
   ].forEach((line, i) => {

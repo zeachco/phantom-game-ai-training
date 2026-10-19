@@ -125,7 +125,9 @@ export class Car {
 
     // Reward vertical progress only: forward travel decreases y, so the
     // gain is old_y - y. Lateral movement and total distance earn nothing.
-    if (this.brain) this.brain.score += old_y - this.y;
+    // A teacher-driven run is not the student's own output: its score is not
+    // updated.
+    if (this.brain && !this.teacher) this.brain.score += old_y - this.y;
 
     this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);

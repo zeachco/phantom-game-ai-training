@@ -24,7 +24,11 @@ import { bindFollowKeys } from '../../utilities/followKeys';
 import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import { bestSavedModelScore } from '../../utilities/scoreRecords';
-import { loadTrainFroms, saveTrainFrom } from '../../utilities/trainFrom';
+import {
+  loadTrainFroms,
+  saveTrainFrom,
+  studentLabel,
+} from '../../utilities/trainFrom';
 import { lerp } from '../../utilities/math';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { Car } from './classes/Car';
@@ -151,6 +155,25 @@ export default async (state: typeof defaultState) => {
     return brain;
   };
 
+  /** true while the group is teacher-driven: its run is disqualified from
+   *  saves and its score is frozen by the car itself */
+  const isDistilling = (value: number | 'mixed'): boolean =>
+    trainFroms.has(String(value));
+
+  /**
+   * The end of a run: every distillation selection goes back to free training,
+   * together with the persisted choice, so the next run measures the student
+   * itself rather than its teacher.
+   */
+  const endDistillRuns = (): void => {
+    for (const value of [...trainFroms.keys()]) {
+      const student: number | 'mixed' =
+        value === 'mixed' ? 'mixed' : Number(value);
+      saveTrainFrom('highway', student, null);
+    }
+    trainFroms.clear();
+  };
+
   // group actions + trainer readouts, shown while a brain group is followed
   const groupPanel = createGroupActions({
     game: 'highway',
@@ -167,6 +190,9 @@ export default async (state: typeof defaultState) => {
       if (target === null) trainFroms.delete(String(value));
       else trainFroms.set(String(value), target);
       saveTrainFrom('highway', value, target);
+      // a training run fields a single student car, so the run restarts with
+      // that one car instead of leaving the group's swarm on the teacher
+      initialize();
       return true;
     },
     teacherScore: (v) => {
@@ -235,6 +261,7 @@ export default async (state: typeof defaultState) => {
   [
     'Score board',
     '👶 first generation',
+    '🎓 car is being trained by another brain group (one student, score disqualified)',
     '💀 car has crashed',
     '🏆 car has crashed with a higher score',
     '💜 car is racing',
@@ -349,13 +376,17 @@ export default async (state: typeof defaultState) => {
 
       let isSaveCompatible = true;
 
-      for (let i = 0; i <= carsNbForThisLayer; i++) {
+      // a teacher-driven run needs a single student car, nothing more
+      const distilling = isDistilling(l);
+      const slots = distilling ? 1 : carsNbForThisLayer + 1;
+
+      for (let i = 0; i < slots; i++) {
         const car = new Car(
           road.getLane(1),
           100,
           ControlType.AI,
           3,
-          `${l} - 0 👶`,
+          studentLabel(`${l} - 0 👶`, distilling),
           layerColor(l, config.MAX_NETWORK_LAYERS),
           l,
         );
@@ -372,7 +403,7 @@ export default async (state: typeof defaultState) => {
             isSaveCompatible = false;
           }
 
-          car.label = [l, i].join('-');
+          car.label = studentLabel([l, i].join('-'), distilling);
         }
         cars.push(car);
       }
@@ -409,13 +440,17 @@ export default async (state: typeof defaultState) => {
     let isSaveCompatible = true;
     const carsNb = Math.max(config.MIXED_CARS, config.MIXED_MIN_CARS);
 
-    for (let i = 0; i <= carsNb; i++) {
+    // a teacher-driven run needs a single student car, nothing more
+    const distilling = isDistilling('mixed');
+    const slots = distilling ? 1 : carsNb + 1;
+
+    for (let i = 0; i < slots; i++) {
       const car = new Car(
         road.getLane(1),
         100,
         ControlType.AI,
         3,
-        `0 👶`,
+        studentLabel('0 👶', distilling),
         config.MIXED_COLOR,
         MIXED_LEVELS,
         (inputCount, outputCount) =>
@@ -439,7 +474,7 @@ export default async (state: typeof defaultState) => {
           );
         }
 
-        car.label = `${i}`;
+        car.label = studentLabel(`${i}`, distilling);
       }
 
       cars.push(car);
@@ -743,11 +778,17 @@ export default async (state: typeof defaultState) => {
 
   function endExperiment() {
     if (state.playing) {
-      const finalSort = state.sortedCars.filter((c) => c.useAI);
+      // teacher-driven cars are disqualified: saving them would only store the
+      // teacher's behavior under the student's name
+      const finalSort = state.sortedCars.filter(
+        (c) => c.useAI && !isDistilling(groupKeyOf(c)),
+      );
       io.saveBestModels(
         finalSort.map((c) => c.brain),
         7,
       );
+      // the run is over: back to free training for every group
+      endDistillRuns();
       state.playing = false;
       setTimeout(initialize, 1500);
     }

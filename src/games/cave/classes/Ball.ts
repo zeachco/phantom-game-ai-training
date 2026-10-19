@@ -312,6 +312,9 @@ export class Ball {
 
   update(cave: Cave) {
     if (this.damaged) return;
+    // a teacher-driven run is not the student's own output, so its score is
+    // not updated: whatever the frame earns is written back below
+    const frozenScore = this.teacher ? this.brain.score : null;
     this.controls.update();
     let jumped = false;
     if (this.controls.consumeJump()) {
@@ -463,6 +466,7 @@ export class Ball {
         this.controls.writeJump(jump);
       }
     }
+    if (frozenScore !== null) this.brain.score = frozenScore;
   }
 
   /** Forward progress into a new cave section is enough to reset the

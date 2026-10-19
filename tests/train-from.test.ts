@@ -8,6 +8,8 @@ import {
   loadTrainFrom,
   loadTrainFroms,
   saveTrainFrom,
+  studentLabel,
+  TRAINING_EMOJI,
   trainFromKey,
 } from '../src/utilities/trainFrom';
 
@@ -228,11 +230,10 @@ test('a distilling group is driven by the teacher while its own brains backpropa
 
     // a constant teacher champion in group 1
     const group1 = race.groups.find((g) => g.layer === 1)!;
-    const student = race.groups.find((g) => g.layer === 2)!.pool[0];
     const free = race.groups.find((g) => g.layer === 3)!.pool[0];
     const teacher = new NeuralNetwork(
-      student.brain!.inputCount,
-      student.brain!.outputCount,
+      free.brain!.inputCount,
+      free.brain!.outputCount,
       1,
     );
     teacher.process = () => [0.9, 0.1, 0];
@@ -245,6 +246,14 @@ test('a distilling group is driven by the teacher while its own brains backpropa
     expect(race.groups.find((g) => g.layer === 2)!.trainFrom).toBe(1);
     expect(race.teacherScore(2)).toBe(42);
     expect(race.teacherScore(1)).toBeNull();
+
+    // a training run fields exactly one student climber, marked as such
+    const group2 = race.groups.find((g) => g.layer === 2)!;
+    expect(group2.distillRun).toBe(true);
+    expect(group2.pool.length).toBe(1);
+    const student = group2.pool[0];
+    expect(student.label).toBe(studentLabel('2:0', true));
+    expect(student.label.endsWith(TRAINING_EMOJI)).toBe(true);
 
     const studentBefore = JSON.stringify(
       student.brain!.levels.map((level) => level.weights),
@@ -267,11 +276,16 @@ test('a distilling group is driven by the teacher while its own brains backpropa
       JSON.stringify(free.brain!.levels.map((level) => level.weights)),
     ).toBe(freeBefore);
 
-    // freeing the group back to its own brains nulls the teacher
+    // freeing the group back to its own brains nulls the teacher and gives the
+    // group its swarm back
     expect(race.setTrainFrom(2, null)).toBe(true);
     race.update(2000);
-    expect(race.groups.find((g) => g.layer === 2)!.trainFrom).toBeNull();
-    expect(student.teacher).toBeNull();
+    const freed = race.groups.find((g) => g.layer === 2)!;
+    expect(freed.trainFrom).toBeNull();
+    expect(freed.distillRun).toBe(false);
+    expect(freed.pool.length).toBeGreaterThan(1);
+    expect(freed.pool[0].teacher).toBeNull();
+    expect(freed.pool[0].label).toBe(studentLabel('2:0', false));
     expect(race.teacherScore(2)).toBeNull();
   } finally {
     env.restore();
@@ -287,10 +301,10 @@ test('a champion loaded from the saves (plain data) still drives as a teacher', 
     race.initialize();
 
     const group1 = race.groups.find((g) => g.layer === 1)!;
-    const student = race.groups.find((g) => g.layer === 2)!.pool[0];
+    const probe = race.groups.find((g) => g.layer === 2)!.pool[0];
     const source = new NeuralNetwork(
-      student.brain!.inputCount,
-      student.brain!.outputCount,
+      probe.brain!.inputCount,
+      probe.brain!.outputCount,
       1,
     );
     // what loadModels hands back: the same data as a save, but no methods
@@ -298,10 +312,11 @@ test('a champion loaded from the saves (plain data) still drives as a teacher', 
     raw.score = 42;
     group1.best = { brain: raw, score: 42 };
 
+    expect(race.setTrainFrom(2, 1)).toBe(true);
+    const student = race.groups.find((g) => g.layer === 2)!.pool[0];
     const studentBefore = JSON.stringify(
       student.brain!.levels.map((level) => level.weights),
     );
-    expect(race.setTrainFrom(2, 1)).toBe(true);
     race.update(1000);
 
     // the raw save was hydrated into a real brain that can drive
@@ -350,6 +365,67 @@ test('persisted train-from selections survive a race re-initialization', () => {
     race.initialize();
     expect(race.groups.find((g) => g.layer === 2)!.trainFrom).toBe(3);
     expect(race.groups.find((g) => g.layer === 4)!.trainFrom).toBeNull();
+  } finally {
+    env.restore();
+  }
+});
+
+test('a training run freezes the student score and never promotes or saves', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  const saved: number[] = [];
+  try {
+    const state = {} as typeof defaultState;
+    const io = stubIo() as unknown as { saveBestModels: () => void };
+    io.saveBestModels = () => void saved.push(1);
+    const race = new ClimbRace(state, io as never, 0);
+    race.initialize();
+
+    const group1 = race.groups.find((g) => g.layer === 1)!;
+    const teacher = new NeuralNetwork(10, 3, 1);
+    teacher.score = 500;
+    group1.best = { brain: teacher, score: 500 };
+
+    expect(race.setTrainFrom(2, 1)).toBe(true);
+    const group2 = race.groups.find((g) => g.layer === 2)!;
+    const student = group2.pool[0];
+    const frozen = student.brain!.score;
+    const seedBefore = group2.scores.seed;
+    const savedBefore = saved.length;
+
+    // the climber is teacher-driven, so the run earns nothing for the student
+    for (let now = 0; now < 40; now++) race.update(now * 16);
+    expect(student.brain!.score).toBe(frozen);
+    expect(group2.scores.seed).toBe(seedBefore);
+    expect(group2.best).toBeNull();
+    expect(saved.length).toBe(savedBefore);
+  } finally {
+    env.restore();
+  }
+});
+
+test('the end of a run resets the selection to free training', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+
+    const group1 = race.groups.find((g) => g.layer === 1)!;
+    group1.best = { brain: new NeuralNetwork(10, 3, 1), score: 10 };
+    expect(race.setTrainFrom(2, 1)).toBe(true);
+    expect(store.has(trainFromKey('climb', 2))).toBe(true);
+
+    // a new seed ends the run: the group goes back to free training, its
+    // disqualification flag is dropped and the persisted choice is gone
+    race.applyUserSeed(99);
+    const group2 = race.groups.find((g) => g.layer === 2)!;
+    expect(group2.trainFrom).toBeNull();
+    expect(group2.distillRun).toBe(false);
+    expect(group2.pool.length).toBeGreaterThan(1);
+    expect(store.has(trainFromKey('climb', 2))).toBe(false);
+    expect(loadTrainFrom('climb', 2)).toBeNull();
   } finally {
     env.restore();
   }
