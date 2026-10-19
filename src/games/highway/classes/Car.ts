@@ -5,7 +5,7 @@ import {
   polysIntersect,
   type Vector,
 } from '../../../utilities/math';
-import carImg from '../assets/car.png';
+import carImg from '../../../assets/car.png';
 import { ControlType } from '../types';
 import { config } from './Config';
 import { Controls } from './Controls';

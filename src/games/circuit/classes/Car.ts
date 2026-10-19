@@ -9,7 +9,7 @@ import {
   polysIntersect,
   type Vector,
 } from '../../../utilities/math';
-import carImg from '../assets/car.png';
+import carImg from '../../../assets/car.png';
 import { ControlType } from '../types';
 import type { Circuit } from './Circuit';
 import { config } from './Config';
