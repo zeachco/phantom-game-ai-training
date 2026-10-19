@@ -5,7 +5,7 @@ import {
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../../ai/Mixed';
-import type { NeuralNetwork } from '../../../ai/Network';
+import { NeuralNetwork } from '../../../ai/Network';
 import {
   type fileUtilities,
   networkLevelSizes,
@@ -267,6 +267,7 @@ export class CircuitRace {
         mutationOnly: false,
         trainFrom: trainFroms.get('mixed') ?? null,
         teacher: null,
+        hydratedTeacher: null,
         best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
           ? {
               brain: this.state.sortedMixed[MIXED_LEVELS][0],
@@ -295,6 +296,7 @@ export class CircuitRace {
         mutationOnly: false,
         trainFrom: trainFroms.get(String(layer)) ?? null,
         teacher: null,
+        hydratedTeacher: null,
         best: this.state.sortedModels[layer]?.[0]
           ? {
               brain: this.state.sortedModels[layer][0],
@@ -379,10 +381,32 @@ export class CircuitRace {
   }
 
   /** The brain a distilling group imitates: the target group's champion,
-   *  null while the target has none yet. */
+   *  null while the target has none yet. Champions loaded from the saves are
+   *  plain data with no methods, so a raw one is hydrated once (mixed brains
+   *  against the current expert library) and cached until it is replaced. */
   #teacherBrain(target: number | 'mixed'): NeuralNetwork | null {
     const key = target === 'mixed' ? 'mixed' : String(target);
-    return this.groups.find((group) => group.key === key)?.best?.brain ?? null;
+    const group = this.groups.find((candidate) => candidate.key === key);
+    const champion = group?.best?.brain ?? null;
+    if (!champion) return null;
+    if (typeof champion.process === 'function') return champion;
+    const cached = group.hydratedTeacher;
+    if (cached?.champion === champion) return cached.brain;
+    const { inputCount, outputCount } = getCircuitBrainDimensions();
+    const brain = group.isMixed
+      ? MixedNetwork.fromSave(
+          champion,
+          inputCount,
+          outputCount,
+          this.#experts,
+          {
+            hiddenNodes: config.MIXED_HIDDEN_NODES,
+          },
+        )
+      : NeuralNetwork.hydrate(champion);
+    if (!brain) return null;
+    group.hydratedTeacher = { champion, brain };
+    return brain;
   }
 
   /** Record a checkpoint split before it can become the new reference. */

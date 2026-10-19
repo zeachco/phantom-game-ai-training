@@ -84,6 +84,48 @@ test('MixedNetwork.train distills the selector and leaves the experts frozen', (
   ).toBe(expertSnapshot);
 });
 
+test('MixedNetwork.fromSave rebuilds a drivable brain from a raw save', () => {
+  const experts = [1, 2].map(() => new NeuralNetwork(4, 2, 1));
+  const expertSnapshot = JSON.stringify(
+    experts.map((expert) => expert.levels.map((level) => level.weights)),
+  );
+  const mixed = new MixedNetwork(4, 2, experts, {
+    hiddenNodes: 3,
+    resetChance: 0,
+  });
+  // a raw save: the JSON round-trip strips the methods, like a localStorage
+  // load does to every champion
+  const raw = JSON.parse(JSON.stringify(mixed)) as ModelsByLayerCount[number];
+
+  const rebuilt = MixedNetwork.fromSave(raw, 4, 2, experts, {
+    hiddenNodes: 3,
+  });
+  expect(rebuilt).toBeInstanceOf(MixedNetwork);
+  expect(JSON.stringify(rebuilt!.levels.map((level) => level.weights))).toBe(
+    JSON.stringify(mixed.levels.map((level) => level.weights)),
+  );
+  expect(rebuilt!.score).toBe(mixed.score);
+
+  // the rebuilt brain routes exactly like the original and the shared
+  // experts came through untouched
+  const input = [0.1, 0.4, 0.7, 0.2];
+  expect(rebuilt!.process(input)).toEqual(mixed.process(input));
+  expect(
+    JSON.stringify(
+      experts.map((expert) => expert.levels.map((level) => level.weights)),
+    ),
+  ).toBe(expertSnapshot);
+
+  // a selector whose width no longer matches the library is rejected
+  const stale = JSON.parse(JSON.stringify(raw)) as ModelsByLayerCount[number];
+  stale.levels[stale.levels.length - 1].weights[0] = [0, 0, 0];
+  expect(
+    MixedNetwork.fromSave(stale, 4, 2, experts, { hiddenNodes: 3 }),
+  ).toBeNull();
+  // a save with no experts at all is rejected too
+  expect(MixedNetwork.fromSave(raw, 4, 2, [])).toBeNull();
+});
+
 test('train-from selections round-trip through localStorage', () => {
   const fx = stubStorage();
   try {
@@ -231,6 +273,61 @@ test('a distilling group is driven by the teacher while its own brains backpropa
     expect(race.groups.find((g) => g.layer === 2)!.trainFrom).toBeNull();
     expect(student.teacher).toBeNull();
     expect(race.teacherScore(2)).toBeNull();
+  } finally {
+    env.restore();
+  }
+});
+
+test('a champion loaded from the saves (plain data) still drives as a teacher', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+
+    const group1 = race.groups.find((g) => g.layer === 1)!;
+    const student = race.groups.find((g) => g.layer === 2)!.pool[0];
+    const source = new NeuralNetwork(
+      student.brain!.inputCount,
+      student.brain!.outputCount,
+      1,
+    );
+    // what loadModels hands back: the same data as a save, but no methods
+    const raw = JSON.parse(JSON.stringify(source)) as never;
+    raw.score = 42;
+    group1.best = { brain: raw, score: 42 };
+
+    const studentBefore = JSON.stringify(
+      student.brain!.levels.map((level) => level.weights),
+    );
+    expect(race.setTrainFrom(2, 1)).toBe(true);
+    race.update(1000);
+
+    // the raw save was hydrated into a real brain that can drive
+    expect(student.teacher).not.toBe(raw);
+    expect(student.teacher).toBeInstanceOf(NeuralNetwork);
+    expect(
+      JSON.stringify(student.teacher!.levels.map((level) => level.weights)),
+    ).toBe(JSON.stringify(source.levels.map((level) => level.weights)));
+    // ...and the student brain took a gradient step toward it
+    expect(
+      JSON.stringify(student.brain!.levels.map((level) => level.weights)),
+    ).not.toBe(studentBefore);
+
+    // the same hydrated brain is reused on the next frames, not re-hydrated
+    const teacher = student.teacher;
+    race.update(2000);
+    race.update(3000);
+    expect(student.teacher).toBe(teacher);
+
+    // replacing the champion invalidates the cache and re-hydrates
+    const other = JSON.parse(JSON.stringify(source)) as never;
+    other.score = 99;
+    group1.best = { brain: other, score: 99 };
+    race.update(4000);
+    expect(student.teacher).not.toBe(teacher);
+    expect(race.teacherScore(2)).toBe(99);
   } finally {
     env.restore();
   }

@@ -7,7 +7,7 @@ import {
 } from '../../ai/Mixed';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
-import type { NeuralNetwork } from '../../ai/Network';
+import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { contrastText, getColorScale } from '../../utilities/colors';
@@ -121,11 +121,35 @@ export default async (state: typeof defaultState) => {
     trainFroms.set(String(student), target);
   const groupKeyOf = (car: Car): number | 'mixed' =>
     car.brain instanceof MixedNetwork ? 'mixed' : car.brainLayers;
+  // the expert library the mixed selector routes to, rehydrated on every load
+  let mixedExperts: NeuralNetwork[] = [];
+  // champions loaded from the saves are plain data with no methods; the
+  // teacher must drive, so a raw one is hydrated once per saved brain
+  const championCaches = new Map<
+    number | 'mixed',
+    { champion: object; brain: NeuralNetwork }
+  >();
   /** the champion of a group: its best saved brain, null while it has none */
-  const championOf = (value: number | 'mixed'): NeuralNetwork | null =>
-    value === 'mixed'
-      ? (state.sortedMixed[MIXED_LEVELS]?.[0] ?? null)
-      : (state.sortedModels[value]?.[0] ?? null);
+  const championOf = (value: number | 'mixed'): NeuralNetwork | null => {
+    const saved =
+      value === 'mixed'
+        ? (state.sortedMixed[MIXED_LEVELS]?.[0] ?? null)
+        : (state.sortedModels[value]?.[0] ?? null);
+    if (!saved) return null;
+    if (typeof (saved as NeuralNetwork).process === 'function')
+      return saved as NeuralNetwork;
+    const cached = championCaches.get(value);
+    if (cached?.champion === saved) return cached.brain;
+    const brain =
+      value === 'mixed'
+        ? MixedNetwork.fromSave(saved, config.SENSORS + 1, 4, mixedExperts, {
+            hiddenNodes: config.MIXED_HIDDEN_NODES,
+          })
+        : NeuralNetwork.hydrate(saved);
+    if (!brain) return null;
+    championCaches.set(value, { champion: saved, brain });
+    return brain;
+  };
 
   // group actions + trainer readouts, shown while a brain group is followed
   const groupPanel = createGroupActions({
@@ -578,6 +602,7 @@ export default async (state: typeof defaultState) => {
     Object.assign(state, defaultState);
     state.playing = true;
     camSet = false;
+    championCaches.clear();
     const inputCount = config.SENSORS + 1;
     const outputCount = 4;
     state.sortedModels = io.loadAllModelLayers(
@@ -590,17 +615,17 @@ export default async (state: typeof defaultState) => {
 
     // Mixed selectors route to the exact expert library loaded above. Validate
     // that library-dependent shape before the mixed save can enter a pool.
-    const experts = hydrateExperts(
+    mixedExperts = hydrateExperts(
       state.sortedModels,
       inputCount,
       outputCount,
       config.MIXED_EXPERTS_PER_LAYER,
     );
     state.sortedMixed = io.loadAllModelLayers(MIXED_LEVELS, MIXED_KIND, () => ({
-      levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, experts.length],
+      levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, mixedExperts.length],
       kind: MIXED_KIND,
       requireKind: true,
-      expertIds: expertSlotIds(experts),
+      expertIds: expertSlotIds(mixedExperts),
     }));
 
     // Game ender

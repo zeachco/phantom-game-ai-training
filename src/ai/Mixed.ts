@@ -204,6 +204,48 @@ export class MixedNetwork extends NeuralNetwork {
     this.#rerollExperts();
   }
 
+  /**
+   * Copies the selector weights of a save, exactly. The experts are shared
+   * between every mixed brain, so this never touches their weights. A save
+   * whose selector shape no longer matches is ignored, the brain keeps its
+   * constructor's random selector.
+   */
+  public adoptSelector(saved: ModelsByLayerCount[number]): void {
+    const levels = saved.levels ?? [];
+    for (let l = 0; l < this.levels.length; l++) {
+      const source = levels[l]?.weights;
+      const level = this.levels[l];
+      if (!source || source.length !== level.weights.length) return;
+      for (let i = 0; i < source.length; i++) {
+        if (source[i].length !== level.weights[i].length) return;
+        level.weights[i] = [...source[i]];
+      }
+    }
+    this.version = saved.version ?? 0;
+  }
+
+  /**
+   * Rebuilds a drivable mixed brain out of a save: the selector adopts the
+   * stored weights, the (shared) experts are left untouched. Null when the
+   * save no longer matches the expert library it routes to.
+   */
+  static fromSave(
+    saved: ModelsByLayerCount[number],
+    inputNb: number,
+    outputNb: number,
+    experts: NeuralNetwork[],
+    options: MixedOptions = {},
+  ): MixedNetwork | null {
+    const selector = saved?.levels;
+    if (!selector?.length || !experts.length) return null;
+    const last = selector[selector.length - 1];
+    if (last?.weights?.[0]?.length !== experts.length) return null;
+    const brain = new MixedNetwork(inputNb, outputNb, experts, options);
+    brain.adoptSelector(saved);
+    brain.score = saved.score || 0;
+    return brain;
+  }
+
   /** first pass picks the expert, second pass replays the original inputs into it */
   #forward(inputs: number[]) {
     const selection = NeuralNetwork.feedForward(inputs, this);

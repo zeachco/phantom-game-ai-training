@@ -43,6 +43,9 @@ export interface Group {
   /** the live teacher brain, refreshed every frame; null while the target
    *  group has no champion yet or the group trains free */
   teacher: NeuralNetwork | null;
+  /** the hydrated copy of a champion loaded from the saves (plain data, no
+   *  methods), cached while the same raw save stays champion */
+  hydratedTeacher: { champion: NeuralNetwork; brain: NeuralNetwork } | null;
   scores: GroupScores;
   /** per-car gate completion times in simulation frames, one entry per gate */
   gateTimes: Record<string, number[]>;
