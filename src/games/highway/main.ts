@@ -103,8 +103,8 @@ export default async (state: typeof defaultState) => {
   const championOf = (value: number | 'mixed'): NeuralNetwork | null => {
     const saved =
       value === 'mixed'
-        ? (state.sortedMixed[MIXED_LEVELS]?.[0] ?? null)
-        : (state.sortedModels[value]?.[0] ?? null);
+        ? state.sortedMixed[MIXED_LEVELS]?.[0] ?? null
+        : state.sortedModels[value]?.[0] ?? null;
     if (!saved) return null;
     if (typeof (saved as NeuralNetwork).process === 'function')
       return saved as NeuralNetwork;
@@ -199,8 +199,8 @@ export default async (state: typeof defaultState) => {
       v === 'mixed'
         ? config.MIXED_COLOR
         : v === 0
-          ? undefined
-          : layerColor(v, config.MAX_NETWORK_LAYERS),
+        ? undefined
+        : layerColor(v, config.MAX_NETWORK_LAYERS),
     initialOpen: true,
     onFollow: (value) => {
       follow = value;
@@ -635,8 +635,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)
@@ -675,8 +675,8 @@ export default async (state: typeof defaultState) => {
     const value = groupKeyOf(car);
     const saved =
       value === 'mixed'
-        ? (state.sortedMixed[MIXED_LEVELS] ?? [])
-        : (state.sortedModels[value] ?? []);
+        ? state.sortedMixed[MIXED_LEVELS] ?? []
+        : state.sortedModels[value] ?? [];
     const trained = trainedBrain(car.brain, saved[0]?.score ?? 0);
     if (value === 'mixed') {
       state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(saved, trained, 1);

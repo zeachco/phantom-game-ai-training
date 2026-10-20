@@ -98,7 +98,9 @@ export function createCockpit(options: CockpitOptions = {}): Cockpit {
   stats.className = 'brain-stats';
   stats.title = statsTitle;
 
-  el.append(controlIndicators, gaugeEl, readout);
+  el.append(controlIndicators);
+  if (gaugeEl) el.append(gaugeEl);
+  el.append(readout);
 
   let lastStatsHtml = '';
 
@@ -184,8 +186,8 @@ export function updateTimingLine(
     delta === null
       ? ''
       : delta < 0
-        ? '#70e08a'
-        : delta > 0
-          ? '#ff7070'
-          : 'rgba(255, 255, 255, 0.55)';
+      ? '#70e08a'
+      : delta > 0
+      ? '#ff7070'
+      : 'rgba(255, 255, 255, 0.55)';
 }
