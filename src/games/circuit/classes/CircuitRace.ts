@@ -5,6 +5,7 @@ import {
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../../ai/Mixed';
+import { brainIoMatches } from '../../../ai/distill';
 import { NeuralNetwork } from '../../../ai/Network';
 import {
   type fileUtilities,
@@ -430,8 +431,11 @@ export class CircuitRace {
    * run never sets a record.
    */
   #keepTrainedBrain(group: Group) {
-    const brain = group.pool[0]?.brain;
-    if (!brain) return;
+    const student = group.pool[0];
+    const brain = student?.brain;
+    // if no teacher ever drove the run nothing was distilled: the student's
+    // weights are untrained and must not replace the group's champion
+    if (!student || !brain || !student.teacherFrames) return;
     const trained = trainedBrain(brain, group.best?.score ?? 0);
     group.best = { brain: trained, score: trained.score };
     if (group.isMixed) {
@@ -486,6 +490,9 @@ export class CircuitRace {
         )
       : NeuralNetwork.hydrate(champion);
     if (!brain) return null;
+    // train-from only needs matching inputs and outputs: any depth or kind is
+    // fine, but a mismatched brain would teach a different function
+    if (!brainIoMatches(brain, inputCount, outputCount)) return null;
     group.hydratedTeacher = { champion, brain };
     return brain;
   }
@@ -779,7 +786,9 @@ export class CircuitRace {
     for (const car of this.state.cars) {
       const alive = !car.damaged;
       const racing = !car.finished;
-      car.teacher = this.#groupOf(car)?.teacher ?? null;
+      const group = this.#groupOf(car);
+      car.teacher = group?.teacher ?? null;
+      car.distillRun = group?.distillRun ?? false;
       car.update(this.state.obstacles, this.circuit);
       this.#recordCheckpointTiming(car);
       if (car.completedLap) this.#recordLapTiming(car);

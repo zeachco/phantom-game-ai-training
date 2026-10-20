@@ -6,6 +6,7 @@ import {
   MixedNetwork,
 } from '../../../ai/Mixed';
 import { NeuralNetwork } from '../../../ai/Network';
+import { brainIoMatches } from '../../../ai/distill';
 import {
   type fileUtilities,
   networkLevelSizes,
@@ -413,8 +414,11 @@ export class ClimbRace {
    * run never sets a record.
    */
   #keepTrainedBrain(group: Group) {
-    const brain = group.pool[0]?.brain;
-    if (!brain) return;
+    const student = group.pool[0];
+    const brain = student?.brain;
+    // if no teacher ever drove the run nothing was distilled: the student's
+    // weights are untrained and must not replace the group's champion
+    if (!student || !brain || !student.teacherFrames) return;
     const trained = trainedBrain(brain, group.best?.score ?? 0);
     group.best = { brain: trained, score: trained.score };
     if (group.isMixed) {
@@ -469,6 +473,9 @@ export class ClimbRace {
         )
       : NeuralNetwork.hydrate(champion);
     if (!brain) return null;
+    // train-from only needs matching inputs and outputs: any depth or kind is
+    // fine, but a mismatched brain would teach a different function
+    if (!brainIoMatches(brain, inputCount, outputCount)) return null;
     group.hydratedTeacher = { champion, brain };
     return brain;
   }
@@ -720,7 +727,9 @@ export class ClimbRace {
     let highest = 0;
     for (const player of this.state.players) {
       const alive = !player.damaged;
-      player.teacher = this.#groupOf(player)?.teacher ?? null;
+      const group = this.#groupOf(player);
+      player.teacher = group?.teacher ?? null;
+      player.distillRun = group?.distillRun ?? false;
       player.update(now);
       if (alive && player.damaged) this.#onDeath(player);
       if (!player.damaged && player.y > highest) highest = player.y;

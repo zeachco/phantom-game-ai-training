@@ -6,6 +6,7 @@ import {
   MixedNetwork,
 } from '../../ai/Mixed';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
+import { brainIoMatches } from '../../ai/distill';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
@@ -153,6 +154,9 @@ export default async (state: typeof defaultState) => {
           })
         : NeuralNetwork.hydrate(saved);
     if (!brain) return null;
+    // train-from only needs matching inputs and outputs: any depth or kind is
+    // fine, but a mismatched brain would teach a different function
+    if (!brainIoMatches(brain, config.SENSORS + 1, 4)) return null;
     championCaches.set(value, { champion: saved, brain });
     return brain;
   };
@@ -515,6 +519,7 @@ export default async (state: typeof defaultState) => {
         ? trainFroms.get(String(groupKeyOf(car)))
         : undefined;
       car.teacher = target === undefined ? null : championOf(target);
+      car.distillRun = target !== undefined;
       car.update(road.borders, state.traffic, deathRays);
       if (alive && performance.now() - car.bornAt > config.CAR_LIFETIME_CAP) {
         car.damaged = true;
@@ -620,11 +625,13 @@ export default async (state: typeof defaultState) => {
 
     const followed = camTarget?.brain;
     if (followed) {
-      // a distilling car shows its brain next to its teacher
+      // a distilling car shows its brain next to its teacher, with the live
+      // training error on the controls
       neuralVisualizer.renderNetwork(
         networkCtx,
         followed,
         camTarget?.teacher ?? null,
+        camTarget?.distillErrors ?? null,
       );
     }
     if (!state.playing) {
@@ -790,6 +797,9 @@ export default async (state: typeof defaultState) => {
    * run never sets a record.
    */
   function keepTrainedBrain(car: Car) {
+    // if no teacher ever drove the car nothing was distilled: the student's
+    // weights are untrained and must not replace the group's champion
+    if (!car.teacherFrames) return;
     const value = groupKeyOf(car);
     const saved =
       value === 'mixed'

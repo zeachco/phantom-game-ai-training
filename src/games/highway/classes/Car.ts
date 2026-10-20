@@ -1,4 +1,4 @@
-import { NeuralNetwork } from '../../../ai/Network';
+import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { type Distiller, distillStep } from '../../../ai/distill';
 import { getRandomColor } from '../../../utilities/colors';
 import {
@@ -13,6 +13,18 @@ import { Controls } from './Controls';
 import type { DeathRay } from './DeathRay';
 import { Sensor } from './Sensor';
 
+/**
+ * The range the physics applies to each control, indexed like the brain's
+ * outputs: forward / left / right / reverse all clamp to [-1, 1]. Distillation
+ * trains toward this applied signal, see NeuralNetwork.train.
+ */
+export const HIGHWAY_OUTPUT_RANGES: OutputRanges = [
+  [-1, 1], // forward
+  [-1, 1], // left
+  [-1, 1], // right
+  [-1, 1], // reverse
+];
+
 export class Car {
   public speed: number;
   public acceleration: number;
@@ -26,10 +38,17 @@ export class Car {
   /** the teacher brain driving this car while its own brain distills, null
    *  for free training; set by the game loop every frame */
   public teacher: NeuralNetwork | null = null;
+  /** the car belongs to a teacher-driven training run, even when the teacher
+   *  is missing (no champion to copy yet): its score stays frozen too */
+  public distillRun = false;
   /** frames this car has been distilling, the step decays over them */
   public teacherFrames = 0;
   /** the probe data of its training run, built on the first distilled frame */
   public distiller: Distiller | null = null;
+  /** per-output applied error of the last live sample, for the network view */
+  public distillErrors: number[] | null = null;
+  /** the last teacher seen: a swap restarts the decayed step and the probes */
+  #lastTeacher: NeuralNetwork | null = null;
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -131,8 +150,9 @@ export class Car {
     // Reward vertical progress only: forward travel decreases y, so the
     // gain is old_y - y. Lateral movement and total distance earn nothing.
     // A teacher-driven run is not the student's own output: its score is not
-    // updated.
-    if (this.brain && !this.teacher) this.brain.score += old_y - this.y;
+    // updated, not even while the teacher is missing (nothing trains then).
+    if (this.brain && !this.teacher && !this.distillRun)
+      this.brain.score += old_y - this.y;
 
     this.#createPolygon();
     this.damaged = this.#assessDamage(roadBorders, traffic);
@@ -145,11 +165,18 @@ export class Car {
         const s = readings[i];
         inputs.push(s == null ? 0 : 1 - s.offset);
       }
-      inputs.push(this.speed / this.maxSpeed);
+      inputs.push(Math.min(1, this.speed / this.maxSpeed));
       let outputs: number[];
       if (this.useAI && this.teacher) {
+        if (this.teacher !== this.#lastTeacher) {
+          // a new teacher: restart the decayed step and the probe ranges
+          this.#lastTeacher = this.teacher;
+          this.teacherFrames = 0;
+          this.distiller = null;
+        }
         // distillation: the teacher drives the car, the own brain
-        // backpropagates toward the teacher's output on the same inputs
+        // backpropagates toward the teacher's applied output on the same
+        // inputs
         outputs = this.teacher.process(inputs);
         this.distiller = distillStep(
           this.distiller,
@@ -157,19 +184,25 @@ export class Car {
           this.teacher,
           inputs,
           this.teacherFrames++,
+          HIGHWAY_OUTPUT_RANGES,
         );
+        this.distillErrors = this.distiller.lastErrors;
       } else {
+        this.#lastTeacher = null;
         this.teacherFrames = 0;
         this.distiller = null;
+        this.distillErrors = null;
         outputs = this.brain.process(inputs);
       }
 
       if (this.useAI) {
         const [forward, left, right, reverse] = outputs;
-        this.controls.forward = forward;
-        this.controls.left = left;
-        this.controls.right = right;
-        this.controls.reverse = reverse;
+        // apply each output through its applied range, the same range the
+        // training trains toward
+        this.controls.forward = clampToRange(forward, HIGHWAY_OUTPUT_RANGES[0]);
+        this.controls.left = clampToRange(left, HIGHWAY_OUTPUT_RANGES[1]);
+        this.controls.right = clampToRange(right, HIGHWAY_OUTPUT_RANGES[2]);
+        this.controls.reverse = clampToRange(reverse, HIGHWAY_OUTPUT_RANGES[3]);
       }
     }
   }

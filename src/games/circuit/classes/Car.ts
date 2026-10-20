@@ -1,4 +1,4 @@
-import { NeuralNetwork } from '../../../ai/Network';
+import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { type Distiller, distillStep } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
@@ -43,6 +43,18 @@ export function getCircuitBrainDimensions(rayCount = config.SENSORS) {
   };
 }
 
+/**
+ * The range the physics applies to each control, indexed like the brain's
+ * outputs. Distillation trains toward exactly this applied signal (see
+ * NeuralNetwork.train), and the teacher's answers are clamped to it the same
+ * way, so a student that matches the targets drives the same line.
+ */
+export const CIRCUIT_OUTPUT_RANGES: OutputRanges = [
+  [-1, 1], // throttle: gas positive, brake / reverse negative
+  [-1, 1], // left
+  [-1, 1], // right
+];
+
 export class Car {
   public vx: number;
   public vy: number;
@@ -56,10 +68,17 @@ export class Car {
   /** the teacher brain driving this car while its own brain distills, null
    *  for free training; set by the race every frame */
   public teacher: NeuralNetwork | null = null;
+  /** the car belongs to a teacher-driven training run, even when the teacher
+   *  is missing (no champion to copy yet): its score stays frozen too */
+  public distillRun = false;
   /** frames this car has been distilling, the step decays over them */
   public teacherFrames = 0;
   /** the probe data of its training run, built on the first distilled frame */
   public distiller: Distiller | null = null;
+  /** per-output applied error of the last live sample, for the network view */
+  public distillErrors: number[] | null = null;
+  /** the last teacher seen: a swap restarts the decayed step and the probes */
+  #lastTeacher: NeuralNetwork | null = null;
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -243,7 +262,10 @@ export class Car {
     if (this.damaged) return;
     // a teacher-driven run is not the student's own output, so its score is
     // not updated: whatever the frame earns is written back below
-    const frozenScore = this.teacher && this.brain ? this.brain.score : null;
+    const frozenScore =
+      (this.teacher || this.distillRun) && this.brain
+        ? this.brain.score
+        : null;
     this.controls.update();
     this.checkpointFramesRemaining--;
     this.prevX = this.x;
@@ -286,8 +308,15 @@ export class Car {
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
         let outputs: number[];
         if (this.teacher) {
+          if (this.teacher !== this.#lastTeacher) {
+            // a new teacher: restart the decayed step and the probe ranges
+            this.#lastTeacher = this.teacher;
+            this.teacherFrames = 0;
+            this.distiller = null;
+          }
           // distillation: the teacher drives the car, the own brain
-          // backpropagates toward the teacher's output on the same inputs
+          // backpropagates toward the teacher's applied output on the same
+          // inputs
           outputs = this.teacher.process(inputs);
           this.distiller = distillStep(
             this.distiller,
@@ -295,17 +324,22 @@ export class Car {
             this.teacher,
             inputs,
             this.teacherFrames++,
+            CIRCUIT_OUTPUT_RANGES,
           );
+          this.distillErrors = this.distiller.lastErrors;
         } else {
+          this.#lastTeacher = null;
           this.teacherFrames = 0;
           this.distiller = null;
+          this.distillErrors = null;
           outputs = this.brain.process(inputs);
         }
         const [throttle, left, right] = outputs;
-        // one signed float: gas positive, brake / reverse negative
-        this.controls.throttle = Math.max(-1, Math.min(1, throttle));
-        this.controls.left = left;
-        this.controls.right = right;
+        // apply each output through its applied range, the same range the
+        // training trains toward
+        this.controls.throttle = clampToRange(throttle, CIRCUIT_OUTPUT_RANGES[0]);
+        this.controls.left = clampToRange(left, CIRCUIT_OUTPUT_RANGES[1]);
+        this.controls.right = clampToRange(right, CIRCUIT_OUTPUT_RANGES[2]);
       }
     }
     if (frozenScore !== null) this.brain.score = frozenScore;

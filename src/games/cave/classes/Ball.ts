@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { NeuralNetwork } from '../../../ai/Network';
+import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { type Distiller, distillStep } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
@@ -29,6 +29,18 @@ export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
     outputCount: Object.keys(controls).length,
   };
 }
+
+/**
+ * The range the physics applies to each control, indexed like the brain's
+ * outputs: moveX / moveY clamp to [-1, 1], jump is read continuously (a
+ * positive value above 0.5 jumps). Distillation trains toward this applied
+ * signal, see NeuralNetwork.train.
+ */
+export const CAVE_OUTPUT_RANGES: OutputRanges = [
+  [-1, 1], // moveX
+  [-1, 1], // moveY
+  [-1, 1], // jump
+];
 
 /** squared stall threshold, the per-frame stall check needs no sqrt */
 const STALL_SPEED_SQ = config.BALL_STALL_SPEED * config.BALL_STALL_SPEED;
@@ -92,10 +104,17 @@ export class Ball {
   /** the teacher brain driving this ball while its own brain distills, null
    *  for free training; set by the race every frame */
   public teacher: NeuralNetwork | null = null;
+  /** the ball belongs to a teacher-driven training run, even when the teacher
+   *  is missing (no champion to copy yet): its score stays frozen too */
+  public distillRun = false;
   /** frames this ball has been distilling, the step decays over them */
   public teacherFrames = 0;
   /** the probe data of its training run, built on the first distilled frame */
   public distiller: Distiller | null = null;
+  /** per-output applied error of the last live sample, for the network view */
+  public distillErrors: number[] | null = null;
+  /** the last teacher seen: a swap restarts the decayed step and the probes */
+  #lastTeacher: NeuralNetwork | null = null;
   public controls: Controls;
   /** render accent, and the brain category it belongs to */
   public color: string;
@@ -319,7 +338,8 @@ export class Ball {
     if (this.damaged) return;
     // a teacher-driven run is not the student's own output, so its score is
     // not updated: whatever the frame earns is written back below
-    const frozenScore = this.teacher ? this.brain.score : null;
+    const frozenScore =
+      this.teacher || this.distillRun ? this.brain.score : null;
     this.controls.update();
     let jumped = false;
     if (this.controls.consumeJump()) {
@@ -458,8 +478,15 @@ export class Ball {
         inputs.push(this.gatePitch);
         let outputs: number[];
         if (this.teacher) {
+          if (this.teacher !== this.#lastTeacher) {
+            // a new teacher: restart the decayed step and the probe ranges
+            this.#lastTeacher = this.teacher;
+            this.teacherFrames = 0;
+            this.distiller = null;
+          }
           // distillation: the teacher drives the ball, the own brain
-          // backpropagates toward the teacher's output on the same inputs
+          // backpropagates toward the teacher's applied output on the same
+          // inputs
           outputs = this.teacher.process(inputs);
           this.distiller = distillStep(
             this.distiller,
@@ -467,15 +494,19 @@ export class Ball {
             this.teacher,
             inputs,
             this.teacherFrames++,
+            CAVE_OUTPUT_RANGES,
           );
+          this.distillErrors = this.distiller.lastErrors;
         } else {
+          this.#lastTeacher = null;
           this.teacherFrames = 0;
           this.distiller = null;
+          this.distillErrors = null;
           outputs = this.brain.process(inputs);
         }
         const [moveX, moveY, jump] = outputs;
-        this.controls.moveX = clamp(-1, 1, moveX);
-        this.controls.moveY = clamp(-1, 1, moveY);
+        this.controls.moveX = clampToRange(moveX, CAVE_OUTPUT_RANGES[0]);
+        this.controls.moveY = clampToRange(moveY, CAVE_OUTPUT_RANGES[1]);
         this.controls.writeJump(jump);
       }
     }

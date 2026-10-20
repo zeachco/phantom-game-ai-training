@@ -1,4 +1,4 @@
-import { NeuralNetwork } from '../../../ai/Network';
+import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { type Distiller, distillStep } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
@@ -7,6 +7,18 @@ import { CLIMB_INPUT_COUNT, config } from './Config';
 import { Controls } from './Controls';
 import { Sensor } from './Sensor';
 import type { Platform, Tower } from './Tower';
+
+/**
+ * The range the physics applies to each control, indexed like the brain's
+ * outputs: the steering inputs clamp to [0, 1] (a negative value simply does
+ * not steer), jump is read continuously (positive above 0.5 jumps). Distillation
+ * trains toward this applied signal, see NeuralNetwork.train.
+ */
+export const CLIMB_OUTPUT_RANGES: OutputRanges = [
+  [0, 1], // left
+  [0, 1], // right
+  [-1, 1], // jump
+];
 
 /** physics half-width of the body, also how far the walls keep the spawn */
 export const PLAYER_HALF_W = 11;
@@ -53,10 +65,17 @@ export class Player {
   /** the teacher brain driving this climber while its own brain distills,
    *  null for free training; set by the race every frame */
   public teacher: NeuralNetwork | null = null;
+  /** the player belongs to a teacher-driven training run, even when the
+   *  teacher is missing (no champion to copy yet): its score stays frozen too */
+  public distillRun = false;
   /** frames this climber has been distilling, the step decays over them */
   public teacherFrames = 0;
   /** the probe data of its training run, built on the first distilled frame */
   public distiller: Distiller | null = null;
+  /** per-output applied error of the last live sample, for the network view */
+  public distillErrors: number[] | null = null;
+  /** the last teacher seen: a swap restarts the decayed step and the probes */
+  #lastTeacher: NeuralNetwork | null = null;
 
   #prevFeet: number;
   #prevJumpHeld = false;
@@ -100,7 +119,10 @@ export class Player {
   update(now: number): void {
     // a teacher-driven run is not the student's own output, so its score is
     // not updated: whatever the frame earns is written back before returning
-    const frozenScore = this.teacher && this.brain ? this.brain.score : null;
+    const frozenScore =
+      (this.teacher || this.distillRun) && this.brain
+        ? this.brain.score
+        : null;
     if (this.damaged) {
       // Corpses ignore platforms and controls until they reach the ground.
       this.vy -= config.GRAVITY;
@@ -266,8 +288,15 @@ export class Player {
         const readings = this.sensor.readings;
         let outputs: number[];
         if (this.teacher && this.brain) {
+          if (this.teacher !== this.#lastTeacher) {
+            // a new teacher: restart the decayed step and the probe ranges
+            this.#lastTeacher = this.teacher;
+            this.teacherFrames = 0;
+            this.distiller = null;
+          }
           // distillation: the teacher drives the climber, the own brain
-          // backpropagates toward the teacher's output on the same inputs
+          // backpropagates toward the teacher's applied output on the same
+          // inputs
           outputs = this.teacher.process(readings);
           this.distiller = distillStep(
             this.distiller,
@@ -275,14 +304,23 @@ export class Player {
             this.teacher,
             readings,
             this.teacherFrames++,
+            CLIMB_OUTPUT_RANGES,
           );
+          this.distillErrors = this.distiller.lastErrors;
         } else {
+          this.#lastTeacher = null;
           this.teacherFrames = 0;
           this.distiller = null;
+          this.distillErrors = null;
           outputs = this.brain.process(readings);
         }
-        this.controls.left = clamp(0, 1, outputs[0]);
-        this.controls.right = clamp(0, 1, outputs[1]);
+        // the steering outputs apply in [0, 1], the range the training trains
+        // toward
+        this.controls.left = clampToRange(outputs[0], CLIMB_OUTPUT_RANGES[0]);
+        this.controls.right = clampToRange(
+          outputs[1],
+          CLIMB_OUTPUT_RANGES[1],
+        );
         this.controls.writeJump(outputs[2]);
       }
     }
