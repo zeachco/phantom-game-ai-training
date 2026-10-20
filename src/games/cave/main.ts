@@ -202,6 +202,9 @@ export default async (state: CaveState) => {
     } else {
       if (!confirm(`Reset the saved weights of brain ${value}?`)) return;
       io.discardModel(value);
+      // the mixed selector's output width and expert slots are pinned to the
+      // saved brains it routes to, so dropping one invalidates its routing
+      io.discardModel(MIXED_LEVELS, MIXED_KIND);
     }
     console.info(
       `Reset saved weights of ${value === 0 ? 'all brains' : value}`,

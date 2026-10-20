@@ -110,6 +110,9 @@ export default async (state: typeof defaultState) => {
       if (!confirm(`Reset the saved weights of ${brainId(value, undefined)}?`))
         return;
       io.discardModel(value);
+      // the mixed selector's output width and expert slots are pinned to the
+      // saved brains it routes to, so dropping one invalidates its routing
+      io.discardModel(MIXED_LEVELS, 'mixed');
     }
     race.resetBrainGroup(value);
   };
