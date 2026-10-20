@@ -56,20 +56,27 @@ function makeContext(width: number, height: number) {
 
 /** the browser bits the visualizer and its key pad touch on import */
 function stubDom() {
+  /** every canvas created through document.createElement, link strips included */
+  const canvases: { width: number; height: number }[] = [];
   const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: {
       addEventListener: () => {},
       removeEventListener: () => {},
-      createElement: () => ({
-        width: 0,
-        height: 0,
-        getContext: () => makeContext(0, 0).ctx,
-      }),
+      createElement: () => {
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: () => makeContext(0, 0).ctx,
+        };
+        canvases.push(canvas);
+        return canvas;
+      },
     },
   });
   return {
+    canvases,
     restore() {
       if (original) Object.defineProperty(globalThis, 'document', original);
       else Reflect.deleteProperty(globalThis, 'document');
@@ -202,6 +209,74 @@ test('hidden clusters leave a gap instead of overlapping', async () => {
     expect(Math.max(...left.map((arc) => arc.x)) + 2 * 5).toBeLessThan(
       Math.min(...right.map((arc) => arc.x)),
     );
+  } finally {
+    dom.restore();
+  }
+});
+
+test('a mixed brain shares its sensors and keeps the two halves apart', async () => {
+  const dom = stubDom();
+  try {
+    const { MixedNetwork } = await import('../src/ai/Mixed');
+    const viz = await visualizer();
+    const experts = [1, 2, 3].map(() => new NeuralNetwork(4, 2, 2));
+    const mixed = new MixedNetwork(4, 2, experts, { hiddenNodes: 3 });
+    mixed.process([0.5, 0.25, 1, 0]);
+    const { ctx, recording } = makeContext(800, 600);
+
+    viz.renderNetwork(ctx, mixed);
+
+    const drawn = rows(recording);
+    const spanX = (arcs: Recording['arcs']) =>
+      Math.max(...arcs.map((arc) => arc.x)) -
+      Math.min(...arcs.map((arc) => arc.x));
+
+    // one shared sensor row, read by the selector and the expert alike
+    const sensors = drawn[drawn.length - 1];
+    expect(sockets(sensors).length).toBe(4);
+    expect(spanX(sockets(sensors))).toBeGreaterThan(800 * 0.7);
+
+    // every row that draws both halves keeps a clear band between them, so
+    // the selector never touches the expert it routed to
+    const center = 400;
+    let splitRows = 0;
+    for (const row of drawn) {
+      const nodes = sockets(row);
+      const left = nodes.filter((arc) => arc.x < center);
+      const right = nodes.filter((arc) => arc.x >= center);
+      if (!left.length || !right.length) continue;
+      splitRows++;
+      const leftEdge = Math.max(...left.map((arc) => arc.x + arc.radius));
+      const rightEdge = Math.min(...right.map((arc) => arc.x - arc.radius));
+      expect(leftEdge).toBeLessThan(rightEdge);
+    }
+    expect(splitRows).toBeGreaterThanOrEqual(2);
+  } finally {
+    dom.restore();
+  }
+});
+
+test('mixed links cover the whole canvas so shared sensors are not clipped', async () => {
+  const dom = stubDom();
+  try {
+    const { MixedNetwork } = await import('../src/ai/Mixed');
+    const viz = await visualizer();
+    viz.renderLines = true;
+    const experts = [1, 2, 3].map(() => new NeuralNetwork(4, 2, 2));
+    const mixed = new MixedNetwork(4, 2, experts, { hiddenNodes: 3 });
+    mixed.process([0.5, 0.25, 1, 0]);
+    const { ctx } = makeContext(800, 600);
+
+    viz.renderNetwork(ctx, mixed);
+
+    // the two link layers are rasterized on a full-width strip; a half-width
+    // strip would clip every link reaching a sensor on the other side
+    const strips = dom.canvases
+      .map((canvas) => canvas.width)
+      .filter((width) => width > 0);
+    expect(
+      strips.filter((width) => width >= 800).length,
+    ).toBeGreaterThanOrEqual(2);
   } finally {
     dom.restore();
   }

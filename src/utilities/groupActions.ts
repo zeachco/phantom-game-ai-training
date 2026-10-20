@@ -67,6 +67,14 @@ export interface GroupActionsOptions {
   ) => void;
   /** score of the brain the group distills from, null for free or none yet */
   teacherScore: (value: number | 'mixed') => number | null;
+  /** the group's accent color, used to color-code the train-from options */
+  groupColor?: (value: number | 'mixed') => string;
+  /**
+   * The group whose brain the visualizer is drawing right now, null when no
+   * brain is shown. Only used while "all" is followed, to report on the model
+   * currently on screen instead of hiding the readouts.
+   */
+  displayedGroup?: () => number | 'mixed' | null;
 }
 
 export interface GroupActions {
@@ -93,6 +101,8 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     trainFrom,
     setTrainFrom,
     teacherScore,
+    groupColor,
+    displayedGroup,
   } = options;
 
   const el = document.createElement('div');
@@ -155,8 +165,15 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   trainSelect.className = 'group-panel-select';
   trainRow.appendChild(trainName);
   trainRow.appendChild(trainSelect);
+  // in the "all" view the train-from control has no single group to point at:
+  // the same row is recycled to name the group the visualizer is showing
+  const shownVal = document.createElement('span');
+  shownVal.className = 'group-panel-value';
+  shownVal.hidden = true;
+  trainRow.appendChild(shownVal);
   readouts.appendChild(trainRow);
   const teacherVal = mkRow('teacher');
+  const teacherRow = teacherVal.parentElement as HTMLElement;
   const seedVal = mkRow('seed best');
   const globalVal = mkRow('global');
   const remoteVal = mkRow('remote');
@@ -172,15 +189,33 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     target === null ? '' : target === 'mixed' ? 'mixed' : String(target);
 
   function refresh(): void {
-    if (el.hidden || value === 0) return;
-    // a run ending resets the group to free training without a follow change
-    const stored = targetValue(trainFrom(value));
-    if (trainSelect.value !== stored) trainSelect.value = stored;
-    const key = groupKeyFor(game, value);
-    teacherVal.textContent = fmt(teacherScore(value));
-    seedVal.textContent = fmt(seedBest(key));
-    globalVal.textContent = fmt(globalBest(key));
-    remoteVal.textContent = fmt(baseScores(game)[key]);
+    if (el.hidden) return;
+    // "all" reports on the brain currently drawn: its group has no train-from
+    // control, so the row names it and the teacher row is dropped
+    const all = value === 0;
+    const group = all ? (displayedGroup?.() ?? null) : value;
+    if (all) {
+      shownVal.textContent = group === null ? '—' : label(group);
+    } else {
+      // a run ending resets the group to free training without a follow change
+      const stored = targetValue(trainFrom(value));
+      if (trainSelect.value !== stored) trainSelect.value = stored;
+      // the closed select wears the color of the group it points at
+      const target = trainFrom(value);
+      trainSelect.style.color =
+        target === null ? '' : (groupColor?.(target) ?? '');
+      teacherVal.textContent = fmt(teacherScore(value));
+    }
+    if (group === null) {
+      seedVal.textContent = '—';
+      globalVal.textContent = '—';
+      remoteVal.textContent = '—';
+    } else {
+      const key = groupKeyFor(game, group);
+      seedVal.textContent = fmt(seedBest(key));
+      globalVal.textContent = fmt(globalBest(key));
+      remoteVal.textContent = fmt(baseScores(game)[key]);
+    }
     syncVal.textContent = relativeTime(lastSyncAt(game));
   }
 
@@ -260,7 +295,10 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
           { tone: 'error' },
         );
       } else {
-        const deleted = results.reduce<number>((sum, count) => sum + (count ?? 0), 0);
+        const deleted = results.reduce<number>(
+          (sum, count) => sum + (count ?? 0),
+          0,
+        );
         showToast(
           value === 0
             ? `Deleted ${deleted} stored ${game} model(s)`
@@ -275,8 +313,9 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   });
 
   /**
-   * Rebuild the selector's options, disabling the current group as a target,
-   * then restore the stored selection.
+   * Rebuild the selector's options, disabling only the current group as its own
+   * target, then restore the stored selection. Every other group can teach it,
+   * the mixed brain included, and the options wear their group's color.
    */
   function rebuildTrainOptions(): void {
     trainSelect.length = 0;
@@ -288,7 +327,9 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
       const option = document.createElement('option');
       option.value = group === 'mixed' ? 'mixed' : String(group);
       option.textContent = label(group);
-      option.disabled = group === value || group === 'mixed';
+      option.disabled = group === value;
+      const color = groupColor?.(group);
+      if (color) option.style.color = color;
       trainSelect.appendChild(option);
     }
     trainSelect.value = targetValue(trainFrom(value));
@@ -309,15 +350,20 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     apply(v: number | 'mixed'): void {
       value = v;
       el.hidden = false;
-      readouts.hidden = v === 0;
+      readouts.hidden = false;
       hr.hidden = false;
+      const all = v === 0;
+      // the "all" view shows the displayed group in place of the train-from
+      // selector, and drops the teacher row that only fits one group
+      trainName.textContent = all ? 'showing' : 'train from';
+      trainSelect.hidden = all;
+      shownVal.hidden = !all;
+      teacherRow.hidden = all;
       // nothing to train from while no group is followed, and the games create
       // this panel before their race exists: don't call back into them yet
-      if (v !== 0) {
-        rebuildTrainOptions();
-        refresh();
-        ensureTimer();
-      }
+      if (!all) rebuildTrainOptions();
+      refresh();
+      ensureTimer();
     },
     setOpen(o: boolean): void {
       open = o;

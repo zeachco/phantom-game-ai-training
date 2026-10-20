@@ -387,6 +387,13 @@ canvas {
   color: rgba(255, 255, 255, 0.75);
 }
 
+/* the hidden attribute only loses to an author display rule, so restate it */
+.group-panel-row[hidden],
+.group-panel-value[hidden],
+.group-panel-select[hidden] {
+  display: none;
+}
+
 .group-panel-name {
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -394,12 +401,7 @@ canvas {
 }
 
 .group-panel-value {
-  font-family:
-    ui-monospace,
-    "Cascadia Mono",
-    Menlo,
-    Consolas,
-    monospace;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
   color: var(--ui-accent);
 }

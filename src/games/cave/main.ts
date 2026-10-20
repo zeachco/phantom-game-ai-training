@@ -156,11 +156,19 @@ export default async (state: CaveState) => {
     followTarget = undefined;
   };
 
+  // the group of the brain the visualizer is drawing; the "all" readouts
+  // report on it
+  let displayedGroup: number | 'mixed' | null = null;
+
   // group actions + trainer readouts, shown while a brain group is followed
   const groupActions: GroupActionsOptions = {
     game: 'cave',
     io,
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
+    groupColor: (v) =>
+      v === 'mixed'
+        ? config.MIXED_COLOR
+        : layerColor(v, config.MAX_NETWORK_LAYERS),
     seedBest: (key) => scoreRecordForGroup('cave', key)?.seed ?? null,
     globalBest: (key) => {
       const record = scoreRecordForGroup('cave', key);
@@ -180,6 +188,7 @@ export default async (state: CaveState) => {
       race.setTrainFrom(v, target);
     },
     teacherScore: (v) => race.teacherScore(v),
+    displayedGroup: () => displayedGroup,
   };
 
   const legend = document.createElement('div');
@@ -633,6 +642,12 @@ export default async (state: CaveState) => {
     const visualized = followed.useAI
       ? followed
       : state.balls.find((ball) => ball.useAI && !ball.damaged);
+    if (visualized?.brain) {
+      displayedGroup =
+        visualized.brain instanceof MixedNetwork
+          ? 'mixed'
+          : visualized.brainLayers;
+    }
     if (panel.isOpen() && visualized?.brain)
       neuralVisualizer.renderNetwork(
         panel.network().ctx,

@@ -6,6 +6,8 @@ import { clampOutput, type Level, type NeuralNetwork } from '../Network';
 
 const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
+/** the clear band between the selector and expert halves of the mixed view */
+const MIXED_GAP = RADIUS * 3;
 const FH = 18;
 const CONTROL_LABELS = ['F', 'L', 'R', 'B'];
 
@@ -322,7 +324,9 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       // expert is the trainee half: it is the pipeline whose controls the
       // student applies
       const trainee =
-        network instanceof MixedNetwork ? network.activeExpert ?? network : network;
+        network instanceof MixedNetwork
+          ? (network.activeExpert ?? network)
+          : network;
       this.#drawDistillationView(
         ctx,
         trainee,
@@ -356,9 +360,9 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     selector: MixedNetwork,
     expert: NeuralNetwork,
   ) {
-    const half = Math.max(1, (ctx.canvas.width - MARGIN * 3) / 2);
+    const half = Math.max(1, (ctx.canvas.width - MARGIN * 2 - MIXED_GAP) / 2);
     const left = MARGIN;
-    const right = MARGIN * 2 + half;
+    const right = left + half + MIXED_GAP;
     const sharedInputs = nodePositions(
       selector.levels[0]?.inputs.length ?? 0,
       MARGIN,
@@ -386,8 +390,25 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       }
     }
     if (this.renderLines) {
-      this.#mainLinks.draw(ctx, selector, selectorLayouts, left, half, 'mixed-selector');
-      this.#expertLinks.draw(ctx, expert, expertLayouts, right, half, 'mixed-expert');
+      // both brains share the full-width sensor row, so their links must be
+      // rasterized across the whole canvas: a half-width strip clips every
+      // link leaving that half toward a sensor on the other side
+      this.#mainLinks.draw(
+        ctx,
+        selector,
+        selectorLayouts,
+        0,
+        ctx.canvas.width,
+        'mixed-selector',
+      );
+      this.#expertLinks.draw(
+        ctx,
+        expert,
+        expertLayouts,
+        0,
+        ctx.canvas.width,
+        'mixed-expert',
+      );
     }
     this.#drawNodes(ctx, selectorLayouts, true);
     this.#drawNodes(ctx, expertLayouts, true);
@@ -491,7 +512,11 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
    * Each node is one thin socket ring, and the arc around it is the gauge,
    * whole rows stroked in a single pass per sign.
    */
-  #drawNodes(ctx: CanvasRenderingContext2D, layouts: LevelLayout[], skipFirstInputs = false) {
+  #drawNodes(
+    ctx: CanvasRenderingContext2D,
+    layouts: LevelLayout[],
+    skipFirstInputs = false,
+  ) {
     ctx.setLineDash(NO_DASH);
     ctx.lineWidth = 2;
     ctx.textAlign = 'center';
@@ -775,8 +800,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
     const hiddenRows: SplitHiddenRow[] = [];
     for (let row = 1; row <= hiddenRowsNb; row++) {
-      const traineeLevelIndex =
-        row - (hiddenRowsNb - traineeHidden) - 1;
+      const traineeLevelIndex = row - (hiddenRowsNb - traineeHidden) - 1;
       const traineeLevel = trainee.levels[traineeLevelIndex];
       const guideLevel = guide.levels[row - (hiddenRowsNb - guideHidden) - 1];
       const traineeValues = traineeLevel ? traineeLevel.outputs : NO_VALUES;

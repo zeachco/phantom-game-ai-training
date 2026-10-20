@@ -130,11 +130,19 @@ export default async (state: typeof defaultState) => {
   // it exists
   let race: CircuitRace;
 
+  // the group of the brain the visualizer is drawing; the "all" readouts
+  // report on it
+  let displayedGroup: number | 'mixed' | null = null;
+
   // group actions + trainer readouts, shown while a brain group is followed
   const groupActions: GroupActionsOptions = {
     game: 'circuit',
     io,
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
+    groupColor: (v) =>
+      v === 'mixed'
+        ? config.MIXED_COLOR
+        : layerColor(v, config.MAX_NETWORK_LAYERS),
     seedBest: (key) => scoreRecordForGroup('circuit', key)?.seed ?? null,
     globalBest: (key) => {
       const record = scoreRecordForGroup('circuit', key);
@@ -152,6 +160,7 @@ export default async (state: typeof defaultState) => {
       race?.setTrainFrom(v, target);
     },
     teacherScore: (v) => (race ? race.teacherScore(v) : null),
+    displayedGroup: () => displayedGroup,
   };
 
   const legend = document.createElement('div');
@@ -648,6 +657,10 @@ export default async (state: typeof defaultState) => {
 
       const followed = camTarget?.brain;
       if (panel.isOpen() && followed) {
+        displayedGroup =
+          followed instanceof MixedNetwork
+            ? 'mixed'
+            : (camTarget?.brainLayers ?? null);
         // a distilling car shows its brain next to its teacher, with the live
         // training error on the controls
         neuralVisualizer.renderNetwork(
