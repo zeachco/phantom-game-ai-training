@@ -58,7 +58,7 @@ export class TimingBoard {
       100,
       (Math.max(0, seed) / config.CIRCUIT_DIFFICULTY_SEED_BASE) * 100,
     );
-    this.#raceLabel.textContent = `race ${seed} (diff. ${Math.round(
+    this.#raceLabel.textContent = `race ${seed} (difficulty ${Math.round(
       difficulty,
     )}%)`;
   }
@@ -111,18 +111,32 @@ export class TimingBoard {
       });
     }
 
-    ranked
-      .sort(
-        (a, b) =>
-          b.laps - a.laps ||
-          a.totalFrames - b.totalFrames ||
-          (a.group?.isMixed ? 1 : 0) - (b.group?.isMixed ? 1 : 0) ||
-          (a.group?.layer ?? -1) - (b.group?.layer ?? -1),
-      )
-      .splice(this.#rows.length);
+    const compare = (a: TimingEntry, b: TimingEntry) =>
+      b.laps - a.laps ||
+      a.totalFrames - b.totalFrames ||
+      (a.group?.isMixed ? 1 : 0) - (b.group?.isMixed ? 1 : 0) ||
+      (a.group?.layer ?? -1) - (b.group?.layer ?? -1);
+    const finishers = ranked.filter(
+      (entry) => entry.laps >= config.LAPS_PER_SEED,
+    );
+    const leaders = ranked
+      .filter((entry) => entry.laps < config.LAPS_PER_SEED)
+      .sort(compare)
+      .slice(0, 3);
+    const visible = [...finishers, ...leaders].sort(compare);
+
+    while (this.#rows.length < Math.max(3, visible.length)) {
+      const row = document.createElement('div');
+      row.className = 'timing-board-row';
+      this.#rows.push(row);
+      this.element.appendChild(row);
+    }
+    while (this.#rows.length > Math.max(3, visible.length)) {
+      this.#rows.pop()?.remove();
+    }
 
     this.#rows.forEach((row, index) => {
-      const entry = ranked[index];
+      const entry = visible[index];
       row.style.color = entry?.color || 'rgba(255, 255, 255, 0.82)';
       const name = entry?.human
         ? '🕹 human'
