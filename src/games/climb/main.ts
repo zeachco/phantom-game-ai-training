@@ -5,6 +5,7 @@ import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
+import { createCockpit } from '../../utilities/cockpit';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
@@ -131,35 +132,17 @@ export default async (state: typeof defaultState) => {
   // the frame counter anchors to the stage, not the panel; demo hides it too
   if (!isDemo) stage.appendChild(frameMeter.el);
 
-  // The output boxes mimic the followed climber, display only.
-  const steerOverlay = document.createElement('div');
-  steerOverlay.className = 'steer-overlay hidden';
-  const controlIndicators = document.createElement('div');
-  controlIndicators.className = 'control-indicators';
-  const budgetGauge = document.createElement('div');
-  budgetGauge.className = 'gate-gauge';
-  budgetGauge.title =
-    'height frames remaining before the height budget kills the followed climber';
-  budgetGauge.setAttribute('role', 'progressbar');
-  budgetGauge.setAttribute('aria-label', 'Height budget remaining');
-  budgetGauge.setAttribute('aria-valuemin', '0');
-  budgetGauge.setAttribute(
-    'aria-valuemax',
-    String(config.HEIGHT_BUDGET_FRAMES),
-  );
-  const budgetGaugeFill = document.createElement('div');
-  budgetGaugeFill.className = 'gate-gauge-fill';
-  budgetGauge.append(budgetGaugeFill);
-  const controlCanvas = document.createElement('canvas');
-  controlCanvas.className = 'control-axis';
-  controlCanvas.width = 110;
-  controlCanvas.height = 110;
-  const controlCtx = controlCanvas.getContext('2d');
+  // The cockpit mimics the followed climber, display only
+  const cockpit = createCockpit({
+    gauge: {
+      title:
+        'height frames remaining before the height budget kills the followed climber',
+      ariaLabel: 'Height budget remaining',
+      max: config.HEIGHT_BUDGET_FRAMES,
+    },
+  });
   const jumpSamples: number[] = [];
-  controlIndicators.append(controlCanvas);
 
-  const readout = document.createElement('div');
-  readout.className = 'readout';
   const floorEl = document.createElement('div');
   floorEl.className = 'laps';
   floorEl.title = 'floors of personal-best height on this seed';
@@ -172,15 +155,12 @@ export default async (state: typeof defaultState) => {
   seedCountdown.className = 'finish-countdown';
   seedCountdown.style.color = 'red';
   seedCountdown.hidden = true;
-  readout.append(seedCountdown, comboEl, floorEl);
+  cockpit.readout.append(seedCountdown, comboEl, floorEl);
   // The network stays in the sidebar, but its stats travel with the in-game
   // cockpit as inline text after the readout, visible when the panel is
   // closed.
-  const brainStats = document.createElement('div');
-  brainStats.className = 'brain-stats';
-  brainStats.title = 'followed brain stats';
-  steerOverlay.append(controlIndicators, budgetGauge, readout, brainStats);
-  stage.appendChild(steerOverlay);
+  cockpit.el.append(cockpit.stats);
+  stage.appendChild(cockpit.el);
 
   // The map selector stays in the top-left HUD so it remains available while
   // the model panel is closed.
@@ -223,7 +203,6 @@ export default async (state: typeof defaultState) => {
   const loop = new GameLoop();
   const shouldUpdateDom = createUpdateLimiter(20);
   let lastCountdownTenths = -1;
-  let lastStatsHtml = '';
 
   function writeSeed(seed: number) {
     history.replaceState(
@@ -420,12 +399,8 @@ export default async (state: typeof defaultState) => {
 
       // the cockpit mimics the followed climber, hidden while it is dead
       if (domUpdateDue) {
-        steerOverlay.style.setProperty(
-          '--hud-color',
-          followed?.color || '#c4c4c4',
-        );
-        steerOverlay.classList.toggle('hidden', !followed || followed.damaged);
-        brainStats.classList.toggle(
+        cockpit.show(followed && !followed.damaged ? followed.color : null);
+        cockpit.stats.classList.toggle(
           'hidden',
           !neuralVisualizer.renderStats || !followed?.brain,
         );
@@ -444,15 +419,14 @@ export default async (state: typeof defaultState) => {
         const c = followed.controls;
         jumpSamples.push(c.jumpHeld ? 1 : 0);
         if (jumpSamples.length > JUMP_HISTORY) jumpSamples.shift();
-        if (controlCtx)
-          drawGamepadControls(controlCtx, {
-            x: c.right - c.left,
-            y: 0,
-            color: followed.color,
-            action: c.jumpHeld,
-            actionLabel: 'JUMP',
-            actionHistory: jumpSamples,
-          });
+        drawGamepadControls(cockpit.ctx, {
+          x: c.right - c.left,
+          y: 0,
+          color: followed.color,
+          action: c.jumpHeld,
+          actionLabel: 'JUMP',
+          actionHistory: jumpSamples,
+        });
         comboEl.hidden = followed.comboValue < 2;
         comboEl.textContent = `x${followed.comboValue}`;
         floorEl.textContent = `floor ${Math.round(followed.brain?.score ?? 0)}`;
@@ -464,9 +438,7 @@ export default async (state: typeof defaultState) => {
           0,
           config.HEIGHT_BUDGET_FRAMES - followed.stallFrames,
         );
-        const budgetFraction = budget / config.HEIGHT_BUDGET_FRAMES;
-        budgetGaugeFill.style.height = `${budgetFraction * 100}%`;
-        budgetGauge.setAttribute('aria-valuenow', String(budget));
+        cockpit.gauge.set(budget / config.HEIGHT_BUDGET_FRAMES, budget);
       }
 
       const followedBrain = followed?.brain;
@@ -510,11 +482,7 @@ export default async (state: typeof defaultState) => {
       `Score ${Math.round(network.score)}`,
       `Best ${best}`,
     ];
-    const html = lines.map((line) => `<span>${line}</span>`).join('');
-    if (html !== lastStatsHtml) {
-      lastStatsHtml = html;
-      brainStats.innerHTML = html;
-    }
+    cockpit.setStats(lines);
   }
 
   /** Fill the follow buttons with their running/dead state once per HUD tick. */

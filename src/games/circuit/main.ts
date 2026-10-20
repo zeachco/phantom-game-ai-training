@@ -6,6 +6,11 @@ import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import {
+  createCockpit,
+  createSpeedo,
+  updateTimingLine,
+} from '../../utilities/cockpit';
+import {
   createCanvas,
   createFrameMeter,
   createUpdateLimiter,
@@ -198,21 +203,16 @@ export default async (state: typeof defaultState) => {
   // the demo profile hides the whole panel instead of starting it collapsed
   if (!isDemo) document.body.appendChild(panel.el);
 
-  // The outputs box mimics the followed car, display only.
-  const steerOverlay = document.createElement('div');
-  steerOverlay.className = 'steer-overlay hidden';
-  const controlIndicators = document.createElement('div');
-  controlIndicators.className = 'control-indicators';
-  const controlCanvas = document.createElement('canvas');
-  controlCanvas.className = 'control-axis';
-  controlCanvas.width = 110;
-  controlCanvas.height = 110;
-  const controlCtx = controlCanvas.getContext('2d');
-  controlIndicators.append(controlCanvas);
+  // The cockpit mimics the followed car, display only.
+  const cockpit = createCockpit({
+    gauge: {
+      title: 'checkpoint frames remaining for the followed car',
+      ariaLabel: 'Checkpoint frames remaining',
+      max: config.CHECKPOINT_BUDGET_FRAMES,
+    },
+  });
   // the race, laps and speed readouts sit together, race on top, laps just
   // above the speed
-  const readout = document.createElement('div');
-  readout.className = 'readout';
   const lapsEl = document.createElement('div');
   lapsEl.className = 'laps';
   lapsEl.title = 'laps on this map';
@@ -226,46 +226,21 @@ export default async (state: typeof defaultState) => {
   totalFramesEl.title = 'simulation frames on this map';
   totalFramesEl.textContent = 'total 0f';
 
-  type TimingLine = {
-    element: HTMLDivElement;
-    label: HTMLSpanElement;
-    value: HTMLSpanElement;
-    delta: HTMLSpanElement;
-  };
-  const makeTimingLine = (label: string, title: string): TimingLine => {
-    const element = document.createElement('div');
-    element.className = 'timing-line';
-    element.title = title;
-    const labelEl = document.createElement('span');
-    labelEl.className = 'timing-label';
-    labelEl.textContent = label;
-    const value = document.createElement('span');
-    value.className = 'timing-value';
-    value.textContent = '—';
-    const delta = document.createElement('span');
-    delta.className = 'timing-delta';
-    element.append(labelEl, value, delta);
-    return { element, label: labelEl, value, delta };
-  };
-  const checkpointTiming = makeTimingLine(
+  const checkpointTiming = cockpit.timingLine(
     'cp',
     'latest checkpoint split in simulation frames; delta is against the track best',
   );
-  const lapTiming = makeTimingLine(
+  const lapTiming = cockpit.timingLine(
     'lap',
     'latest completed lap in simulation frames; delta is against the track best',
   );
-  const finishTiming = makeTimingLine(
+  const finishTiming = cockpit.timingLine(
     'finish',
     'final race time in simulation frames; delta is against the track best',
   );
   const timingDeltas = document.createElement('div');
   timingDeltas.className = 'timing-deltas';
-  timingDeltas.append(
-    checkpointTiming.element,
-    lapTiming.element,
-    finishTiming.element,
-  );
+  timingDeltas.append(checkpointTiming.el, lapTiming.el, finishTiming.el);
   const finishCountdown = document.createElement('div');
   finishCountdown.className = 'finish-countdown';
   finishCountdown.style.color = 'red';
@@ -276,50 +251,22 @@ export default async (state: typeof defaultState) => {
   raceEndCountdown.setAttribute('aria-live', 'polite');
   raceEndCountdown.hidden = true;
   stage.appendChild(raceEndCountdown);
-  const speedo = document.createElement('div');
-  speedo.className = 'speedo';
-  speedo.title = 'speed';
-  const speedoValue = document.createElement('span');
-  speedoValue.className = 'speedo-value';
-  speedoValue.textContent = '0.0';
-  const speedoUnit = document.createElement('span');
-  speedoUnit.className = 'speedo-unit';
-  speedoUnit.textContent = 'u/f';
-  speedo.append(speedoValue, speedoUnit);
-  readout.append(
+  const speedo = createSpeedo();
+  cockpit.readout.append(
     finishCountdown,
     lapsEl,
     lapFramesEl,
     totalFramesEl,
     timingDeltas,
-    speedo,
+    speedo.el,
   );
-  // the gate countdown: frame budget left for the followed car to claim its
-  // next gate
-  const gateGauge = document.createElement('div');
-  gateGauge.className = 'gate-gauge';
-  gateGauge.title = 'checkpoint frames remaining for the followed car';
-  gateGauge.setAttribute('role', 'progressbar');
-  gateGauge.setAttribute('aria-label', 'Checkpoint frames remaining');
-  gateGauge.setAttribute('aria-valuemin', '0');
-  gateGauge.setAttribute(
-    'aria-valuemax',
-    String(config.CHECKPOINT_BUDGET_FRAMES),
-  );
-  const gateGaugeFill = document.createElement('div');
-  gateGaugeFill.className = 'gate-gauge-fill';
-  gateGauge.append(gateGaugeFill);
   // The network stays in the sidebar, but its stats travel with the in-game
-  // cockpit as inline text after the gate gauge, visible when the panel is closed.
-  const brainStats = document.createElement('div');
-  brainStats.className = 'brain-stats';
-  brainStats.title = 'followed brain stats';
-  steerOverlay.append(controlIndicators, gateGauge, readout, brainStats);
-  stage.appendChild(steerOverlay);
+  // cockpit as inline text after the readout, visible when the panel is closed.
+  cockpit.el.append(cockpit.stats);
+  stage.appendChild(cockpit.el);
 
   let lastFollowed: Car | undefined;
   // The loop's first tick is eager, so every state it reads must exist by then.
-  let lastStatsHtml = '';
   const shouldUpdateDom = createUpdateLimiter(20);
 
   // the frame counter anchors to the stage, not the panel; demo hides both
@@ -568,28 +515,19 @@ export default async (state: typeof defaultState) => {
       const cameraAngle = camAngle;
       // the controls mimic the followed car, hidden while it is dead
       if (domUpdateDue) {
-        steerOverlay.style.setProperty(
-          '--hud-color',
-          camTarget?.color || '#c4c4c4',
-        );
-        steerOverlay.classList.toggle(
-          'hidden',
-          !camTarget || lastFollowed?.damaged,
+        cockpit.show(
+          camTarget && !lastFollowed?.damaged ? camTarget.color : null,
         );
       }
       if (camTarget) {
         const c = camTarget.controls;
-        if (controlCtx)
-          drawGamepadControls(controlCtx, {
-            x: c.right - c.left,
-            y: c.throttle,
-            color: camTarget.color,
-          });
+        drawGamepadControls(cockpit.ctx, {
+          x: c.right - c.left,
+          y: c.throttle,
+          color: camTarget.color,
+        });
         if (domUpdateDue) {
-          speedoValue.textContent = Math.hypot(
-            camTarget.vx,
-            camTarget.vy,
-          ).toFixed(1);
+          speedo.set(Math.hypot(camTarget.vx, camTarget.vy));
           lapsEl.textContent = `lap ${Math.min(
             camTarget.laps + 1,
             config.LAPS_PER_SEED,
@@ -599,18 +537,10 @@ export default async (state: typeof defaultState) => {
             camTarget.totalRaceFrames + camTarget.framesSinceLapStart
           }f`;
           updateFocusedTiming(camTarget);
-          const gateFraction = Math.max(
-            0,
-            Math.min(
-              1,
-              camTarget.checkpointFramesRemaining /
-                config.CHECKPOINT_BUDGET_FRAMES,
-            ),
-          );
-          gateGaugeFill.style.height = `${gateFraction * 100}%`;
-          gateGauge.setAttribute(
-            'aria-valuenow',
-            String(camTarget.checkpointFramesRemaining),
+          cockpit.gauge.set(
+            camTarget.checkpointFramesRemaining /
+              config.CHECKPOINT_BUDGET_FRAMES,
+            camTarget.checkpointFramesRemaining,
           );
         }
       }
@@ -730,7 +660,7 @@ export default async (state: typeof defaultState) => {
       // The KeyS shortcut toggles the stats, now an inline DOM block in the cockpit.
       if (domUpdateDue) {
         const statsOn = neuralVisualizer.renderStats;
-        brainStats.classList.toggle('hidden', !statsOn || !followed);
+        cockpit.stats.classList.toggle('hidden', !statsOn || !followed);
         if (statsOn && followed && camTarget)
           updateBrainStats(followed, camTarget);
       }
@@ -822,25 +752,6 @@ export default async (state: typeof defaultState) => {
 
   /** Rebuild the inline stats block of the followed brain; the DOM is only
    *  touched when the rendered text changes, so a steady frame is cheap. */
-  function updateTimingLine(
-    line: TimingLine,
-    frames: number | null,
-    delta: number | null,
-  ) {
-    line.value.textContent =
-      frames === null ? '—' : String(Math.max(0, Math.round(frames)));
-    line.delta.textContent =
-      delta === null ? '' : `(${delta > 0 ? '+' : ''}${Math.round(delta)})`;
-    line.delta.style.color =
-      delta === null
-        ? ''
-        : delta < 0
-          ? '#70e08a'
-          : delta > 0
-            ? '#ff7070'
-            : 'rgba(255, 255, 255, 0.55)';
-  }
-
   function updateFocusedTiming(car: Car) {
     checkpointTiming.label.textContent =
       car.lastCheckpointIndex < 0 ? 'cp' : `cp${car.lastCheckpointIndex + 1}`;
@@ -882,11 +793,7 @@ export default async (state: typeof defaultState) => {
       `Score ${Math.round(network.score)}`,
       `Best ${best}`,
     ];
-    const html = lines.map((line) => `<span>${line}</span>`).join('');
-    if (html !== lastStatsHtml) {
-      lastStatsHtml = html;
-      brainStats.innerHTML = html;
-    }
+    cockpit.setStats(lines);
   }
 
   // A reload never loses more than the most recent promotions.

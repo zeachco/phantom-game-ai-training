@@ -5,6 +5,11 @@ import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
+import {
+  createCockpit,
+  createSpeedo,
+  updateTimingLine,
+} from '../../utilities/cockpit';
 import { createFrameMeter } from '../../utilities/dom';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { createScoreBoard } from '../../utilities/scoreBoard';
@@ -238,19 +243,17 @@ export default async (state: CaveState) => {
   position.append(positionLabel, positionValue, positionTotal);
   stage.appendChild(position);
 
-  const steerOverlay = document.createElement('div');
-  steerOverlay.className = 'steer-overlay';
-  const controlIndicators = document.createElement('div');
-  controlIndicators.className = 'control-indicators';
-  const controlCanvas = document.createElement('canvas');
-  controlCanvas.className = 'control-axis';
-  controlCanvas.width = 110;
-  controlCanvas.height = 110;
-  const controlCtx = controlCanvas.getContext('2d');
-  controlIndicators.append(controlCanvas);
+  // The cockpit mimics the followed ball, display only
+  const cockpit = createCockpit({
+    startHidden: false,
+    gauge: {
+      title:
+        'budget remaining to make forward progress into the next cave section',
+      ariaLabel: 'Cave section progress budget remaining',
+      max: config.SECTION_BUDGET_FRAMES,
+    },
+  });
 
-  const readout = document.createElement('div');
-  readout.className = 'readout';
   const gateCountEl = document.createElement('div');
   gateCountEl.className = 'laps';
   gateCountEl.title = 'next gate out of the total gates in this cave';
@@ -261,75 +264,29 @@ export default async (state: CaveState) => {
   totalFramesEl.className = 'frame-count';
   totalFramesEl.title = 'simulation frames rolled in this cave';
 
-  const makeTimingLine = (label: string, title: string) => {
-    const element = document.createElement('div');
-    element.className = 'timing-line';
-    element.title = title;
-    const labelEl = document.createElement('span');
-    labelEl.className = 'timing-label';
-    labelEl.textContent = label;
-    const value = document.createElement('span');
-    value.className = 'timing-value';
-    value.textContent = '—';
-    const delta = document.createElement('span');
-    delta.className = 'timing-delta';
-    element.append(labelEl, value, delta);
-    return { element, label: labelEl, value, delta };
-  };
-  const gateTiming = makeTimingLine(
+  const gateTiming = cockpit.timingLine(
     'gate',
     'latest completed gate split in simulation frames',
   );
-  const finishTiming = makeTimingLine(
+  const finishTiming = cockpit.timingLine(
     'finish',
     'final cave time in simulation frames',
   );
   const timingDeltas = document.createElement('div');
   timingDeltas.className = 'timing-deltas';
-  timingDeltas.append(gateTiming.element, finishTiming.element);
+  timingDeltas.append(gateTiming.el, finishTiming.el);
 
-  const speedo = document.createElement('div');
-  speedo.className = 'speedo';
-  speedo.title = 'speed';
-  const speedoValue = document.createElement('span');
-  speedoValue.className = 'speedo-value';
-  const speedoUnit = document.createElement('span');
-  speedoUnit.className = 'speedo-unit';
-  speedoUnit.textContent = 'u/f';
-  speedo.append(speedoValue, speedoUnit);
-  readout.append(
+  const speedo = createSpeedo();
+  cockpit.readout.append(
     gateCountEl,
     gateFramesEl,
     totalFramesEl,
     timingDeltas,
-    speedo,
+    speedo.el,
   );
 
-  const sectionGauge = document.createElement('div');
-  sectionGauge.className = 'gate-gauge';
-  sectionGauge.title =
-    'budget remaining to make forward progress into the next cave section';
-  sectionGauge.setAttribute('role', 'progressbar');
-  sectionGauge.setAttribute(
-    'aria-label',
-    'Cave section progress budget remaining',
-  );
-  sectionGauge.setAttribute('aria-valuemin', '0');
-  sectionGauge.setAttribute(
-    'aria-valuemax',
-    String(config.SECTION_BUDGET_FRAMES),
-  );
-  const sectionGaugeFill = document.createElement('div');
-  sectionGaugeFill.className = 'gate-gauge-fill';
-  sectionGauge.append(sectionGaugeFill);
-
-  const brainStats = document.createElement('div');
-  brainStats.className = 'brain-stats';
-  brainStats.title = 'followed brain stats';
-  steerOverlay.append(controlIndicators, sectionGauge, readout, brainStats);
-  stage.appendChild(steerOverlay);
-
-  let lastStatsText = '';
+  cockpit.el.append(cockpit.stats);
+  stage.appendChild(cockpit.el);
 
   // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
@@ -654,21 +611,19 @@ export default async (state: CaveState) => {
     }
 
     const isFollowedAlive = !followed.damaged;
-    steerOverlay.style.setProperty('--hud-color', followed.color || '#c4c4c4');
-    steerOverlay.classList.toggle('hidden', !isFollowedAlive);
+    cockpit.show(isFollowedAlive ? followed.color : null);
     if (isFollowedAlive) {
       jumpSamples.push(followed.controls.jumpHeld ? 1 : 0);
       if (jumpSamples.length > JUMP_HISTORY)
         jumpSamples.splice(0, jumpSamples.length - JUMP_HISTORY);
-      if (controlCtx)
-        drawGamepadControls(controlCtx, {
-          x: followed.controls.moveX,
-          y: followed.controls.moveY,
-          color: followed.color,
-          action: followed.controls.jumpHeld,
-          actionLabel: 'JUMP',
-          actionHistory: jumpSamples,
-        });
+      drawGamepadControls(cockpit.ctx, {
+        x: followed.controls.moveX,
+        y: followed.controls.moveY,
+        color: followed.color,
+        action: followed.controls.jumpHeld,
+        actionLabel: 'JUMP',
+        actionHistory: jumpSamples,
+      });
     }
 
     renderer.render(scene, camera);
@@ -708,32 +663,26 @@ export default async (state: CaveState) => {
       gateCountEl.textContent = `gate ${gateNumber}/${config.GATES_PER_SEED}`;
       gateFramesEl.textContent = `gate ${followed.framesSinceLastGate}f`;
       totalFramesEl.textContent = `total ${followed.totalRaceFrames}f`;
-      speedoValue.textContent = followed.speed.toFixed(1);
+      speedo.set(followed.speed);
 
       gateTiming.label.textContent =
         followed.completedGateIndex < 0
           ? 'gate'
           : `gate${followed.completedGateIndex + 1}`;
-      gateTiming.value.textContent =
-        followed.completedGateIndex < 0
-          ? '—'
-          : String(Math.round(followed.completedGateFrames));
-      finishTiming.value.textContent =
-        followed.lastFinishFrames > 0
-          ? String(Math.round(followed.lastFinishFrames))
-          : '—';
-
-      const sectionFraction = Math.max(
-        0,
-        Math.min(
-          1,
-          followed.sectionFramesRemaining / config.SECTION_BUDGET_FRAMES,
-        ),
+      updateTimingLine(
+        gateTiming,
+        followed.completedGateIndex < 0 ? null : followed.completedGateFrames,
+        null,
       );
-      sectionGaugeFill.style.height = `${sectionFraction * 100}%`;
-      sectionGauge.setAttribute(
-        'aria-valuenow',
-        String(followed.sectionFramesRemaining),
+      updateTimingLine(
+        finishTiming,
+        followed.lastFinishFrames > 0 ? followed.lastFinishFrames : null,
+        null,
+      );
+
+      cockpit.gauge.set(
+        followed.sectionFramesRemaining / config.SECTION_BUDGET_FRAMES,
+        followed.sectionFramesRemaining,
       );
 
       let bestScore: number | string = '—';
@@ -752,22 +701,12 @@ export default async (state: CaveState) => {
         followed.brain.mutationIndex === 0
           ? 'Original model'
           : `Mut ${(followed.brain.mutationFactor * 100).toFixed(4)}%`;
-      const statsText = [
+      cockpit.setStats([
         `Net ${followed.brain.id}`,
         mutation,
         `Score ${Math.round(followed.brain.score)}`,
         `Best ${bestScore}`,
-      ].join('\n');
-      if (statsText !== lastStatsText) {
-        lastStatsText = statsText;
-        brainStats.replaceChildren(
-          ...statsText.split('\n').map((line) => {
-            const span = document.createElement('span');
-            span.textContent = line;
-            return span;
-          }),
-        );
-      }
+      ]);
     }
   });
 

@@ -12,6 +12,7 @@ import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
+import { createCockpit } from '../../utilities/cockpit';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import {
   createCanvas,
@@ -213,30 +214,14 @@ export default async (state: typeof defaultState) => {
   // the frame counter anchors to the stage, not the panel
   stage.appendChild(frameMeter.el);
 
-  // The output box mimics the followed car, display only, and brainStats
+  // The cockpit mimics the followed car, display only; the stats block
   // carries its network / mutation / score readout.
-  const steerOverlay = document.createElement('div');
-  steerOverlay.className = 'steer-overlay hidden';
-  const controlIndicators = document.createElement('div');
-  controlIndicators.className = 'control-indicators';
-  const controlCanvas = document.createElement('canvas');
-  controlCanvas.className = 'control-axis';
-  controlCanvas.width = 110;
-  controlCanvas.height = 110;
-  const controlCtx = controlCanvas.getContext('2d');
-  controlIndicators.append(controlCanvas);
-  const readout = document.createElement('div');
-  readout.className = 'readout';
+  const cockpit = createCockpit({ statsTitle: 'followed car brain stats' });
   const speedEl = document.createElement('div');
   speedEl.className = 'laps';
   speedEl.title = 'followed car speed';
-  const brainStats = document.createElement('div');
-  brainStats.className = 'brain-stats';
-  brainStats.title = 'followed car brain stats';
-  readout.append(speedEl, brainStats);
-  steerOverlay.append(controlIndicators, readout);
-  stage.appendChild(steerOverlay);
-  let lastStatsHtml = '';
+  cockpit.readout.append(speedEl, cockpit.stats);
+  stage.appendChild(cockpit.el);
 
   const lanes = Math.round(carCanvas.width / 75);
   const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9, lanes);
@@ -511,20 +496,15 @@ export default async (state: typeof defaultState) => {
         },
         scoreEntries(state),
       );
-      steerOverlay.style.setProperty(
-        '--hud-color',
-        camTarget?.color || '#c4c4c4',
-      );
-      steerOverlay.classList.toggle('hidden', !camTarget);
+      cockpit.show(camTarget ? camTarget.color : null);
     }
     if (camTarget) {
       const c = camTarget.controls;
-      if (controlCtx)
-        drawGamepadControls(controlCtx, {
-          x: c.right - c.left,
-          y: c.forward - c.reverse,
-          color: camTarget.color,
-        });
+      drawGamepadControls(cockpit.ctx, {
+        x: c.right - c.left,
+        y: c.forward - c.reverse,
+        color: camTarget.color,
+      });
       if (domUpdateDue) updateBrainStats(camTarget);
     }
 
@@ -679,11 +659,7 @@ export default async (state: typeof defaultState) => {
       `Score ${Math.round(brain.score)}`,
     ];
     speedEl.textContent = `Speed ${car.speed.toFixed(2)}`;
-    const html = lines.map((line) => `<span>${line}</span>`).join('');
-    if (html !== lastStatsHtml) {
-      lastStatsHtml = html;
-      brainStats.innerHTML = html;
-    }
+    cockpit.setStats(lines);
   }
 
   /**
