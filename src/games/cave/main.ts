@@ -627,6 +627,45 @@ export default async (state: CaveState) => {
     const ordered = [...race.groups].sort((a, b) =>
       a.isMixed === b.isMixed ? a.layer - b.layer : a.isMixed ? 1 : -1,
     );
+    const rows = ordered.map((group) => {
+      const best = groupBestScore(group);
+      const leader = bestBall(group);
+      const liveScore = leader?.brain.score ?? -Infinity;
+      const currentRecord = group.scores.seed;
+      const isHistorical = best > liveScore + Number.EPSILON;
+      const isCurrentLeader =
+        currentRecord > 0 && liveScore >= currentRecord - Number.EPSILON;
+      const emoji = isHistorical
+        ? '👻'
+        : leader?.damaged
+          ? isCurrentLeader
+            ? '🏆'
+            : '💀'
+          : isCurrentLeader
+            ? '💚'
+            : '💜';
+      const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
+      const score = best > 0 ? String(Math.round(best)) : '—';
+      const color = group.isMixed
+        ? config.MIXED_COLOR
+        : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
+      const textColor = leader?.damaged && !isHistorical ? '#def' : color;
+      return { emoji, text: `${label} ${score}`, color: textColor };
+    });
+    for (const group of ordered) {
+      if (!group.distillRun) continue;
+      const trainee = group.pool[0];
+      if (!trainee) continue;
+      const label = group.isMixed ? 'mixed trainee' : `brain ${group.layer} trainee`;
+      const color = group.isMixed
+        ? config.MIXED_COLOR
+        : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
+      rows.push({
+        emoji: '🎓',
+        text: `${label} ${Math.round(trainee.brain.score)}`,
+        color,
+      });
+    }
     scoreBoard.update(
       {
         text: `${state.living}/${state.balls.length} balls`,
@@ -634,31 +673,7 @@ export default async (state: CaveState) => {
           Math.min(1, state.living / Math.max(1, state.balls.length)),
         ),
       },
-      ordered.map((group) => {
-        const best = groupBestScore(group);
-        const leader = bestBall(group);
-        const liveScore = leader?.brain.score ?? -Infinity;
-        const currentRecord = group.scores.seed;
-        const isHistorical = best > liveScore + Number.EPSILON;
-        const isCurrentLeader =
-          currentRecord > 0 && liveScore >= currentRecord - Number.EPSILON;
-        const emoji = isHistorical
-          ? '👻'
-          : leader?.damaged
-            ? isCurrentLeader
-              ? '🏆'
-              : '💀'
-            : isCurrentLeader
-              ? '💚'
-              : '💜';
-        const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
-        const score = best > 0 ? String(Math.round(best)) : '—';
-        const color = group.isMixed
-          ? config.MIXED_COLOR
-          : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-        const textColor = leader?.damaged && !isHistorical ? '#def' : color;
-        return { emoji, text: `${label} ${score}`, color: textColor };
-      }),
+      rows,
     );
   }
 

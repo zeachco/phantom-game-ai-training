@@ -582,6 +582,7 @@ export class CircuitRace {
     if (group.distillRun) return;
     if (!car.useAI || car.brain.score <= group.scores.seed) return;
     group.scores.seed = car.brain.score;
+    group.ghostScore = car.brain.score;
     this.#promote(group, car);
   }
 
@@ -857,7 +858,10 @@ export class CircuitRace {
         car.passedCheckpoint = false;
         savePoint = true;
         const group = this.#groupOf(car);
-        if (group) this.#pendingSaves.add(group);
+        if (group) {
+          this.#settle(group, car);
+          this.#pendingSaves.add(group);
+        }
       }
     }
 

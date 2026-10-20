@@ -167,18 +167,22 @@ export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
   const entries: (Player | Group)[] = [];
   const topPlayers = state.sortedPlayers;
   const topCount = Math.min(topPlayers.length, config.SCORES_NB);
+  const displayedPlayers = Array.from(
+    new Set([
+      ...topPlayers.slice(0, topCount),
+      ...state.groups.flatMap((group) =>
+        group.distillRun ? group.pool.slice(0, 1) : [],
+      ),
+    ]),
+  );
   for (const group of state.groups) {
     if (group.ghostScore <= 0) continue;
-    let shown = false;
-    for (let i = 0; i < topCount; i++) {
-      if (topPlayers[i].brain?.score === group.ghostScore) {
-        shown = true;
-        break;
-      }
-    }
+    const shown = displayedPlayers.some(
+      (player) => player.brain?.score === group.ghostScore,
+    );
     if (!shown) entries.push(group);
   }
-  for (let i = 0; i < topCount; i++) entries.push(topPlayers[i]);
+  entries.push(...displayedPlayers);
   entries.sort((a, b) => {
     const scoreA = a instanceof Player ? (a.brain?.score ?? 0) : a.ghostScore;
     const scoreB = b instanceof Player ? (b.brain?.score ?? 0) : b.ghostScore;

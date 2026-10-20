@@ -175,27 +175,30 @@ export function globalRecordForGroup(
 }
 
 /**
- * The shared left scoreboard rows, best first: frozen group ghosts plus the
- * live cars, current track only. Running cars use their live score, ghosts
- * use the frozen dead record; a ghost stays hidden while a board car already
- * shows that score, so the leader is never doubled by its own ghost.
+ * The shared left scoreboard rows, best first: group record ghosts plus the
+ * live cars, current track only. A ghost stays hidden while a board car
+ * already shows that score, so the leader is never doubled by its own ghost.
  */
 export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
   const entries: (Car | Group)[] = [];
   const topCars = state.sortedCars;
   const topCount = Math.min(topCars.length, config.SCORES_NB);
+  const displayedCars = Array.from(
+    new Set([
+      ...topCars.slice(0, topCount),
+      ...state.groups.flatMap((group) =>
+        group.distillRun ? group.pool.slice(0, 1) : [],
+      ),
+    ]),
+  );
   for (const group of state.groups) {
     if (group.ghostScore <= 0) continue;
-    let shown = false;
-    for (let i = 0; i < topCount; i++) {
-      if (topCars[i].brain.score === group.ghostScore) {
-        shown = true;
-        break;
-      }
-    }
+    const shown = displayedCars.some(
+      (car) => car.brain.score === group.ghostScore,
+    );
     if (!shown) entries.push(group);
   }
-  for (let i = 0; i < topCount; i++) entries.push(topCars[i]);
+  entries.push(...displayedCars);
   entries.sort((a, b) => {
     const scoreA = a instanceof Car ? a.brain.score : a.ghostScore;
     const scoreB = b instanceof Car ? b.brain.score : b.ghostScore;

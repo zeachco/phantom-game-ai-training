@@ -49,10 +49,16 @@ const modelColor = (model: ModelsByLayerCount[number]) =>
 
 /** The rows of the scoreboard, best first: saved ghosts plus the live cars. */
 export function scoreEntries(state: typeof defaultState): ScoreBoardRow[] {
+  const liveCars = Array.from(
+    new Set([
+      ...state.sortedCars.slice(0, config.SCORES_NB),
+      ...state.cars.filter((car) => car.distillRun),
+    ]),
+  );
   const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
     ...state.sortedModels.map((m) => m[0]).filter(Boolean),
     ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
-    ...state.sortedCars.slice(0, config.SCORES_NB),
+    ...liveCars,
   ].sort((a, b) => {
     const scoreA = a instanceof Car ? a.brain.score : a.score;
     const scoreB = b instanceof Car ? b.brain.score : b.score;
