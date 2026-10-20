@@ -303,10 +303,12 @@ export default async (state: typeof defaultState) => {
   };
 
   loop.play(
-    (_es, _dt) => {
+    (_es, _dt, paused) => {
       const now = gameNow();
-      frameMeter.tick(now);
-      if (state.playing) {
+      if (!paused) frameMeter.tick(now);
+      // the simulation freezes while paused, but the camera and the render
+      // below keep updating on the frozen scene
+      if (state.playing && !paused) {
         race.update(now);
         // the first drive input takes the camera to the human player
         const h = state.human;

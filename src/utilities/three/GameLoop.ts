@@ -11,8 +11,13 @@ export interface GameLoopOptions {
 export class GameLoop {
   clock: Clock = new Clock();
 
+  /**
+   * `paused` is true while the game is paused: the simulation must not step,
+   * but cameras and rendering keep updating on the frozen scene, so the loop
+   * still runs every frame with a zero delta.
+   */
   play(
-    loop: (es: number, delta: number) => void,
+    loop: (es: number, delta: number, paused: boolean) => void,
     options: GameLoopOptions = {},
   ) {
     const interval = options.maxFps ? 1000 / options.maxFps : 0;
@@ -29,14 +34,15 @@ export class GameLoop {
       lastCappedFrame = now;
       if (isGamePaused()) {
         // Halted: drain the clock so resuming does not feed the whole pause
-        // in as one giant delta, and keep the last rendered frame on screen.
+        // in as one giant delta. The loop still runs, with a zero delta, so
+        // cameras keep tracking and the frozen scene keeps rendering.
         this.clock.getDelta();
-        // loop(0, 0);
+        loop(0, 0, true);
         return;
       }
       const dt = this.clock.getDelta();
       const es = this.clock.getElapsedTime();
-      loop(es, dt);
+      loop(es, dt, false);
     };
     // Preserve the old eager first tick; later ticks are driven by RAF.
     run(performance.now());

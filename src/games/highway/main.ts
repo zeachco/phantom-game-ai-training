@@ -418,41 +418,48 @@ export default async (state: typeof defaultState) => {
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();
 
-  loop.play((_es, _dt) => {
+  loop.play((_es, _dt, paused) => {
     const now = gameNow();
-    frameMeter.tick(now);
-    ray.update();
-    for (let i = 0; i < state.traffic.length; i++) {
-      state.traffic[i].update(road.borders, noTraffic, deathRays);
+    // the simulation freezes while paused, but the camera and the render
+    // below keep updating on the frozen scene
+    if (!paused) {
+      frameMeter.tick(now);
+      ray.update();
+      for (let i = 0; i < state.traffic.length; i++) {
+        state.traffic[i].update(road.borders, noTraffic, deathRays);
+      }
+      for (let i = 0; i < state.cars.length; i++) {
+        const car = state.cars[i];
+        const alive = !car.damaged;
+        // distillation: the teacher drives the car, the own brain backpropagates
+        const target = car.useAI
+          ? trainFroms.get(String(groupKeyOf(car)))
+          : undefined;
+        car.teacher = target === undefined ? null : championOf(target);
+        car.distillRun =
+          target !== undefined ||
+          learningOnlyGroups.has(String(groupKeyOf(car)));
+        car.update(road.borders, state.traffic, deathRays);
+        if (alive && gameNow() - car.bornAt > config.CAR_LIFETIME_CAP) {
+          car.damaged = true;
+        }
+        const brain = car.brain;
+        if (brain instanceof MixedNetwork) {
+          car.setColor(mixedColor(brain));
+        }
+        if (car.y > ray.y || car.y > carRay.y) {
+          car.damaged = true;
+        }
+        if (alive && car.damaged) {
+          state.living--;
+          const group = groupKeyOf(car);
+          if (learningOnlyGroups.has(String(group))) keepTrainedBrain(car);
+        }
+      }
+      state.sortedCars = state.cars.sort(
+        (a, b) => b.brain.score - a.brain.score,
+      );
     }
-    for (let i = 0; i < state.cars.length; i++) {
-      const car = state.cars[i];
-      const alive = !car.damaged;
-      // distillation: the teacher drives the car, the own brain backpropagates
-      const target = car.useAI
-        ? trainFroms.get(String(groupKeyOf(car)))
-        : undefined;
-      car.teacher = target === undefined ? null : championOf(target);
-      car.distillRun =
-        target !== undefined || learningOnlyGroups.has(String(groupKeyOf(car)));
-      car.update(road.borders, state.traffic, deathRays);
-      if (alive && gameNow() - car.bornAt > config.CAR_LIFETIME_CAP) {
-        car.damaged = true;
-      }
-      const brain = car.brain;
-      if (brain instanceof MixedNetwork) {
-        car.setColor(mixedColor(brain));
-      }
-      if (car.y > ray.y || car.y > carRay.y) {
-        car.damaged = true;
-      }
-      if (alive && car.damaged) {
-        state.living--;
-        const group = groupKeyOf(car);
-        if (learningOnlyGroups.has(String(group))) keepTrainedBrain(car);
-      }
-    }
-    state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);
     const domUpdateDue = shouldUpdateDom(now);
     if (domUpdateDue) updateFollowButtons();
 
@@ -554,7 +561,7 @@ export default async (state: typeof defaultState) => {
       carCtx.strokeText(`GAME OVER`, carCanvas.width / 2, carCanvas.height / 2);
     }
 
-    if (!state.living) endExperiment();
+    if (!paused && !state.living) endExperiment();
   });
   function initialize() {
     Object.assign(state, defaultState);
