@@ -328,15 +328,17 @@ export async function deleteRemoteModels(
   return deleted;
 }
 
-export type SubmitResult =
-  | { ok: true; notBetter?: false; best?: undefined }
-  | {
-      ok: false;
-      notBetter: boolean;
-      best: number;
-      rejected?: boolean;
-      error?: string;
-    };
+export interface SubmitResult {
+  ok: boolean;
+  /** the server already had a better model for this group */
+  notBetter: boolean;
+  /** the server's current best score, when notBetter */
+  best: number;
+  /** the server rejected the payload (a 4xx other than 409) */
+  rejected: boolean;
+  /** the rejection reason, when rejected */
+  error?: string;
+}
 
 /** Submits one brain to the server. */
 export async function submitModel(
@@ -364,7 +366,7 @@ export async function submitModel(
       },
       SUBMIT_TIMEOUT_MS,
     );
-    if (res.ok) return { ok: true };
+    if (res.ok) return { ok: true, notBetter: false, best: 0, rejected: false };
     if (res.status === 409) {
       let best = 0;
       let error = '';
@@ -389,9 +391,9 @@ export async function submitModel(
       }
       return { ok: false, notBetter: false, best: 0, rejected: true, error };
     }
-    return { ok: false, notBetter: false, best: 0 };
+    return { ok: false, notBetter: false, best: 0, rejected: false };
   } catch {
-    return { ok: false, notBetter: false, best: 0 };
+    return { ok: false, notBetter: false, best: 0, rejected: false };
   }
 }
 
