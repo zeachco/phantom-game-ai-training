@@ -17,6 +17,7 @@ class Config {
     this.CAR_NB / 10,
     this.CAR_NB / 10,
     this.CAR_NB / 10,
+    this.CAR_NB / 10,
   ];
   /** cap of brain variants, the keyboard shortcuts only cover 1..9 */
   public MAX_NETWORK_LAYERS = 9;
