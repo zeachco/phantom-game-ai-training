@@ -46,7 +46,11 @@ const fmt = (n: number | null | undefined): string =>
 
 export interface GroupActionsOptions {
   game: string;
-  io: { importModels(models: Record<string, unknown> | null): string[] };
+  io: {
+    importModels(models: Record<string, unknown> | null): string[];
+    discardModel(layers: number, kind?: string): void;
+    discardGameModels(): void;
+  };
   /** display label for a follow value, e.g. 'brain 3' or 'mixed' */
   label: (value: number | 'mixed') => string;
   /** live best on the group's current simulation seed, null when none */
@@ -138,6 +142,7 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     'Delete remote',
     'Delete the group\u2019s stored models from the server',
   );
+  deleteBtn.classList.add('group-panel-btn-danger');
   el.appendChild(actions);
 
   const readouts = document.createElement('div');
@@ -305,8 +310,8 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     if (
       !confirm(
         value === 0
-          ? `Delete all ${game} models from the server? Your local saves are kept.`
-          : `Delete ${keys[0]} from the server? This removes the publicly stored models of the group; your local saves are kept.`,
+          ? `Delete all ${game} models from the server and remove all local saves?`
+          : `Delete ${keys[0]} from the server? This removes the publicly stored models of the group and the local save.`,
       )
     )
       return;
@@ -321,14 +326,30 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
           { tone: 'error' },
         );
       } else {
+        if (value === 0) {
+          io.discardGameModels();
+        } else {
+          for (let i = 0; i < targets.length; i++) {
+            if (results[i] !== null) {
+              const target = targets[i];
+              if (target === 'mixed') {
+                io.discardModel(MIXED_LEVELS, MIXED_KIND);
+              } else {
+                io.discardModel(target);
+                io.discardModel(MIXED_LEVELS, MIXED_KIND);
+              }
+            }
+          }
+        }
+        reinitialize();
         const deleted = results.reduce<number>(
           (sum, count) => sum + (count ?? 0),
           0,
         );
         showToast(
           value === 0
-            ? `Deleted ${deleted} stored ${game} model(s)`
-            : `Deleted ${deleted} stored model(s) of ${keys[0]}`,
+            ? `Deleted ${deleted} stored ${game} model(s) and removed local saves`
+            : `Deleted ${deleted} stored model(s) of ${keys[0]} and removed local save`,
           { tone: 'success' },
         );
       }
