@@ -41,7 +41,8 @@ import { defaultState, mixedColor, scoreEntries } from './utilities';
 
 const neuralVisualizer = new Visualizer(config);
 
-const io = fileUtilities('highway', makeSubmitChecker('highway'));
+const checkHighwayModel = makeSubmitChecker('highway');
+const io = fileUtilities('highway', checkHighwayModel);
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
@@ -392,17 +393,25 @@ export default async (state: typeof defaultState) => {
   // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize.
-  void (async () => {
+  const syncHighwayModels = async () => {
     try {
-      const { written } = await loadBaseModels('highway', io, true);
+      const { written, synced } = await loadBaseModels('highway', io, true);
       if (written.length) {
         console.info(`Loaded base models: ${written.join(', ')}`);
         initialize();
       }
+      // Existing saves do not trigger onSaved at boot. Once the latest server
+      // scores are known, submit any local champion that beats its group best.
+      if (synced) {
+        for (const [group, models] of Object.entries(io.exportModels()))
+          checkHighwayModel(group, models);
+      }
     } catch (err) {
       console.warn('Unable to load base highway models', err);
     }
-  })();
+  };
+  void syncHighwayModels();
+  window.addEventListener('online', () => void syncHighwayModels());
   initialize();
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();

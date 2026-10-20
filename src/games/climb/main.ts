@@ -55,7 +55,12 @@ export default async (state: typeof defaultState) => {
   let camSet = false;
 
   const resetBrainSaves = (value: number | 'mixed') => {
-    if (value === 'mixed') {
+    if (value === 0) {
+      if (!confirm('Reset all the saved climb weights?')) return;
+      io.discardGameModels();
+      console.info('Reset saved weights of all brains');
+      race.initialize();
+    } else if (value === 'mixed') {
       if (!confirm(`Reset the saved weights of ${brainId(0, undefined)}?`))
         return;
       io.discardModel(MIXED_LEVELS, 'mixed');

@@ -72,7 +72,7 @@ export interface GroupActionsOptions {
 export interface GroupActions {
   /** the <hr> + actions + readouts root, append once after .follow-keys */
   el: HTMLElement;
-  /** show for a brain group, hide for 'all'; always refreshes the readouts */
+  /** show actions for all or a brain group; readouts are group-specific */
   apply(value: number | 'mixed'): void;
   /** start/stop the ~500 ms refresh, driven by the panel open state */
   setOpen(open: boolean): void;
@@ -197,32 +197,40 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   }
 
   localBtn.addEventListener('click', () => {
-    if (value === 0) return;
     resetLocal(value);
     refresh();
   });
 
   reloadBtn.addEventListener('click', async () => {
-    if (value === 0) return;
-    const key = groupKeyFor(game, value);
+    const targets = value === 0 ? groups : [value];
+    const keys = targets.map((target) => groupKeyFor(game, target));
     if (
       !confirm(
-        `Reload ${label(value)} from the server? This overwrites the local save of ${key}.`,
+        value === 0
+          ? `Reload all ${game} models from the server? This overwrites local saves for ${keys.join(', ')}.`
+          : `Reload ${label(value)} from the server? This overwrites the local save of ${keys[0]}.`,
       )
     )
       return;
     reloadBtn.disabled = true;
     try {
-      const score = await fetchRemoteModel(game, key, io);
-      if (score === null) {
-        showToast(`No ${key} model on the server (or offline)`, {
-          tone: 'error',
-        });
+      const results = await Promise.all(
+        keys.map((key) => fetchRemoteModel(game, key, io)),
+      );
+      const loaded = results.filter((score) => score !== null);
+      if (loaded.length === 0) {
+        showToast(
+          `No ${value === 0 ? game : keys[0]} model on the server (or offline)`,
+          { tone: 'error' },
+        );
       } else {
         reinitialize();
-        showToast(`Reloaded ${key} from the server (score ${fmt(score)})`, {
-          tone: 'success',
-        });
+        showToast(
+          value === 0
+            ? `Reloaded ${loaded.length} of ${keys.length} ${game} models from the server`
+            : `Reloaded ${keys[0]} from the server (score ${fmt(loaded[0])})`,
+          { tone: 'success' },
+        );
       }
     } finally {
       reloadBtn.disabled = false;
@@ -231,25 +239,34 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   });
 
   deleteBtn.addEventListener('click', async () => {
-    if (value === 0) return;
-    const key = groupKeyFor(game, value);
+    const targets = value === 0 ? groups : [value];
+    const keys = targets.map((target) => groupKeyFor(game, target));
     if (
       !confirm(
-        `Delete ${key} from the server? This removes the publicly stored models of the group; your local saves are kept.`,
+        value === 0
+          ? `Delete all ${game} models from the server? Your local saves are kept.`
+          : `Delete ${keys[0]} from the server? This removes the publicly stored models of the group; your local saves are kept.`,
       )
     )
       return;
     deleteBtn.disabled = true;
     try {
-      const deleted = await deleteRemoteModels(game, key);
-      if (deleted === null) {
-        showToast(`Could not delete ${key} from the server (offline?)`, {
-          tone: 'error',
-        });
+      const results = await Promise.all(
+        keys.map((key) => deleteRemoteModels(game, key)),
+      );
+      if (results.every((deleted) => deleted === null)) {
+        showToast(
+          `Could not delete ${value === 0 ? game : keys[0]} models from the server (offline?)`,
+          { tone: 'error' },
+        );
       } else {
-        showToast(`Deleted ${deleted} stored model(s) of ${key}`, {
-          tone: 'success',
-        });
+        const deleted = results.reduce<number>((sum, count) => sum + (count ?? 0), 0);
+        showToast(
+          value === 0
+            ? `Deleted ${deleted} stored ${game} model(s)`
+            : `Deleted ${deleted} stored model(s) of ${keys[0]}`,
+          { tone: 'success' },
+        );
       }
     } finally {
       deleteBtn.disabled = false;
@@ -291,7 +308,9 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     el,
     apply(v: number | 'mixed'): void {
       value = v;
-      el.hidden = v === 0;
+      el.hidden = false;
+      readouts.hidden = v === 0;
+      hr.hidden = false;
       // nothing to train from while no group is followed, and the games create
       // this panel before their race exists: don't call back into them yet
       if (v !== 0) {

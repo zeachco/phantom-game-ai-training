@@ -465,6 +465,15 @@ canvas {
   background: rgba(255, 255, 255, 0.3);
 }
 
+.follow-keys button.follow-all,
+.follow-keys button.follow-all:hover,
+.follow-keys button.follow-all.dead,
+.follow-keys button.follow-all.running {
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+}
+
 /* --btn-color is the car color of the button's category, set in main.ts */
 .follow-keys button.dead {
   background: transparent;

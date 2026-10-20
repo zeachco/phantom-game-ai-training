@@ -192,14 +192,15 @@ export async function loadBaseModels(
   game: string,
   io: { importModels(models: Record<string, unknown> | null): string[] },
   onlyMissing = false,
-): Promise<{ source: 'server' | 'none'; written: string[] }> {
+): Promise<{ source: 'server' | 'none'; written: string[]; synced: boolean }> {
   const models = await fetchBaseModels(game);
-  if (models === null) return { source: 'none', written: [] };
+  if (models === null) return { source: 'none', written: [], synced: false };
   recordBaseScores(
     game,
     Object.fromEntries(Object.entries(models).map(([g, e]) => [g, e.score])),
   );
-  if (!Object.keys(models).length) return { source: 'none', written: [] };
+  if (!Object.keys(models).length)
+    return { source: 'none', written: [], synced: true };
   const keys = onlyMissing
     ? Object.keys(models).filter((key) => !localStorage.getItem(key))
     : Object.keys(models);
@@ -207,7 +208,7 @@ export async function loadBaseModels(
   for (const k of keys) {
     toImport[k] = [models[k].model];
   }
-  return { source: 'server', written: io.importModels(toImport) };
+  return { source: 'server', written: io.importModels(toImport), synced: true };
 }
 
 /**
@@ -329,7 +330,13 @@ export async function deleteRemoteModels(
 
 export type SubmitResult =
   | { ok: true; notBetter?: false; best?: undefined }
-  | { ok: false; notBetter: boolean; best: number };
+  | {
+      ok: false;
+      notBetter: boolean;
+      best: number;
+      rejected?: boolean;
+      error?: string;
+    };
 
 /** Submits one brain to the server. */
 export async function submitModel(
@@ -360,15 +367,27 @@ export async function submitModel(
     if (res.ok) return { ok: true };
     if (res.status === 409) {
       let best = 0;
+      let error = '';
       try {
-        const data = await res.json();
+        const data = (await res.json()) as { best?: unknown; error?: unknown };
         if (typeof (data as { best?: unknown })?.best === 'number') {
           best = (data as { best: number }).best;
         }
+        if (typeof data.error === 'string') error = data.error;
       } catch {
         // default 0
       }
-      return { ok: false, notBetter: true, best };
+      return { ok: false, notBetter: true, best, rejected: true, error };
+    }
+    if (res.status >= 400 && res.status < 500) {
+      let error = `HTTP ${res.status}`;
+      try {
+        const data = (await res.json()) as { error?: unknown };
+        if (typeof data.error === 'string') error = data.error;
+      } catch {
+        // Keep the status as the useful fallback.
+      }
+      return { ok: false, notBetter: false, best: 0, rejected: true, error };
     }
     return { ok: false, notBetter: false, best: 0 };
   } catch {
@@ -482,6 +501,12 @@ function enqueue(item: Pending): void {
           showToast(
             `☁️ Server already has a better ${item.group} · best ${result.best.toFixed(2)}`,
             { tone: 'info' },
+          );
+        } else if (result.rejected) {
+          recordSubmittedSig(item.game, item.sig);
+          showToast(
+            `☁️ Server rejected ${item.group}: ${result.error ?? 'request was invalid'}`,
+            { tone: 'error' },
           );
         } else {
           backoffStep = Math.min(backoffStep + 1, 16);

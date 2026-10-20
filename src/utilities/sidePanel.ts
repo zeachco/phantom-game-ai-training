@@ -133,8 +133,9 @@ export function createSidePanel(options: SidePanelOptions): SidePanel {
     const btn = document.createElement('button');
     btn.textContent = label;
     btn.dataset.follow = String(value);
+    if (value === 0) btn.classList.add('follow-all');
     btn.title = 'Click to follow';
-    const color = buttonColor(value);
+    const color = value === 0 ? '#ffffff' : buttonColor(value);
     if (color) {
       btn.style.setProperty('--btn-color', color);
       // black or white, whichever keeps the higher contrast on the brain color
