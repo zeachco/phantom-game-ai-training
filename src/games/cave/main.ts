@@ -785,6 +785,7 @@ export default async (state: CaveState) => {
         networkCtx,
         visualized.brain,
         visualized.teacher,
+        visualized.distillErrors,
       );
     if (now - lastHud > 50) {
       lastHud = now;

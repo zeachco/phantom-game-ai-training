@@ -828,11 +828,13 @@ export default async (state: typeof defaultState) => {
 
       const followed = camTarget?.brain;
       if (panelOpen && followed) {
-        // a distilling car shows its brain next to its teacher
+        // a distilling car shows its brain next to its teacher, with the live
+        // training error on the controls
         neuralVisualizer.renderNetwork(
           networkCtx,
           followed,
           camTarget?.teacher ?? null,
+          camTarget?.distillErrors ?? null,
         );
       }
       // The KeyS shortcut toggles the stats, now an inline DOM block in the cockpit.

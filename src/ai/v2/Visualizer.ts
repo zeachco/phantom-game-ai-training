@@ -79,6 +79,8 @@ interface SplitHiddenRow {
   y: number;
   trainee: { x: number[]; radius: number; values: number[] };
   guide: { x: number[]; radius: number; values: number[] };
+  /** the trainee level behind this row, for its mutation magnitudes */
+  traineeLevelIndex: number | null;
 }
 
 /** `0`, `1`, ... reused across frames, a mixed brain relabels its experts on each one */
@@ -263,14 +265,15 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
   /**
    * Draw a brain. `guide` is its teacher while it distils: the two are then
-   * drawn back to back, trainee on the left and guide on the right, and the red
-   * arc on the outputs is how far the guide would have answered from the
-   * trainee.
+   * drawn back to back, trainee on the left and guide on the right, and the
+   * red arc on the outputs is the live training error: how far the student's
+   * applied answer is from the teacher's on the inputs being driven right now.
    */
   renderNetwork(
     ctx: CanvasRenderingContext2D,
     network: NeuralNetwork,
     guide: NeuralNetwork | null = null,
+    errors: number[] | null = null,
   ) {
     if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
@@ -283,7 +286,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       guide = guide.activeExpert;
     }
 
-    this.#drawBrain(ctx, network, guide);
+    this.#drawBrain(ctx, network, guide, errors);
   }
 
   #layerColor(layer: number) {
@@ -308,13 +311,25 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx: CanvasRenderingContext2D,
     network: NeuralNetwork,
     guide: NeuralNetwork | null,
+    errors: number[] | null,
   ) {
     // distillation: one brain drawn as two. The sensors are the same, the
     // controls are the same, only the hidden neurons are split, trainee on the
     // left and guide on the right, and the outputs carry the red delta of what
     // the trainee has left to learn.
-    if (guide && !(network instanceof MixedNetwork)) {
-      this.#drawDistillationView(ctx, network, guide);
+    if (guide) {
+      // a mixed student answers through the expert it routed to, so that
+      // expert is the trainee half: it is the pipeline whose controls the
+      // student applies
+      const trainee =
+        network instanceof MixedNetwork ? network.activeExpert ?? network : network;
+      this.#drawDistillationView(
+        ctx,
+        trainee,
+        guide,
+        errors,
+        network instanceof MixedNetwork ? null : network.lastMutations,
+      );
       return;
     }
 
@@ -526,6 +541,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx: CanvasRenderingContext2D,
     trainee: NeuralNetwork,
     guide: NeuralNetwork,
+    errors: number[] | null,
+    mutations: number[][] | null,
   ) {
     const layout = this.#splitLayout(ctx, trainee, guide);
     ctx.setLineDash(NO_DASH);
@@ -578,6 +595,15 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
         '#86f',
         false,
       );
+      if (mutations && row.traineeLevelIndex !== null) {
+        this.#drawMutations(
+          ctx,
+          row.trainee.x,
+          row.y,
+          row.trainee.radius,
+          mutations[row.traineeLevelIndex] ?? [],
+        );
+      }
       this.#drawRow(
         ctx,
         row.guide.x,
@@ -605,15 +631,36 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       false,
       CONTROL_LABELS,
     );
+    if (mutations) {
+      this.#drawMutations(
+        ctx,
+        layout.outputs,
+        layout.outputY,
+        layout.outputRadius,
+        mutations[trainee.levels.length - 1] ?? [],
+      );
+    }
 
-    this.#drawOutputDeltas2(
-      ctx,
-      layout.outputs,
-      layout.outputY,
-      layout.outputRadius,
-      last?.outputs ?? [],
-      guide.levels[guide.levels.length - 1]?.outputs ?? [],
-    );
+    // the live training error on the controls; the clamped answer gap is the
+    // fallback for a view drawn outside a training step
+    if (errors) {
+      this.#drawErrorArcs(
+        ctx,
+        layout.outputs,
+        layout.outputY,
+        layout.outputRadius,
+        errors,
+      );
+    } else {
+      this.#drawOutputDeltas2(
+        ctx,
+        layout.outputs,
+        layout.outputY,
+        layout.outputRadius,
+        last?.outputs ?? [],
+        guide.levels[guide.levels.length - 1]?.outputs ?? [],
+      );
+    }
   }
 
   /**
@@ -690,8 +737,9 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
     const hiddenRows: SplitHiddenRow[] = [];
     for (let row = 1; row <= hiddenRowsNb; row++) {
-      const traineeLevel =
-        trainee.levels[row - (hiddenRowsNb - traineeHidden) - 1];
+      const traineeLevelIndex =
+        row - (hiddenRowsNb - traineeHidden) - 1;
+      const traineeLevel = trainee.levels[traineeLevelIndex];
       const guideLevel = guide.levels[row - (hiddenRowsNb - guideHidden) - 1];
       const traineeValues = traineeLevel ? traineeLevel.outputs : NO_VALUES;
       const guideValues = guideLevel ? guideLevel.outputs : NO_VALUES;
@@ -704,6 +752,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
         y: yOf(row),
         trainee: cluster(traineeValues, traineeLeft, traineeRight, radius),
         guide: cluster(guideValues, guideLeft, guideRight, radius),
+        traineeLevelIndex: traineeLevel ? traineeLevelIndex : null,
       });
     }
 
@@ -751,6 +800,60 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       traineeLevels: rowsAt(trainee, traineeHidden, traineeX),
       guideLevels: rowsAt(guide, guideHidden, guideX),
     };
+  }
+
+  /**
+   * The live training error, drawn in red around the shared outputs: one arc
+   * per control, its sweep is how far the student's applied answer is from
+   * the teacher's on the inputs being driven right now, one direction for an
+   * error above, the other for below.
+   */
+  #drawErrorArcs(
+    ctx: CanvasRenderingContext2D,
+    positions: number[],
+    y: number,
+    radius: number,
+    errors: number[],
+  ) {
+    // just outside the socket ring, so the arc is readable next to the node
+    const arcRadius = Math.max(5, radius * 1.25);
+    ctx.setLineDash(NO_DASH);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'red';
+    for (let i = 0; i < positions.length; i++) {
+      const error = errors[i] ?? 0;
+      if (!Number.isFinite(error) || Math.abs(error) < 0.01) continue;
+      const sweep = TAU * Math.max(-1, Math.min(1, error));
+      ctx.beginPath();
+      ctx.arc(positions[i], y, arcRadius, -Math.PI / 2, -Math.PI / 2 + sweep);
+      ctx.stroke();
+    }
+  }
+
+  /**
+   * Which nodes the last backprop step actually moved: a red halo around each
+   * mutated node, the more weight it lost the more solid the red.
+   */
+  #drawMutations(
+    ctx: CanvasRenderingContext2D,
+    positions: number[],
+    y: number,
+    radius: number,
+    magnitudes: number[],
+  ) {
+    const haloRadius = radius * 1.5;
+    ctx.setLineDash(NO_DASH);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < positions.length; i++) {
+      const magnitude = magnitudes[i] ?? 0;
+      if (!Number.isFinite(magnitude) || magnitude < 1e-6) continue;
+      // a node that moved 0.05 of weight in one step is fully red
+      const intensity = Math.max(0.15, Math.min(1, magnitude / 0.05));
+      ctx.strokeStyle = `rgba(255, 40, 40, ${intensity})`;
+      ctx.beginPath();
+      ctx.arc(positions[i], y, haloRadius, 0, TAU);
+      ctx.stroke();
+    }
   }
 
   /**

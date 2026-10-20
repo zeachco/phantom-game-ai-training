@@ -567,6 +567,7 @@ export default async (state: typeof defaultState) => {
           networkCtx,
           followedBrain,
           followed?.teacher ?? null,
+          followed?.distillErrors ?? null,
         );
     },
     {
