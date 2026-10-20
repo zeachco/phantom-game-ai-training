@@ -796,7 +796,8 @@ export default async (state: typeof defaultState) => {
   /**
    * Hand a trained student's weights to the next generation: the brain becomes
    * the group's saved base model, so the next run mutates from what the
-   * student learned, along with the score earned during the driven run.
+   * student learned, while preserving the score it had before training so the
+   * trainee still has to beat that record in a normal run.
    */
   function keepTrainedBrain(car: Car) {
     // if no teacher ever drove the car nothing was distilled: the student's
@@ -807,7 +808,7 @@ export default async (state: typeof defaultState) => {
       value === 'mixed'
         ? (state.sortedMixed[MIXED_LEVELS] ?? [])
         : (state.sortedModels[value] ?? []);
-    const trained = trainedBrain(car.brain, car.brain.score);
+    const trained = trainedBrain(car.brain, saved[0]?.score ?? 0);
     if (value === 'mixed') {
       state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(saved, trained, 1);
       io.saveBestModels([trained], 1);
