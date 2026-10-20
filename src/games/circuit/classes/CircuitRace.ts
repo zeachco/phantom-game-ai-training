@@ -58,7 +58,6 @@ export class CircuitRace {
   #bestCheckpointFrames: number[] = [];
   /** fastest completed lap and finish on the current track */
   #bestLapFrames = Infinity;
-  #bestLapGroup: Group | null = null;
   #bestFinishFrames = Infinity;
   #humanFinishCelebrated = false;
   #pendingSaves = new Set<Group>();
@@ -521,21 +520,24 @@ export class CircuitRace {
     car.lastLapDelta = Number.isFinite(this.#bestLapFrames)
       ? frames - this.#bestLapFrames
       : null;
-    if (frames < this.#bestLapFrames) {
-      this.#bestLapFrames = frames;
-      this.#bestLapGroup = this.#groupOf(car) ?? null;
-    }
+    if (frames < this.#bestLapFrames) this.#bestLapFrames = frames;
   }
 
-  /** After a new group finishes, guide the lowest-scoring other group from
-   *  the group that has set the fastest lap on this track. */
-  #trainLowestGroupFromBestLap() {
-    const guide = this.#bestLapGroup;
-    if (!guide || !Number.isFinite(this.#bestLapFrames)) return;
-    const student = this.groups
-      .filter((group) => group !== guide)
-      .sort((a, b) => a.scores.seed - b.scores.seed)[0];
-    if (!student) return;
+  /** A fully crashed group can restart as a student if it has the lowest
+   *  current track score. The strongest other group supplies the guide. */
+  #autoTrainAfterGroupDeath(student: Group) {
+    const lowestScore = Math.min(
+      ...this.groups.map((group) => group.scores.seed),
+    );
+    if (student.scores.seed > lowestScore) return;
+    const guide = this.groups
+      .filter(
+        (group) =>
+          group !== student &&
+          this.#teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
+      )
+      .sort((a, b) => b.scores.seed - a.scores.seed)[0];
+    if (!guide) return;
     this.setTrainFrom(
       student.isMixed ? 'mixed' : student.layer,
       guide.isMixed ? 'mixed' : guide.layer,
@@ -677,13 +679,15 @@ export class CircuitRace {
     this.state.living += group.pool.length;
   }
 
-  #onDeath(car: Car) {
+  #onDeath(car: Car): Group | null {
     this.state.living--;
     car.deathTime = performance.now();
+    let deadGroup: Group | null = null;
 
     if (car.useAI) {
       const group = this.#groupOf(car);
       if (group) {
+        const wasDistillRun = group.distillRun;
         if (group.distillRun) {
           this.#keepTrainedBrain(group);
           group.trainFrom = null;
@@ -699,6 +703,12 @@ export class CircuitRace {
           group.ghostScore = car.brain.score;
           this.#pendingSaves.add(group);
         }
+        if (
+          !wasDistillRun &&
+          group.pool.every((instance) => instance.damaged)
+        ) {
+          deadGroup = group;
+        }
       }
     }
     this.flushPendingSaves();
@@ -709,6 +719,7 @@ export class CircuitRace {
       this.spawnHuman();
       this.#onHumanCrash?.();
     }
+    return deadGroup;
   }
 
   #regenerateMap() {
@@ -728,7 +739,6 @@ export class CircuitRace {
     this.#humanFinishCelebrated = false;
     this.#bestCheckpointFrames = [];
     this.#bestLapFrames = Infinity;
-    this.#bestLapGroup = null;
     this.#bestFinishFrames = Infinity;
     this.seedChangeAt = 0;
     this.state.circuit = this.circuit;
@@ -763,7 +773,6 @@ export class CircuitRace {
   public initialize() {
     this.#bestCheckpointFrames = [];
     this.#bestLapFrames = Infinity;
-    this.#bestLapGroup = null;
     this.#bestFinishFrames = Infinity;
     this.#humanFinishCelebrated = false;
     Object.assign(this.state, defaultState);
@@ -813,7 +822,7 @@ export class CircuitRace {
       group.teacher =
         group.trainFrom === null ? null : this.#teacherBrain(group.trainFrom);
     let savePoint = false;
-    let newlyFinishedGroup = false;
+    const deadGroups = new Set<Group>();
     for (const car of this.state.cars) {
       const alive = !car.damaged;
       const racing = !car.finished;
@@ -833,7 +842,10 @@ export class CircuitRace {
       this.#recordCheckpointTiming(car);
       if (car.completedLap) this.#recordLapTiming(car);
       if (racing && car.finished && !car.damaged) this.#recordFinishTiming(car);
-      if (alive && car.damaged) this.#onDeath(car);
+      if (alive && car.damaged) {
+        const deadGroup = this.#onDeath(car);
+        if (deadGroup) deadGroups.add(deadGroup);
+      }
       if (racing && car.finished && !car.damaged) {
         const group = this.#groupOf(car);
         if (group) {
@@ -848,6 +860,8 @@ export class CircuitRace {
         if (group) this.#pendingSaves.add(group);
       }
     }
+
+    for (const group of deadGroups) this.#autoTrainAfterGroupDeath(group);
 
     for (let i = this.state.cars.length - 1; i >= 0; i--) {
       const car = this.state.cars[i];
@@ -885,7 +899,6 @@ export class CircuitRace {
           !this.#completedTrackGroups.has(group.key)
         ) {
           this.#completedTrackGroups.add(group.key);
-          newlyFinishedGroup = true;
         }
         const previousFinish = this.#completedFinishes.get(brainIndex);
         if (
@@ -912,8 +925,6 @@ export class CircuitRace {
         }
       }
     }
-
-    if (newlyFinishedGroup) this.#trainLowestGroupFromBestLap();
 
     if (this.#completedTrackGroups.size >= 6 && !this.seedChangeAt) {
       this.flushPendingSaves();
