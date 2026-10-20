@@ -258,9 +258,8 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   });
 
   /**
-   * Rebuild the selector's options: free training plus every other group the
-   * game runs (a group cannot distill from itself), then restore the stored
-   * selection.
+   * Rebuild the selector's options, disabling the current group as a target,
+   * then restore the stored selection.
    */
   function rebuildTrainOptions(): void {
     trainSelect.length = 0;
@@ -269,10 +268,10 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     free.textContent = 'free (own brains)';
     trainSelect.appendChild(free);
     for (const group of groups) {
-      if (group === value) continue;
       const option = document.createElement('option');
       option.value = group === 'mixed' ? 'mixed' : String(group);
       option.textContent = label(group);
+      option.disabled = group === value || group === 'mixed';
       trainSelect.appendChild(option);
     }
     trainSelect.value = targetValue(trainFrom(value));
