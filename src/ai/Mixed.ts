@@ -1,5 +1,12 @@
 import { rand } from '../utilities/math';
-import { clampOutput, Level, NeuralNetwork, TEACHING_RATE } from './Network';
+import {
+  clampToRange,
+  Level,
+  NeuralNetwork,
+  OutputRanges,
+  TEACHING_RATE,
+  UNIT_RANGE,
+} from './Network';
 import type { ModelsByLayerCount } from './utils';
 
 /** storage namespace, mixed brains stay apart from the regular ones */
@@ -130,12 +137,14 @@ export class MixedNetwork extends NeuralNetwork {
    * of the experts' outputs on the same inputs, pulled toward `targets`. The
    * experts stay frozen (they are shared), only the routing weights move, so
    * each state learns to hand the controls to the expert whose behavior the
-   * teacher showed there. Returns the pre-step loss.
+   * teacher showed there. `ranges` is the applied range of each control, see
+   * NeuralNetwork.train. Returns the pre-step loss.
    */
   public train(
     inputs: number[],
     targets: number[],
     learningRate: number = TEACHING_RATE,
+    ranges: OutputRanges = [],
   ): number {
     const activations: number[][] = [inputs];
     let selection = inputs;
@@ -155,11 +164,15 @@ export class MixedNetwork extends NeuralNetwork {
       for (let k = 0; k < outCount; k++) blended[k] += share * outputs[k];
     }
 
+    // the same applied-range error plain brains use: only the value the game
+    // would actually apply counts
     let loss = 0;
-    // the same clamped error plain brains use: only [-1, 1] is ever applied
+    const errors = new Array<number>(outCount);
     for (let k = 0; k < outCount; k++) {
-      const error = clampOutput(blended[k]) - clampOutput(targets[k] ?? 0);
-      loss += error * error;
+      const range = ranges[k] ?? UNIT_RANGE;
+      errors[k] =
+        clampToRange(blended[k], range) - clampToRange(targets[k] ?? 0, range);
+      loss += errors[k] * errors[k];
     }
 
     // softmax blend: the raw selector output j owns the share (E_j - y) of the
@@ -171,19 +184,23 @@ export class MixedNetwork extends NeuralNetwork {
       const outputs = expertOutputs[j];
       let acc = 0;
       for (let k = 0; k < outCount; k++) {
-        acc +=
-          (clampOutput(blended[k]) - clampOutput(targets[k] ?? 0)) *
-          (outputs[k] - blended[k]);
+        acc += errors[k] * (outputs[k] - blended[k]);
       }
       deltas[j] = (2 * share * acc) / outCount;
     }
 
+    const mutations = this.levels.map((level) =>
+      new Array<number>(level.outputs.length).fill(0),
+    );
     NeuralNetwork.applyGradients(
       this.levels,
       activations,
       deltas,
       learningRate,
+      mutations,
     );
+    this.lastErrors = errors;
+    this.lastMutations = mutations;
     return loss;
   }
 

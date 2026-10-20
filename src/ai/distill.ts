@@ -1,4 +1,4 @@
-import { type NeuralNetwork, teachingRate } from './Network';
+import { type NeuralNetwork, type OutputRanges, teachingRate } from './Network';
 
 /**
  * Distillation data. A teacher drives the entity, so every frame hands the
@@ -20,12 +20,22 @@ export class Distiller {
   #min: number[];
   #max: number[];
 
+  /** the game's applied control ranges, trained toward and read back as the live error */
+  public outputRanges: OutputRanges = [];
+  /** mean pre-step loss over the last frame's train calls, the real-time loss */
+  public lastLoss: number | null = null;
+  /** per-output applied error of the live sample of the last frame, the
+   *  error the driven car is actually experiencing right now */
+  public lastErrors: number[] | null = null;
+
   constructor(
     public inputCount: number,
     public probesPerFrame = Distiller.PROBES_PER_FRAME,
+    outputRanges: OutputRanges = [],
   ) {
     this.#min = new Array(inputCount).fill(Infinity);
     this.#max = new Array(inputCount).fill(-Infinity);
+    this.outputRanges = outputRanges;
   }
 
   /**
@@ -75,13 +85,36 @@ export class Distiller {
     frames: number,
   ): void {
     const rate = teachingRate(frames);
-    brain.train(inputs, teacher.process(inputs), rate);
+    // the live sample first, because it is the behaviour being copied right
+    // now; its error is the one the driven car is experiencing
+    const liveLoss = brain.train(inputs, teacher.process(inputs), rate, this.outputRanges);
+    this.lastErrors = brain.lastErrors;
     this.#observe(inputs);
+    let loss = liveLoss;
     for (let i = 0; i < this.probesPerFrame; i++) {
       const probe = this.sample();
-      brain.train(probe, teacher.process(probe), rate);
+      loss += brain.train(probe, teacher.process(probe), rate, this.outputRanges);
     }
+    this.lastLoss = loss / (this.probesPerFrame + 1);
   }
+}
+
+/**
+ * The contract of train-from: the teacher's internal structure (depth, kind)
+ * may differ from the student's, but its inputs and outputs must match the
+ * game's dimensions exactly, otherwise the teacher's answers are truncated or
+ * zero-padded and the student learns a different function.
+ */
+export function brainIoMatches(
+  brain: { inputCount: number; outputCount: number } | null | undefined,
+  inputCount: number,
+  outputCount: number,
+): boolean {
+  return (
+    !!brain &&
+    brain.inputCount === inputCount &&
+    brain.outputCount === outputCount
+  );
 }
 
 /**
@@ -94,8 +127,9 @@ export function distillStep(
   teacher: NeuralNetwork,
   inputs: number[],
   frames: number,
+  outputRanges: OutputRanges = [],
 ): Distiller {
-  const active = distiller ?? new Distiller(inputs.length);
+  const active = distiller ?? new Distiller(inputs.length, undefined, outputRanges);
   active.step(brain, teacher, inputs, frames);
   return active;
 }

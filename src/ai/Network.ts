@@ -20,6 +20,22 @@ export const TEACHING_RATE = 0.05;
 export function clampOutput(value: number): number {
   return value < -1 ? -1 : value > 1 ? 1 : value;
 }
+
+/** the applied range of one control, `[min, max]` */
+export type OutputRange = [number, number];
+/** every output's applied range, indexed by output; the games define theirs once */
+export type OutputRanges = OutputRange[];
+
+/** the default applied range, what most controls clamp to */
+export const UNIT_RANGE: OutputRange = [-1, 1];
+
+/** clamps to one control's applied range, the canonical box being [-1, 1] */
+export function clampToRange(
+  value: number,
+  range: OutputRange = UNIT_RANGE,
+): number {
+  return value < range[0] ? range[0] : value > range[1] ? range[1] : value;
+}
 /** a whole distillation run decays over this many frames */
 export const TEACHING_FRAMES = 10_000;
 
@@ -130,17 +146,30 @@ export class NeuralNetwork {
     }
   }
 
+  /** per-output error of the last train step, straight through the applied range */
+  public lastErrors: number[] | null = null;
+  /** |weight change| per level, per output node, from the last train step */
+  public lastMutations: number[][] | null = null;
+
   /**
    * One gradient-descent step that pulls the network's outputs toward
    * `targets` for `inputs` (MSE, backpropagated through every level). The
    * brain is a pure linear map, so the gradients are exact. Returns the
    * pre-step loss; watch it shrink while a distilling brain converges on its
    * teacher.
+   *
+   * `ranges` is the applied range of each control: the error is measured on
+   * the value the game would actually apply (straight-through: the gradient
+   * still runs through the raw output). The default is [-1, 1] per output;
+   * games whose physics applies a different box (climb steers in [0, 1])
+   * pass theirs, because a student that matches the teacher's raw outputs
+   * only past the applied bound drives differently.
    */
   public train(
     inputs: number[],
     targets: number[],
     learningRate = TEACHING_RATE,
+    ranges: OutputRanges = [],
   ): number {
     const activations: number[][] = [inputs];
     let current = inputs;
@@ -151,23 +180,34 @@ export class NeuralNetwork {
     const output = current;
     let loss = 0;
     const deltas = new Array<number>(output.length);
+    const errors = new Array<number>(output.length);
     for (let i = 0; i < output.length; i++) {
-      // The games clamp every output to [-1, 1], so two brains that differ
-      // only past that bound drive identically. The error is measured on the
-      // clamped value (straight-through: the gradient still runs through the
-      // raw output), which keeps deep brains from chasing absurd targets like
-      // a raw output of 150 and blowing their weights up doing it.
-      const error = clampOutput(output[i]) - clampOutput(targets[i] ?? 0);
+      // Two brains that differ only past the applied bound drive identically,
+      // so the error is measured on the applied value, which also keeps deep
+      // brains from chasing absurd targets like a raw output of 150.
+      const range = ranges[i] ?? UNIT_RANGE;
+      const error =
+        clampToRange(output[i], range) - clampToRange(targets[i] ?? 0, range);
       loss += error * error;
+      errors[i] = error;
       deltas[i] = (2 * error) / output.length;
     }
+    const mutations = NeuralNetwork.#mutationAccumulator(this.levels);
     NeuralNetwork.applyGradients(
       this.levels,
       activations,
       deltas,
       learningRate,
+      mutations,
     );
+    this.lastErrors = errors;
+    this.lastMutations = mutations;
     return loss;
+  }
+
+  /** one bucket per level, one per output node of that level */
+  static #mutationAccumulator(levels: Level[]): number[][] {
+    return levels.map((level) => new Array<number>(level.outputs.length).fill(0));
   }
 
   /**
@@ -180,6 +220,7 @@ export class NeuralNetwork {
     activations: number[][],
     deltas: number[],
     learningRate: number,
+    mutations: number[][] | null = null,
   ): void {
     for (let levelIndex = levels.length - 1; levelIndex >= 0; levelIndex--) {
       const level = levels[levelIndex];
@@ -203,7 +244,9 @@ export class NeuralNetwork {
           if (nextDeltas) nextDeltas[input] += weights[output] * delta;
           const correction = step * delta * activation;
           // a non finite correction would poison the brain for good
-          if (Number.isFinite(correction)) weights[output] -= correction;
+          if (!Number.isFinite(correction)) continue;
+          weights[output] -= correction;
+          if (mutations) mutations[levelIndex][output] += Math.abs(correction);
         }
       }
       if (nextDeltas) deltas = nextDeltas;
