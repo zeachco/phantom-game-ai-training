@@ -36,6 +36,7 @@ import {
   type defaultState,
   globalRecordForGroup,
 } from './utilities';
+import { gameNow } from '../../utilities/gameClock';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -411,7 +412,7 @@ export default async (state: typeof defaultState) => {
 
   loop.play(
     (_es, _dt) => {
-      const now = performance.now();
+      const now = gameNow();
       frameMeter.tick(now);
       if (state.playing) {
         race.update(now);
@@ -624,7 +625,7 @@ export default async (state: typeof defaultState) => {
         }
       }
       // the human car draws last, above every other car, no sensor fan
-      const corpseNow = performance.now();
+      const corpseNow = gameNow();
       // off-screen cars cost a transform and two blits for nothing
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
@@ -706,7 +707,7 @@ export default async (state: typeof defaultState) => {
         return state.human;
       return undefined;
     }
-    const now = performance.now();
+    const now = gameNow();
     const freshFinish = (car: Car) =>
       car.finished &&
       car.completedLapAt > 0 &&

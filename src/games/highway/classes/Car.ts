@@ -12,6 +12,7 @@ import { config } from './Config';
 import { Controls } from './Controls';
 import type { DeathRay } from './DeathRay';
 import { Sensor } from './Sensor';
+import { gameNow } from '../../../utilities/gameClock';
 
 /**
  * The range the physics applies to each control, indexed like the brain's
@@ -95,7 +96,7 @@ export class Car {
     this.friction = config.CAR_FRICTION;
     this.angle = 0;
     this.damaged = false;
-    this.bornAt = performance.now();
+    this.bornAt = gameNow();
 
     this.useAI = controlType === ControlType.AI;
 

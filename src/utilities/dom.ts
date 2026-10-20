@@ -1,3 +1,5 @@
+import { isGamePaused, setGamePaused } from './gameClock';
+
 export function createCanvas() {
   const can = document.createElement('canvas');
   document.body.appendChild(can);
@@ -15,6 +17,34 @@ export function createStage() {
   stage.className = 'game-stage';
   document.body.appendChild(stage);
   return stage;
+}
+
+/**
+ * P toggles the pause in every game: the game loop halts (see GameLoop and
+ * gameClock) and a PAUSED banner sits in the middle of the stage.
+ */
+export function bindPauseToggle(stage: HTMLElement) {
+  const banner = document.createElement('div');
+  banner.className = 'pause-overlay';
+  banner.textContent = 'PAUSED';
+  banner.hidden = true;
+  stage.appendChild(banner);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.repeat || e.isComposing || e.code !== 'KeyP') return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target.isContentEditable)
+    )
+      return;
+    e.preventDefault();
+    setGamePaused(!isGamePaused());
+    banner.hidden = !isGamePaused();
+  };
+  window.addEventListener('keydown', onKey);
 }
 
 /**

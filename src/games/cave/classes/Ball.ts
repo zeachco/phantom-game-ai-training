@@ -142,7 +142,7 @@ export class Ball {
   /** signed elevation of the ball→gate vector off the velocity/tangent plane,
    *  in [-1, 1]; positive means the gate sits above the heading plane */
   public gatePitch = 0;
-  /** performance.now() of the crash: the corpse fades from 0.5 to 0 over
+  /** gameNow() of the crash: the corpse fades from 0.5 to 0 over
    *  DEAD_LIFETIME; the whole brain group respawns when every corpse has expired */
   public deathTime = 0;
   /** frames remaining to advance into another cave section */

@@ -39,6 +39,7 @@ import { DeathRay } from './classes/DeathRay';
 import { Road } from './classes/Road';
 import { ControlType } from './types';
 import { defaultState, mixedColor, scoreEntries } from './utilities';
+import { gameNow } from '../../utilities/gameClock';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -418,7 +419,7 @@ export default async (state: typeof defaultState) => {
   updateFollowButtons();
 
   loop.play((_es, _dt) => {
-    const now = performance.now();
+    const now = gameNow();
     frameMeter.tick(now);
     ray.update();
     for (let i = 0; i < state.traffic.length; i++) {
@@ -435,7 +436,7 @@ export default async (state: typeof defaultState) => {
       car.distillRun =
         target !== undefined || learningOnlyGroups.has(String(groupKeyOf(car)));
       car.update(road.borders, state.traffic, deathRays);
-      if (alive && performance.now() - car.bornAt > config.CAR_LIFETIME_CAP) {
+      if (alive && gameNow() - car.bornAt > config.CAR_LIFETIME_CAP) {
         car.damaged = true;
       }
       const brain = car.brain;

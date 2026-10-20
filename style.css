@@ -6,9 +6,9 @@
   --ui-text: #edf0f5;
   --ui-muted: #a0a9b8;
   --ui-accent: #56dcf5;
-  --ui-font: "Segoe UI", Arial, sans-serif;
-  --arcade-font:
-    Impact, Haettenschweiler, "Arial Narrow", "Nimbus Sans Narrow", sans-serif;
+  --ui-font: 'Segoe UI', Arial, sans-serif;
+  --arcade-font: Impact, Haettenschweiler, 'Arial Narrow', 'Nimbus Sans Narrow',
+    sans-serif;
   --ui-motion: 180ms ease;
 }
 
@@ -48,12 +48,34 @@ body:has(.side-panel.open) .game-stage {
   display: block;
 }
 
+.pause-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  padding: 0.4em 0.9em;
+  font: bold clamp(2rem, 8vw, 5rem) / 1 system-ui, sans-serif;
+  letter-spacing: 0.15em;
+  color: #fff;
+  background: #000a;
+  border-radius: 0.2em;
+  pointer-events: none;
+}
+
+.pause-overlay[hidden] {
+  display: none;
+}
+
 /* The home screen needs no extra markup: the four games are the main action. */
 body:has(.game-menu.big) {
   min-height: 100vh;
   min-height: 100svh;
-  background-image:
-    radial-gradient(ellipse at 25% 40%, #56dcf509, transparent 50%),
+  background-image: radial-gradient(
+      ellipse at 25% 40%,
+      #56dcf509,
+      transparent 50%
+    ),
     radial-gradient(ellipse at 75% 65%, #b99bfa09, transparent 50%);
 }
 
@@ -80,11 +102,8 @@ canvas {
   list-style: none;
   transform: translate(-50%, -12px);
   opacity: 0.32;
-  transition:
-    transform var(--ui-motion),
-    opacity var(--ui-motion),
-    background-color var(--ui-motion),
-    border-color var(--ui-motion),
+  transition: transform var(--ui-motion), opacity var(--ui-motion),
+    background-color var(--ui-motion), border-color var(--ui-motion),
     box-shadow var(--ui-motion);
 }
 
@@ -130,24 +149,21 @@ canvas {
   text-decoration: none;
   text-transform: uppercase;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    background-color var(--ui-motion),
-    border-color var(--ui-motion),
-    box-shadow var(--ui-motion),
-    transform var(--ui-motion);
+  transition: background-color var(--ui-motion), border-color var(--ui-motion),
+    box-shadow var(--ui-motion), transform var(--ui-motion);
 }
 
-.game-menu a[href="?game=circuit"] {
+.game-menu a[href='?game=circuit'] {
   --game-accent: #f5d576;
   --game-tint: 245, 213, 118;
 }
 
-.game-menu a[href="?game=cave"] {
+.game-menu a[href='?game=cave'] {
   --game-accent: #b99bfa;
   --game-tint: 185, 155, 250;
 }
 
-.game-menu a[href="?game=climb"] {
+.game-menu a[href='?game=climb'] {
   --game-accent: #ff8d86;
   --game-tint: 255, 141, 134;
 }
@@ -194,12 +210,13 @@ canvas {
   border: 1px solid #626d7b;
   border-left: 10px solid var(--game-accent);
   border-radius: 12px;
-  background:
-    linear-gradient(135deg, rgba(var(--game-tint), 0.045), transparent 70%),
+  background: linear-gradient(
+      135deg,
+      rgba(var(--game-tint), 0.045),
+      transparent 70%
+    ),
     linear-gradient(135deg, #1e232b, #13171c);
-  box-shadow:
-    -12px 8px 48px rgba(var(--game-tint), 0.06),
-    0 12px 28px #0003;
+  box-shadow: -12px 8px 48px rgba(var(--game-tint), 0.06), 0 12px 28px #0003;
   font-size: clamp(32px, 4vw, 48px);
   letter-spacing: 0.025em;
 }
@@ -208,9 +225,7 @@ canvas {
 .game-menu.big a:focus-visible {
   border-color: var(--game-accent);
   background-color: rgba(var(--game-tint), 0.08);
-  box-shadow:
-    0 0 32px rgba(var(--game-tint), 0.13),
-    0 16px 32px #0005;
+  box-shadow: 0 0 32px rgba(var(--game-tint), 0.13), 0 16px 32px #0005;
   transform: translateY(-4px);
 }
 
@@ -296,9 +311,7 @@ canvas {
   color: var(--ui-accent);
   font-size: 1.1em;
   cursor: pointer;
-  transition:
-    background-color var(--ui-motion),
-    color var(--ui-motion);
+  transition: background-color var(--ui-motion), color var(--ui-motion);
 }
 
 .side-panel-toggle:hover {
@@ -354,9 +367,7 @@ canvas {
   color: var(--ui-text);
   background: #222832;
   cursor: pointer;
-  transition:
-    background-color var(--ui-motion),
-    border-color var(--ui-motion);
+  transition: background-color var(--ui-motion), border-color var(--ui-motion);
 }
 
 .group-panel-btn:hover:not(:disabled) {
@@ -372,6 +383,16 @@ canvas {
 .group-panel-btn:focus-visible {
   outline: 2px solid var(--ui-accent);
   outline-offset: 2px;
+}
+
+.group-panel-btn-danger {
+  border-color: #7a3a3f;
+  background: #3a2226;
+  color: #ff9d9d;
+}
+.group-panel-btn-danger:hover:not(:disabled) {
+  border-color: #ff7070;
+  background: #55292e;
 }
 
 .group-panel-readouts {
@@ -401,12 +422,12 @@ canvas {
 }
 
 .group-panel-value {
-  font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
   color: var(--ui-accent);
 }
 
-.group-panel-row input[type="range"] {
+.group-panel-row input[type='range'] {
   width: 42%;
   accent-color: var(--ui-accent);
 }
@@ -447,9 +468,7 @@ canvas {
 
 .follow-keys span {
   grid-column: 1 / -1;
-  font:
-    bold 0.7em Arial,
-    sans-serif;
+  font: bold 0.7em Arial, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.6);
@@ -460,9 +479,7 @@ canvas {
   border: 2px solid transparent;
   border-radius: 0.4em;
   padding: 0.25em 0;
-  font:
-    bold 0.8em Arial,
-    sans-serif;
+  font: bold 0.8em Arial, sans-serif;
   color: #fff;
   background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
@@ -516,9 +533,7 @@ canvas {
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
   background: #ffffff05;
-  font:
-    0.72em Arial,
-    sans-serif;
+  font: 0.72em Arial, sans-serif;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
 }
@@ -532,9 +547,7 @@ canvas {
   padding: 0.5em 0.7em;
   border-radius: 0.4em;
   background: #ffffff05;
-  font:
-    0.72em Arial,
-    sans-serif;
+  font: 0.72em Arial, sans-serif;
   color: rgba(255, 255, 255, 0.85);
 }
 
@@ -555,12 +568,7 @@ canvas {
   padding: 0.25em 0.6em;
   border-radius: 0.4em;
   background: #10141a99;
-  font:
-    0.72em / 1.2 ui-monospace,
-    "Cascadia Mono",
-    Menlo,
-    Consolas,
-    monospace;
+  font: 0.72em / 1.2 ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
   color: var(--ui-accent);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
@@ -579,9 +587,7 @@ canvas {
   border: 0;
   background: none;
   padding: 0;
-  font:
-    bold 0.7em Arial,
-    sans-serif;
+  font: bold 0.7em Arial, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.6);
@@ -604,9 +610,7 @@ canvas {
   gap: 0.35em;
   margin-left: auto;
   color: #fff;
-  font:
-    bold 0.8em Arial,
-    sans-serif;
+  font: bold 0.8em Arial, sans-serif;
 }
 .seed-controls button {
   width: 1.8em;
@@ -1084,9 +1088,7 @@ canvas {
   box-shadow: 0 8px 24px #0007;
   opacity: 0;
   transform: translateY(12px);
-  transition:
-    opacity var(--ui-motion),
-    transform var(--ui-motion);
+  transition: opacity var(--ui-motion), transform var(--ui-motion);
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1096,11 +1098,11 @@ canvas {
   transform: translateY(0);
 }
 
-.toast[data-tone="success"] {
+.toast[data-tone='success'] {
   --toast-accent: #70e08a;
 }
 
-.toast[data-tone="error"] {
+.toast[data-tone='error'] {
   --toast-accent: #ff7070;
 }
 

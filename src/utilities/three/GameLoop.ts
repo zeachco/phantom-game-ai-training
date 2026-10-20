@@ -1,4 +1,5 @@
 import { Clock } from 'three';
+import { isGamePaused } from '../gameClock';
 
 export interface GameLoopOptions {
   /** When set, frames are skipped until this interval has elapsed. */
@@ -26,6 +27,13 @@ export class GameLoop {
         return;
       }
       lastCappedFrame = now;
+      if (isGamePaused()) {
+        // Halted: drain the clock so resuming does not feed the whole pause
+        // in as one giant delta, and keep the last rendered frame on screen.
+        this.clock.getDelta();
+        // loop(0, 0);
+        return;
+      }
       const dt = this.clock.getDelta();
       const es = this.clock.getElapsedTime();
       loop(es, dt);

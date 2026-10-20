@@ -1,4 +1,5 @@
 import type { Vector } from '../../../utilities/math';
+import { gameNow } from '../../../utilities/gameClock';
 
 /**
  * A gate across the road, claimed in order one per lap. The order is what
@@ -33,7 +34,7 @@ export class Checkpoint {
     ctx.setLineDash([8, 2]);
     ctx.lineWidth = 8;
     if (next) {
-      const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 250);
+      const pulse = 0.55 + 0.45 * Math.sin(gameNow() / 250);
       ctx.strokeStyle =
         this.index === 0
           ? `rgba(255, 0, 0, ${pulse})`

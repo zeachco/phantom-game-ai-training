@@ -17,6 +17,7 @@ import { config } from './Config';
 import { Controls } from './Controls';
 import type { Obstacle } from './Obstacle';
 import { Sensor } from './Sensor';
+import { gameNow } from '../../../utilities/gameClock';
 
 /** the gate line shades by misalignment, quantized so no string is built per frame */
 const GATE_COLORS = new Array(21).fill(0).map((_s, i) => {
@@ -116,16 +117,16 @@ export class Car {
   public gateX = 0;
   public gateY = 0;
   public gateDelta = 0;
-  /** performance.now() of the crash: the corpse fades from 0.5 to 0 over
+  /** gameNow() of the crash: the corpse fades from 0.5 to 0 over
    *  DEAD_LIFETIME; the whole brain group respawns when every corpse has expired */
   public deathTime = 0;
   /** frames remaining to reach the next checkpoint at the reference 60 FPS */
   public checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
   /** simulation frames since the last checkpoint was claimed */
   public framesSinceLastCheckpoint = 0;
-  /** performance.now() when the current lap started, zero while moving */
+  /** gameNow() when the current lap started, zero while moving */
   public lapStartedAt = 0;
-  /** performance.now() when the last completed lap finished */
+  /** gameNow() when the last completed lap finished */
   public completedLapAt = 0;
   /** simulation frames spent on the current lap */
   public framesSinceLapStart = 0;
@@ -195,7 +196,7 @@ export class Car {
     this.damaged = false;
     this.checkpointFramesRemaining = config.CHECKPOINT_BUDGET_FRAMES;
     this.stallFrames = 0;
-    this.lapStartedAt = performance.now();
+    this.lapStartedAt = gameNow();
 
     this.useAI = controlType === ControlType.AI;
 
@@ -434,7 +435,7 @@ export class Car {
             config.LAP_SPEED_BONUS / this.framesSinceLapStart;
           this.completedLap = true;
           this.laps++;
-          this.completedLapAt = performance.now();
+          this.completedLapAt = gameNow();
           this.completedLapFrames = this.framesSinceLapStart;
           this.totalRaceFrames += this.completedLapFrames;
           this.framesSinceLapStart = 0;

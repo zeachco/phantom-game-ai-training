@@ -32,6 +32,7 @@ import {
 import { Car, getCircuitBrainDimensions } from './Car';
 import { Circuit } from './Circuit';
 import { config } from './Config';
+import { gameNow } from '../../../utilities/gameClock';
 
 export type CircuitModelIo = ReturnType<typeof fileUtilities>;
 
@@ -685,8 +686,8 @@ export class CircuitRace {
 
   #onDeath(car: Car): Group | null {
     this.state.living--;
-    car.deathTime = performance.now();
     let deadGroup: Group | null = null;
+    car.deathTime = gameNow();
 
     if (car.useAI) {
       const group = this.#groupOf(car);
@@ -897,8 +898,8 @@ export class CircuitRace {
           car === this.state.human
             ? 'human'
             : car.brain instanceof MixedNetwork
-              ? 'mixed'
-              : String(car.brainLayers);
+            ? 'mixed'
+            : String(car.brainLayers);
         this.#completedBrainIndices.add(brainIndex);
         if (
           group &&

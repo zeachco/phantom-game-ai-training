@@ -26,6 +26,7 @@ import { ChaseCamera } from './classes/ChaseCamera';
 import { config, isDemo } from './classes/Config';
 import { SensorViz } from './classes/SensorViz';
 import type { defaultState, Group } from './utilities';
+import { gameNow } from '../../utilities/gameClock';
 
 type CaveState = typeof defaultState;
 
@@ -422,7 +423,7 @@ export default async (state: CaveState) => {
     }
     if (!leader) leader = state.balls.find((ball) => !ball.damaged);
     const current = followTarget;
-    const now = performance.now();
+    const now = gameNow();
     if (
       current &&
       current !== leader &&
@@ -552,7 +553,7 @@ export default async (state: CaveState) => {
     // Keep physics, AI and race timers at 60 Hz on every display. Limit
     // catch-up after tab suspension so it cannot spiral into a long frame.
     accumulator = Math.min(accumulator + dt, 5 / 60);
-    const now = performance.now();
+    const now = gameNow();
     while (accumulator >= 1 / 60) {
       accumulator -= 1 / 60;
       race.update(now);

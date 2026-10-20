@@ -1,7 +1,7 @@
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-import { createStage } from './utilities/dom';
+import { bindPauseToggle, createStage } from './utilities/dom';
 
 type GameModule = { default: (state: object) => unknown };
 
@@ -27,7 +27,10 @@ const app = apps.get(game);
 if (app) {
   // the dock lives in the stage, so it centers on the canvas instead of the
   // page: an open side panel never clips it
-  createStage().appendChild(ul);
+  const stage = createStage();
+  stage.appendChild(ul);
+  // P pauses every game: halts the loop and shows PAUSED mid-scene
+  bindPauseToggle(stage);
   const state = {};
   app().then((mod) => (mod as GameModule).default(state));
 } else {

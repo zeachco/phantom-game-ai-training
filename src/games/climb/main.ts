@@ -26,6 +26,7 @@ import { ClimbRace } from './classes/ClimbRace';
 import { config, isDemo } from './classes/Config';
 import type { Player } from './classes/Player';
 import { brainId, scoreBoardRows, type defaultState } from './utilities';
+import { gameNow } from '../../utilities/gameClock';
 
 const neuralVisualizer = new Visualizer(config);
 
@@ -303,7 +304,7 @@ export default async (state: typeof defaultState) => {
 
   loop.play(
     (_es, _dt) => {
-      const now = performance.now();
+      const now = gameNow();
       frameMeter.tick(now);
       if (state.playing) {
         race.update(now);

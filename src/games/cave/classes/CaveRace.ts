@@ -33,6 +33,7 @@ import {
 import { Ball, getCaveBrainDimensions } from './Ball';
 import { Cave } from './Cave';
 import { config } from './Config';
+import { gameNow } from '../../../utilities/gameClock';
 
 export type CaveModelIo = ReturnType<typeof fileUtilities>;
 
@@ -656,8 +657,8 @@ export class CaveRace {
 
   #onDeath(ball: Ball): Group | null {
     this.state.living--;
-    ball.deathTime = performance.now();
     let deadGroup: Group | null = null;
+    ball.deathTime = gameNow();
 
     if (ball.useAI) {
       const group = this.#groupOf(ball);
