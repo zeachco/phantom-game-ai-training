@@ -679,9 +679,7 @@ export default async (state: typeof defaultState) => {
         );
       }
       // the loss graph follows the student's distiller, null outside a run
-      panel.groupPanel.drawLossGraph(
-        camTarget?.distiller?.lossHistory ?? null,
-      );
+      panel.groupPanel.drawLossGraph(camTarget?.distiller?.lossHistory ?? null);
       // The KeyS shortcut toggles the stats, now an inline DOM block in the cockpit.
       if (domUpdateDue) {
         const statsOn = neuralVisualizer.renderStats;

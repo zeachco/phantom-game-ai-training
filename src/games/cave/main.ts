@@ -656,6 +656,8 @@ export default async (state: CaveState) => {
         visualized.teacher,
         visualized.distillErrors,
       );
+    // the loss graph follows the student's distiller, null outside a run
+    panel.groupPanel.drawLossGraph(visualized?.distiller?.lossHistory ?? null);
     if (now - lastHud > 50) {
       lastHud = now;
       updateFollowButtons();

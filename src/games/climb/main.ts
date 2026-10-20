@@ -466,6 +466,8 @@ export default async (state: typeof defaultState) => {
           followed?.teacher ?? null,
           followed?.distillErrors ?? null,
         );
+      // the loss graph follows the student's distiller, null outside a run
+      panel.groupPanel.drawLossGraph(followed?.distiller?.lossHistory ?? null);
     },
     {
       maxFps: config.HUMAN_FPS_CAP,

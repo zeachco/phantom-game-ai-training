@@ -558,9 +558,7 @@ export default async (state: typeof defaultState) => {
       );
     }
     // the loss graph follows the student's distiller, null outside a run
-    panel.groupPanel.drawLossGraph(
-      camTarget?.distiller?.lossHistory ?? null,
-    );
+    panel.groupPanel.drawLossGraph(camTarget?.distiller?.lossHistory ?? null);
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';

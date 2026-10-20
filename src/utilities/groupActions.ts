@@ -3,9 +3,10 @@
  * inserted between the follow-keys and the network readout and is only
  * visible while a brain group (1-9 or mixed) is followed. It re-wires the
  * old long-press "reset brain saves" action to a plain button, adds remote
- * reload / remote delete, and shows the four trainer readouts (seed best,
- * cross-seed global best, server snapshot score, last sync time), refreshed
- * on follow change and every ~500 ms while the panel is open.
+ * reload / remote delete, the trainer readouts (seed best, cross-seed global
+ * best, server snapshot score, last sync time) and the live loss graph of the
+ * followed student's distiller, refreshed on follow change and every ~500 ms
+ * while the panel is open.
  */
 import { MIXED_KIND, MIXED_LEVELS } from '../ai/Mixed';
 import {
@@ -15,7 +16,6 @@ import {
   lastSyncAt,
 } from '../ai/serverSync';
 import { showToast } from './toast';
-import { learningStepPercent, saveLearningStepPercent } from './learningRate';
 
 /** The server group key for a follow value: '1'..'9' or 'mixed'. */
 export function groupKeyFor(game: string, value: number | 'mixed'): string {
@@ -91,6 +91,12 @@ export interface GroupActions {
   setOpen(open: boolean): void;
   /** force an immediate readout refresh */
   refresh(): void;
+  /**
+   * Redraw the loss graph from the followed student's recent frame losses,
+   * the games call it from their loop like the brain preview; null or empty
+   * hides the row, so it only shows while a teacher is driving.
+   */
+  drawLossGraph(history: number[] | null): void;
 }
 
 export function createGroupActions(options: GroupActionsOptions): GroupActions {
@@ -184,29 +190,21 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   const globalVal = mkRow('global');
   const remoteVal = mkRow('remote');
   const syncVal = mkRow('last sync');
-  const learningRow = document.createElement('div');
-  learningRow.className = 'group-panel-row';
-  learningRow.hidden = true;
-  const learningName = document.createElement('label');
-  learningName.className = 'group-panel-name';
-  learningName.textContent = 'learn per step';
-  const learningControl = document.createElement('input');
-  learningControl.type = 'range';
-  learningControl.min = '0';
-  learningControl.max = '100';
-  learningControl.step = '1';
-  learningControl.value = String(learningStepPercent());
-  learningControl.id = `learning-step-${game}`;
-  learningName.htmlFor = learningControl.id;
-  const learningValue = document.createElement('span');
-  learningValue.className = 'group-panel-value';
-  learningValue.textContent = `${learningControl.value}%`;
-  learningRow.append(learningName, learningControl, learningValue);
-  readouts.appendChild(learningRow);
-  learningControl.addEventListener('input', () => {
-    saveLearningStepPercent(Number(learningControl.value));
-    learningValue.textContent = `${learningControl.value}%`;
-  });
+  // the live loss of the followed student's distiller, where the old
+  // "learn per step" slider row used to be: it shows only while training
+  const lossRow = document.createElement('div');
+  lossRow.className = 'group-panel-row group-panel-loss-row';
+  lossRow.hidden = true;
+  const lossName = document.createElement('span');
+  lossName.className = 'group-panel-name';
+  lossName.textContent = 'loss';
+  const lossCanvas = document.createElement('canvas');
+  lossCanvas.className = 'group-panel-loss';
+  const lossCtx = lossCanvas.getContext('2d');
+  const lossVal = document.createElement('span');
+  lossVal.className = 'group-panel-value';
+  lossRow.append(lossName, lossCanvas, lossVal);
+  readouts.appendChild(lossRow);
   el.appendChild(readouts);
 
   let value: number | 'mixed' = 0;
@@ -225,14 +223,12 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     const group = all ? (displayedGroup?.() ?? null) : value;
     if (all) {
       shownVal.textContent = group === null ? '—' : label(group);
-      learningRow.hidden = true;
     } else {
       // a run ending resets the group to free training without a follow change
       const stored = targetValue(trainFrom(value));
       if (trainSelect.value !== stored) trainSelect.value = stored;
       // the closed select wears the color of the group it points at
       const target = trainFrom(value);
-      learningRow.hidden = target === null;
       trainSelect.style.color =
         target === null ? '' : (groupColor?.(target) ?? '');
       teacherVal.textContent = fmt(teacherScore(value));
@@ -392,6 +388,59 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     refresh();
   });
 
+  /** the graph's line wears the panel accent, matching the readout values */
+  const ACCENT = '#56dcf5';
+
+  function drawLossGraph(history: number[] | null): void {
+    const data = history && history.length > 0 ? history : null;
+    if (data === null) {
+      if (lossRow.hidden) return;
+      lossRow.hidden = true;
+      lossVal.textContent = '';
+      return;
+    }
+    if (lossRow.hidden) lossRow.hidden = false;
+    const latest = data[data.length - 1];
+    lossVal.textContent = Number.isFinite(latest) ? latest.toPrecision(2) : '—';
+    const ctx = lossCtx;
+    if (!ctx) return;
+    const w = lossCanvas.clientWidth;
+    const h = lossCanvas.clientHeight;
+    if (w === 0 || h === 0) return;
+    const dpr = Math.max(1, globalThis.devicePixelRatio || 1);
+    const pw = Math.round(w * dpr);
+    const ph = Math.round(h * dpr);
+    if (lossCanvas.width !== pw || lossCanvas.height !== ph) {
+      lossCanvas.width = pw;
+      lossCanvas.height = ph;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    let max = 0;
+    for (const sample of data) if (sample > max) max = sample;
+    max = Math.max(max, 1e-9);
+    const pad = 3;
+    const x = (i: number) =>
+      pad + (i / Math.max(1, data.length - 1)) * (w - 2 * pad);
+    const y = (sample: number) => h - pad - (sample / max) * (h - 2 * pad);
+    // oldest at the left edge, newest at the right: the graph scrolls as the
+    // window fills, and the scale follows the window's own peak
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      if (i === 0) ctx.moveTo(x(i), y(data[i]));
+      else ctx.lineTo(x(i), y(data[i]));
+    }
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // a faint fill under the same samples, closed down to the baseline
+    ctx.lineTo(x(data.length - 1), h - pad);
+    ctx.lineTo(x(0), h - pad);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(86, 220, 245, 0.12)';
+    ctx.fill();
+  }
+
   return {
     el,
     apply(v: number | 'mixed'): void {
@@ -422,5 +471,6 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
       }
     },
     refresh,
+    drawLossGraph,
   };
 }

@@ -1,5 +1,5 @@
+import { LEARNING_STEP_PERCENT } from '../utilities/learningRate';
 import { type NeuralNetwork, type OutputRanges, teachingRate } from './Network';
-import { learningStepPercent } from '../utilities/learningRate';
 
 /**
  * Distillation data. A teacher drives the entity, so every frame hands the
@@ -16,6 +16,8 @@ import { learningStepPercent } from '../utilities/learningRate';
 export class Distiller {
   /** how many random probes each frame costs on top of the live sample */
   static PROBES_PER_FRAME = 5;
+  /** the trainer's loss graph plots at most this many recent frames */
+  static HISTORY_LIMIT = 300;
 
   /** lowest and highest value seen per input, unknown until the first frame */
   #min: number[];
@@ -28,6 +30,9 @@ export class Distiller {
   /** per-output applied error of the live sample of the last frame, the
    *  error the driven car is actually experiencing right now */
   public lastErrors: number[] | null = null;
+  /** the frame losses since the run started, oldest first, capped so the
+   *  trainer's loss graph stays a sliding window */
+  public lossHistory: number[] = [];
 
   constructor(
     public inputCount: number,
@@ -85,18 +90,31 @@ export class Distiller {
     inputs: number[],
     frames: number,
   ): void {
-    const rate = teachingRate(frames) * learningStepPercent() / 100;
+    const rate = (teachingRate(frames) * LEARNING_STEP_PERCENT) / 100;
     // the live sample first, because it is the behaviour being copied right
     // now; its error is the one the driven car is experiencing
-    const liveLoss = brain.train(inputs, teacher.process(inputs), rate, this.outputRanges);
+    const liveLoss = brain.train(
+      inputs,
+      teacher.process(inputs),
+      rate,
+      this.outputRanges,
+    );
     this.lastErrors = brain.lastErrors;
     this.#observe(inputs);
     let loss = liveLoss;
     for (let i = 0; i < this.probesPerFrame; i++) {
       const probe = this.sample();
-      loss += brain.train(probe, teacher.process(probe), rate, this.outputRanges);
+      loss += brain.train(
+        probe,
+        teacher.process(probe),
+        rate,
+        this.outputRanges,
+      );
     }
     this.lastLoss = loss / (this.probesPerFrame + 1);
+    this.lossHistory.push(this.lastLoss);
+    if (this.lossHistory.length > Distiller.HISTORY_LIMIT)
+      this.lossHistory.shift();
   }
 }
 
@@ -130,7 +148,8 @@ export function distillStep(
   frames: number,
   outputRanges: OutputRanges = [],
 ): Distiller {
-  const active = distiller ?? new Distiller(inputs.length, undefined, outputRanges);
+  const active =
+    distiller ?? new Distiller(inputs.length, undefined, outputRanges);
   active.step(brain, teacher, inputs, frames);
   return active;
 }

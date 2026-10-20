@@ -427,9 +427,18 @@ canvas {
   color: var(--ui-accent);
 }
 
-.group-panel-row input[type='range'] {
-  width: 42%;
-  accent-color: var(--ui-accent);
+/* the loss graph row centers its canvas, the other rows sit on a baseline */
+.group-panel-loss-row {
+  align-items: center;
+}
+
+.group-panel-loss {
+  flex: 1;
+  height: 44px;
+  margin-inline: 0.6em;
+  border: 1px solid var(--ui-border);
+  border-radius: 0.35em;
+  background: #1b202a;
 }
 
 .group-panel-select {
