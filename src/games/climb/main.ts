@@ -4,19 +4,17 @@ import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText, getColorScale } from '../../utilities/colors';
+import { getColorScale } from '../../utilities/colors';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
-import { bindFollowKeys } from '../../utilities/followKeys';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import type { GroupActionsOptions } from '../../utilities/groupActions';
 import {
-  bindSidePanelToggle,
   createCanvas,
-  createCollapsibleSection,
   createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
-import { createGroupActions } from '../../utilities/groupActions';
+import { createSidePanel } from '../../utilities/sidePanel';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -34,9 +32,6 @@ const io = fileUtilities('climb', makeSubmitChecker('climb'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
-/** the panel takes that share of the screen while open, capped in width */
-const PANEL_RATIO = 0.75;
-const PANEL_MAX_WIDTH = 800;
 /** world height visible on screen at the reference scale */
 const VIEW_HEIGHT = 420;
 /** how many per-frame jump samples the action button's history holds */
@@ -49,36 +44,8 @@ export default async (state: typeof defaultState) => {
   const gameCanvas = createCanvas();
   stage.appendChild(gameCanvas);
 
-  const networkCanvas = createCanvas();
-  networkCanvas.className = 'neural-canvas';
-
   const gameCtx = gameCanvas.getContext('2d');
-  const networkCtx = networkCanvas.getContext('2d');
 
-  const panel = document.createElement('aside');
-  panel.className = `side-panel`;
-  panel.style.width = `${PANEL_RATIO * 100}%`;
-  panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
-
-  const toggleBtn = document.createElement('button');
-  toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❮';
-  toggleBtn.setAttribute('title', 'F12 to toggle');
-  toggleBtn.setAttribute('aria-label', 'Toggle models panel');
-  let panelOpen = false;
-  const togglePanel = () => {
-    panelOpen = panel.classList.toggle('open');
-    toggleBtn.textContent = panelOpen ? '❯' : '❮';
-    groupPanel.setOpen(panelOpen);
-  };
-  toggleBtn.onclick = togglePanel;
-  // F12 or L open the panel like the tab button does
-  bindSidePanelToggle(togglePanel);
-
-  const followKeys = document.createElement('div');
-  followKeys.className = 'follow-keys';
-  const followLabel = document.createElement('span');
-  followLabel.textContent = 'Follow';
   /** 0 follows the best score overall, 1-9 the best climber of that brain
    *  layer, 'mixed' the mix */
   let follow: number | 'mixed' = 0;
@@ -86,20 +53,6 @@ export default async (state: typeof defaultState) => {
    *  or a manual follow change */
   let humanFollow = false;
   let camSet = false;
-
-  const setFollow = (value: number | 'mixed') => {
-    follow = value;
-    humanFollow = false;
-    followKeys.querySelectorAll('button').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.follow === String(value));
-    });
-    const color =
-      typeof value === 'number' && value > 0
-        ? layerColor(value, config.MAX_NETWORK_LAYERS)
-        : '#c4c4c4';
-    networkCanvas.style.setProperty('--network-color', color);
-    groupPanel.apply(value);
-  };
 
   const resetBrainSaves = (value: number | 'mixed') => {
     if (value === 'mixed') {
@@ -118,7 +71,7 @@ export default async (state: typeof defaultState) => {
   };
 
   // group actions + trainer readouts, shown while a brain group is followed
-  const groupPanel = createGroupActions({
+  const groupActions: GroupActionsOptions = {
     game: 'climb',
     io,
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
@@ -138,48 +91,7 @@ export default async (state: typeof defaultState) => {
       race.setTrainFrom(v, target);
     },
     teacherScore: (v) => race.teacherScore(v),
-  });
-
-  const followBtns = new Map<
-    HTMLButtonElement,
-    { key: string; running?: boolean }
-  >();
-  const makeFollowBtn = (key: string, label: string, title: string) => {
-    const btn = document.createElement('button');
-    btn.className = 'follow-btn';
-    const color =
-      key === '0'
-        ? '#c4c4c4'
-        : key === 'mixed'
-          ? config.MIXED_COLOR
-          : layerColor(Number(key), config.MAX_NETWORK_LAYERS);
-    // the button wears its group's color, like the board rows
-    btn.style.setProperty('--btn-color', color);
-    btn.style.setProperty('--btn-text', contrastText(color));
-    btn.textContent = label;
-    btn.title = title;
-    btn.dataset.follow = key;
-    btn.onclick = () => setFollow(key === 'mixed' ? 'mixed' : Number(key) || 0);
-    followBtns.set(btn, { key });
-    return btn;
   };
-  followKeys.append(followLabel);
-  for (let layer = 1; layer <= config.MAX_NETWORK_LAYERS; layer++)
-    followKeys.append(
-      makeFollowBtn(String(layer), `brain ${layer}`, `follow brain ${layer}`),
-    );
-  followKeys.append(makeFollowBtn('0', 'all', 'follow the best climber'));
-  followKeys.append(makeFollowBtn('mixed', 'mixed', 'follow the mixed brain'));
-
-  // the brain preview lives in the panel at a fixed 4:3 shape
-  const netWrap = document.createElement('div');
-  netWrap.style.aspectRatio = '4 / 3';
-  netWrap.style.flex = '0 0 auto';
-  netWrap.style.position = 'relative';
-  networkCanvas.style.position = 'absolute';
-  networkCanvas.style.left = '0';
-  networkCanvas.style.top = '0';
-  netWrap.append(networkCanvas);
 
   const about = document.createElement('div');
   about.className = 'side-panel-about';
@@ -192,18 +104,24 @@ export default async (state: typeof defaultState) => {
 
   const frameMeter = createFrameMeter();
 
-  const panelContent = document.createElement('div');
-  panelContent.className = 'side-panel-content';
-  panelContent.append(
-    followKeys,
-    groupPanel.el,
-    netWrap,
-    createCollapsibleSection(about),
-  );
-
-  panel.append(toggleBtn, panelContent);
+  // the trainer aside: follow buttons, group actions and the brain preview
+  const panel = createSidePanel({
+    groupActions,
+    content: about,
+    buttonColor: (v) =>
+      v === 'mixed'
+        ? config.MIXED_COLOR
+        : v === 0
+          ? '#c4c4c4'
+          : layerColor(v, config.MAX_NETWORK_LAYERS),
+    initialOpen: !isDemo,
+    onFollow: (value) => {
+      follow = value;
+      humanFollow = false;
+    },
+  });
   // the demo profile hides the whole panel instead of starting it collapsed
-  if (!isDemo) document.body.appendChild(panel);
+  if (!isDemo) document.body.appendChild(panel.el);
 
   // the frame counter anchors to the stage, not the panel; demo hides it too
   if (!isDemo) stage.appendChild(frameMeter.el);
@@ -349,13 +267,6 @@ export default async (state: typeof defaultState) => {
     if (e.code === 'KeyR') race.applyUserSeed(Math.floor(Math.random() * 1000));
   };
   document.addEventListener('keydown', onKey);
-  // unified follow shortcuts: 1-9 a brain group, 0 the best climber,
-  // backquote the mixed brain
-  bindFollowKeys({
-    digit: (layer) => setFollow(layer),
-    all: () => setFollow(0),
-    mixed: () => setFollow('mixed'),
-  });
 
   /** world-space y at the bottom of the view; the camera only ever climbs */
   let camTop = 0;
@@ -375,7 +286,6 @@ export default async (state: typeof defaultState) => {
     }
   })();
   race.initialize();
-  setFollow(0);
 
   const followedPlayer = (): Player | undefined => {
     const h = state.human;
@@ -428,20 +338,10 @@ export default async (state: typeof defaultState) => {
       }
 
       // the game canvas keeps whatever width the open panel leaves
-      const panelWidth = Math.round(
-        Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH),
-      );
-      const gameWidth = panelOpen
-        ? window.innerWidth - panelWidth
+      const gameWidth = panel.isOpen()
+        ? window.innerWidth - panel.panelWidth()
         : window.innerWidth;
       resizeCanvas(gameCanvas, gameCtx, gameWidth, window.innerHeight);
-      if (panelOpen)
-        resizeCanvas(
-          networkCanvas,
-          networkCtx,
-          netWrap.clientWidth,
-          netWrap.clientHeight,
-        );
 
       // camera: the whole tower width always fits and centers the followed
       // player's body. It targets location only; velocity never predicts the
@@ -565,9 +465,9 @@ export default async (state: typeof defaultState) => {
       }
 
       const followedBrain = followed?.brain;
-      if (panelOpen && followedBrain)
+      if (panel.isOpen() && followedBrain)
         neuralVisualizer.renderNetwork(
-          networkCtx,
+          panel.network().ctx,
           followedBrain,
           followed?.teacher ?? null,
           followed?.distillErrors ?? null,
@@ -621,14 +521,7 @@ export default async (state: typeof defaultState) => {
         p.brain instanceof MixedNetwork ? 'mixed' : String(p.brainLayers),
       );
     }
-    followBtns.forEach((info, btn) => {
-      const isRunning =
-        info.key === '0' ? state.living > 0 : running.has(info.key);
-      if (isRunning === info.running) return;
-      info.running = isRunning;
-      btn.classList.toggle('running', isRunning);
-      btn.classList.toggle('dead', !isRunning);
-    });
+    panel.setRunning(running, state.living > 0);
   }
 };
 

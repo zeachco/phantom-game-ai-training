@@ -4,18 +4,12 @@ import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText, getColorScale } from '../../utilities/colors';
-import {
-  bindSidePanelToggle,
-  createCanvas,
-  createCollapsibleSection,
-  createFrameMeter,
-  resizeCanvas,
-} from '../../utilities/dom';
+import { getColorScale } from '../../utilities/colors';
+import { createFrameMeter } from '../../utilities/dom';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
-import { bindFollowKeys } from '../../utilities/followKeys';
-import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import type { GroupActionsOptions } from '../../utilities/groupActions';
+import { createSidePanel } from '../../utilities/sidePanel';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
@@ -31,11 +25,6 @@ import type { defaultState, Group } from './utilities';
 type CaveState = typeof defaultState;
 
 const neuralVisualizer = new Visualizer(config);
-
-/** the panel takes that share of the screen while open, capped in width,
- * the 3D cave keeps whatever is left */
-const PANEL_RATIO = 0.75;
-const PANEL_MAX_WIDTH = 800;
 
 /** how many per-frame jump samples the action button's history holds */
 const JUMP_HISTORY = 80;
@@ -129,11 +118,7 @@ export default async (state: CaveState) => {
   stage.appendChild(scoreBoard.el);
 
   // ---- side panel: brain follow keys, group actions and the live network
-  // visualization ported from the circuit game. It starts hidden. ----
-  const networkCanvas = createCanvas();
-  networkCanvas.className = 'neural-canvas';
-  const networkCtx = networkCanvas.getContext('2d');
-
+  // visualization ported from the circuit game. ----
   /** 0 follows the best-scoring AI ball, 1-9 that brain layer, 'mixed' the
    *  mixed brain; the human ball takes over while the player drives */
   let follow: number | 'mixed' = 0;
@@ -144,53 +129,6 @@ export default async (state: CaveState) => {
   let followTargetSince = 0;
   const FOLLOW_SWITCH_SCORE_GAP = 5;
   const FOLLOW_SWITCH_MIN_MS = 5_000;
-  let panelOpen = false;
-
-  const panel = document.createElement('aside');
-  panel.className = 'side-panel';
-  panel.style.width = `${PANEL_RATIO * 100}%`;
-  panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
-
-  const toggleBtn = document.createElement('button');
-  toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❮';
-  toggleBtn.setAttribute('aria-label', 'Toggle models panel');
-  toggleBtn.setAttribute('title', 'F12 to toggle');
-  const togglePanel = () => {
-    panelOpen = panel.classList.toggle('open');
-    toggleBtn.textContent = panelOpen ? '❯' : '❮';
-    groupPanel.setOpen(panelOpen);
-  };
-  toggleBtn.onclick = togglePanel;
-  // F12 or L open the panel like the tab button does
-  bindSidePanelToggle(togglePanel);
-
-  const followKeys = document.createElement('div');
-  followKeys.className = 'follow-keys';
-  const followLabel = document.createElement('span');
-  followLabel.textContent = 'Follow';
-
-  const setFollow = (value: number | 'mixed') => {
-    follow = value;
-    followTarget = undefined;
-    followKeys.querySelectorAll('button').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.follow === String(value));
-    });
-    // Mixed colors change every frame, so mixed and "all" keep a neutral DOM
-    // outline instead of repainting the panel continuously.
-    const color =
-      typeof value === 'number' && value > 0
-        ? layerColor(value, config.MAX_NETWORK_LAYERS)
-        : '#c4c4c4';
-    networkCanvas.style.setProperty('--network-color', color);
-    groupPanel.apply(value);
-  };
-
-  /** one entry per follow button: brain 1-9, all AI, mixed */
-  const followBtns = new Map<
-    HTMLButtonElement,
-    { key: string; running?: boolean }
-  >();
 
   const resetBrainSaves = (value: number | 'mixed') => {
     if (value === 'mixed') {
@@ -214,7 +152,7 @@ export default async (state: CaveState) => {
   };
 
   // group actions + trainer readouts, shown while a brain group is followed
-  const groupPanel = createGroupActions({
+  const groupActions: GroupActionsOptions = {
     game: 'cave',
     io,
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
@@ -237,57 +175,7 @@ export default async (state: CaveState) => {
       race.setTrainFrom(v, target);
     },
     teacherScore: (v) => race.teacherScore(v),
-  });
-
-  followKeys.append(followLabel);
-  (
-    [
-      ['brain 1', 1],
-      ['brain 2', 2],
-      ['brain 3', 3],
-      ['brain 4', 4],
-      ['brain 5', 5],
-      ['brain 6', 6],
-      ['brain 7', 7],
-      ['brain 8', 8],
-      ['brain 9', 9],
-      ['all', 0],
-      ['mixed', 'mixed'],
-    ] as [string, number | 'mixed'][]
-  ).forEach(([label, value]) => {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.dataset.follow = String(value);
-    btn.title = 'Click to follow';
-    const color =
-      typeof value === 'number' && value > 0
-        ? layerColor(value, config.MAX_NETWORK_LAYERS)
-        : '#c4c4c4';
-    btn.style.setProperty('--btn-color', color);
-    // black or white, whichever keeps the higher contrast on the ball color
-    btn.style.setProperty('--btn-text', contrastText(color));
-    followKeys.append(btn);
-    followBtns.set(btn, { key: String(value) });
-    btn.onclick = () => setFollow(value);
-  });
-  setFollow(0);
-  // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
-  // backquote the mixed brain
-  bindFollowKeys({
-    digit: (layer) => setFollow(layer),
-    all: () => setFollow(0),
-    mixed: () => setFollow('mixed'),
-  });
-
-  // the brain preview lives in the panel at a fixed 4:3 shape
-  const netWrap = document.createElement('div');
-  netWrap.style.aspectRatio = '4 / 3';
-  netWrap.style.flex = '0 0 auto';
-  netWrap.style.position = 'relative';
-  networkCanvas.style.position = 'absolute';
-  networkCanvas.style.left = '0';
-  networkCanvas.style.top = '0';
-  netWrap.append(networkCanvas);
+  };
 
   const legend = document.createElement('div');
   legend.className = 'side-panel-legend';
@@ -317,18 +205,23 @@ export default async (state: CaveState) => {
   info.className = 'side-panel-info';
   info.append(about, legend);
 
-  const panelContent = document.createElement('div');
-  panelContent.className = 'side-panel-content';
-  panelContent.append(
-    followKeys,
-    groupPanel.el,
-    netWrap,
-    createCollapsibleSection(info),
-  );
-
-  panel.append(toggleBtn, panelContent);
+  // the trainer aside: follow buttons, group actions and the brain preview
+  const panel = createSidePanel({
+    groupActions,
+    content: info,
+    buttonColor: (v) =>
+      typeof v === 'number' && v > 0
+        ? layerColor(v, config.MAX_NETWORK_LAYERS)
+        : '#c4c4c4',
+    initialOpen: !isDemo,
+    onFollow: (value) => {
+      follow = value;
+      // a manual change picks the category leader right away
+      followTarget = undefined;
+    },
+  });
   // the demo profile hides the whole panel instead of starting it collapsed
-  if (!isDemo) document.body.appendChild(panel);
+  if (!isDemo) document.body.appendChild(panel.el);
 
   // the frame counter anchors to the stage, not the panel; demo hides it too
   if (!isDemo) stage.appendChild(frameMeter.el);
@@ -590,14 +483,7 @@ export default async (state: CaveState) => {
         ball.brain instanceof MixedNetwork ? 'mixed' : String(ball.brainLayers),
       );
     }
-    followBtns.forEach((info, btn) => {
-      const isRunning =
-        info.key === '0' ? state.living > 0 : running.has(info.key);
-      if (isRunning === info.running) return;
-      info.running = isRunning;
-      btn.classList.toggle('running', isRunning);
-      btn.classList.toggle('dead', !isRunning);
-    });
+    panel.setRunning(running, state.living > 0);
   }
 
   /** A group's best score: the highest of its current-cave live high and every
@@ -656,7 +542,9 @@ export default async (state: CaveState) => {
       if (!group.distillRun) continue;
       const trainee = group.pool[0];
       if (!trainee) continue;
-      const label = group.isMixed ? 'mixed trainee' : `brain ${group.layer} trainee`;
+      const label = group.isMixed
+        ? 'mixed trainee'
+        : `brain ${group.layer} trainee`;
       const color = group.isMixed
         ? config.MIXED_COLOR
         : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
@@ -677,27 +565,19 @@ export default async (state: CaveState) => {
     );
   }
 
-  /** The 3D viewport and the network canvas split the window while the panel
-   *  is open, exactly like the circuit game. */
+  /** The 3D viewport and the panel split the window, exactly like the
+   *  circuit game. */
   let viewWidth = window.innerWidth;
   function layoutViewport() {
-    const panelWidth = Math.round(
-      Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH),
-    );
-    const next = panelOpen ? window.innerWidth - panelWidth : window.innerWidth;
+    const next = panel.isOpen()
+      ? window.innerWidth - panel.panelWidth()
+      : window.innerWidth;
     if (next !== viewWidth) {
       viewWidth = next;
       renderer.setSize(next, window.innerHeight);
       camera.aspect = next / window.innerHeight;
       camera.updateProjectionMatrix();
     }
-    if (panelOpen)
-      resizeCanvas(
-        networkCanvas,
-        networkCtx,
-        netWrap.clientWidth,
-        netWrap.clientHeight,
-      );
   }
 
   const loop = new GameLoop();
@@ -798,9 +678,9 @@ export default async (state: CaveState) => {
     const visualized = followed.useAI
       ? followed
       : state.balls.find((ball) => ball.useAI && !ball.damaged);
-    if (panelOpen && visualized?.brain)
+    if (panel.isOpen() && visualized?.brain)
       neuralVisualizer.renderNetwork(
-        networkCtx,
+        panel.network().ctx,
         visualized.brain,
         visualized.teacher,
         visualized.distillErrors,

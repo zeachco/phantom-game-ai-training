@@ -11,19 +11,17 @@ import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
-import { contrastText, getColorScale } from '../../utilities/colors';
+import { getColorScale } from '../../utilities/colors';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import {
-  bindSidePanelToggle,
   createCanvas,
-  createCollapsibleSection,
   createFrameMeter,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
-import { bindFollowKeys } from '../../utilities/followKeys';
-import { createGroupActions } from '../../utilities/groupActions';
 import { createScoreBoard } from '../../utilities/scoreBoard';
+import type { GroupActionsOptions } from '../../utilities/groupActions';
+import { createSidePanel } from '../../utilities/sidePanel';
 import { bestSavedModelScore } from '../../utilities/scoreRecords';
 import {
   loadTrainFroms,
@@ -47,10 +45,6 @@ const io = fileUtilities('highway', makeSubmitChecker('highway'));
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
 
-/** the panel takes that share of the screen while open, capped in width */
-const PANEL_RATIO = 0.75;
-const PANEL_MAX_WIDTH = 800;
-
 export default async (state: typeof defaultState) => {
   // the stage overlays the canvas; the narrow road strip centers inside it,
   // and everything else tracks the canvas edges instead of the viewport
@@ -59,11 +53,7 @@ export default async (state: typeof defaultState) => {
   carCanvas.style.display = 'block';
   carCanvas.style.marginInline = 'auto';
   stage.appendChild(carCanvas);
-  const networkCanvas = createCanvas();
-  networkCanvas.className = 'neural-canvas';
-
   const carCtx = carCanvas.getContext('2d');
-  const networkCtx = networkCanvas.getContext('2d');
 
   carCanvas.width = 200;
 
@@ -72,38 +62,6 @@ export default async (state: typeof defaultState) => {
   /** world y mapped to the follow line, it lerps so target switches animate */
   let camY = 0;
   let camSet = false;
-
-  const panel = document.createElement('aside');
-  panel.className = 'side-panel';
-  panel.style.width = `${PANEL_RATIO * 100}%`;
-  panel.style.maxWidth = `${PANEL_MAX_WIDTH}px`;
-  let panelOpen = false;
-
-  const toggleBtn = document.createElement('button');
-  toggleBtn.className = 'side-panel-toggle';
-  toggleBtn.textContent = '❮';
-  toggleBtn.setAttribute('title', 'F12 to toggle');
-  toggleBtn.setAttribute('aria-label', 'Toggle models panel');
-
-  const followKeys = document.createElement('div');
-  followKeys.className = 'follow-keys';
-  const followLabel = document.createElement('span');
-  followLabel.textContent = 'Follow';
-
-  const setFollow = (value: number | 'mixed') => {
-    follow = value;
-    followKeys.querySelectorAll('button').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.follow === String(value));
-    });
-    groupPanel.apply(value);
-  };
-
-  /** car buttons: key 0 any car, 1-9 that brain layer, 'mixed' the mix,
-   *  running stays undefined until the first pass so the classes always paint */
-  const followBtns = new Map<
-    HTMLButtonElement,
-    { key: string; running?: boolean }
-  >();
 
   const resetBrainSaves = (value: number | 'mixed') => {
     if (value === 'mixed') {
@@ -184,7 +142,7 @@ export default async (state: typeof defaultState) => {
   };
 
   // group actions + trainer readouts, shown while a brain group is followed
-  const groupPanel = createGroupActions({
+  const groupActions: GroupActionsOptions = {
     game: 'highway',
     io,
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
@@ -209,61 +167,7 @@ export default async (state: typeof defaultState) => {
       if (target === undefined) return null;
       return championOf(target)?.score ?? null;
     },
-  });
-
-  followKeys.append(followLabel);
-  (
-    [
-      ['brain 1', 1],
-      ['brain 2', 2],
-      ['brain 3', 3],
-      ['brain 4', 4],
-      ['brain 5', 5],
-      ['brain 6', 6],
-      ['brain 7', 7],
-      ['brain 8', 8],
-      ['brain 9', 9],
-      ['all', 0],
-      ['mixed', 'mixed'],
-    ] as [string, number | 'mixed'][]
-  ).forEach(([label, value]) => {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.dataset.follow = String(value);
-    btn.title = 'Click to follow';
-    const color =
-      value === 'mixed'
-        ? config.MIXED_COLOR
-        : value === 0
-          ? undefined
-          : layerColor(value, config.MAX_NETWORK_LAYERS);
-    if (color) {
-      btn.style.setProperty('--btn-color', color);
-      // black or white, whichever keeps the higher contrast on the car color
-      btn.style.setProperty('--btn-text', contrastText(color));
-    }
-    followKeys.append(btn);
-    followBtns.set(btn, { key: String(value) });
-    btn.onclick = () => setFollow(value);
-  });
-  setFollow(0);
-  // unified follow shortcuts: 1-9 a brain group, 0 the overall leader,
-  // backquote the mixed brain
-  bindFollowKeys({
-    digit: (layer) => setFollow(layer),
-    all: () => setFollow(0),
-    mixed: () => setFollow('mixed'),
-  });
-
-  // the brain preview lives in the panel at a fixed 4:3 shape
-  const netWrap = document.createElement('div');
-  netWrap.style.aspectRatio = '4 / 3';
-  netWrap.style.flex = '0 0 auto';
-  netWrap.style.position = 'relative';
-  networkCanvas.style.position = 'absolute';
-  networkCanvas.style.left = '0';
-  networkCanvas.style.top = '0';
-  netWrap.append(networkCanvas);
+  };
 
   const legend = document.createElement('div');
   legend.className = 'side-panel-legend';
@@ -285,26 +189,22 @@ export default async (state: typeof defaultState) => {
 
   const frameMeter = createFrameMeter();
 
-  const panelContent = document.createElement('div');
-  panelContent.className = 'side-panel-content';
-  panelContent.append(
-    followKeys,
-    groupPanel.el,
-    netWrap,
-    createCollapsibleSection(legend),
-  );
-
-  panel.append(toggleBtn, panelContent);
-  document.body.appendChild(panel);
-
-  const togglePanel = () => {
-    panelOpen = panel.classList.toggle('open');
-    toggleBtn.textContent = panelOpen ? '❯' : '❮';
-    groupPanel.setOpen(panelOpen);
-  };
-  toggleBtn.onclick = togglePanel;
-  // F12 or L open the panel like the tab button does
-  bindSidePanelToggle(togglePanel);
+  // the trainer aside: follow buttons, group actions and the brain preview
+  const panel = createSidePanel({
+    groupActions,
+    content: legend,
+    buttonColor: (v) =>
+      v === 'mixed'
+        ? config.MIXED_COLOR
+        : v === 0
+          ? undefined
+          : layerColor(v, config.MAX_NETWORK_LAYERS),
+    initialOpen: true,
+    onFollow: (value) => {
+      follow = value;
+    },
+  });
+  document.body.appendChild(panel.el);
 
   const scoreBoard = createScoreBoard();
   stage.appendChild(scoreBoard.el);
@@ -543,13 +443,6 @@ export default async (state: typeof defaultState) => {
     if (domUpdateDue) updateFollowButtons();
 
     resizeCanvas(carCanvas, carCtx, carCanvas.width, window.innerHeight);
-    if (panelOpen)
-      resizeCanvas(
-        networkCanvas,
-        networkCtx,
-        netWrap.clientWidth,
-        netWrap.clientHeight,
-      );
 
     const camTarget = followedCar();
     if (camTarget) {
@@ -627,11 +520,11 @@ export default async (state: typeof defaultState) => {
     }
 
     const followed = camTarget?.brain;
-    if (followed) {
+    if (panel.isOpen() && followed) {
       // a distilling car shows its brain next to its teacher, with the live
       // training error on the controls
       neuralVisualizer.renderNetwork(
-        networkCtx,
+        panel.network().ctx,
         followed,
         camTarget?.teacher ?? null,
         camTarget?.distillErrors ?? null,
@@ -737,23 +630,14 @@ export default async (state: typeof defaultState) => {
   /** car buttons stay filled with their car color while the category
    *  races, and turn to an outline once its last car is dead */
   function updateFollowButtons() {
-    followBtns.forEach((info, btn) => {
-      const running =
-        info.key === '0'
-          ? state.living > 0
-          : state.cars.some(
-              (car) =>
-                !car.damaged &&
-                (info.key === 'mixed'
-                  ? car.brain instanceof MixedNetwork
-                  : car.brainLayers === Number(info.key) &&
-                    !(car.brain instanceof MixedNetwork)),
-            );
-      if (running === info.running) return;
-      info.running = running;
-      btn.classList.toggle('running', running);
-      btn.classList.toggle('dead', !running);
-    });
+    const running = new Set<string>();
+    for (const car of state.cars) {
+      if (car.damaged) continue;
+      running.add(
+        car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers),
+      );
+    }
+    panel.setRunning(running, state.living > 0);
   }
 
   function followedCar(): Car | undefined {
