@@ -317,7 +317,10 @@ export class Car {
           // distillation: the teacher drives the car, the own brain
           // backpropagates toward the teacher's applied output on the same
           // inputs
-          outputs = this.teacher.process(inputs);
+          // Network.process reuses its output array. distillStep evaluates
+          // probe inputs after the live action, so keep the teacher's actual
+          // action before those probes overwrite it.
+          outputs = this.teacher.process(inputs).slice();
           this.distiller = distillStep(
             this.distiller,
             this.brain,

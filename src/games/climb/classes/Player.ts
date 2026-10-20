@@ -297,7 +297,10 @@ export class Player {
           // distillation: the teacher drives the climber, the own brain
           // backpropagates toward the teacher's applied output on the same
           // inputs
-          outputs = this.teacher.process(readings);
+          // Network.process reuses its output array. distillStep evaluates
+          // probe inputs after the live action, so keep the teacher's actual
+          // action before those probes overwrite it.
+          outputs = this.teacher.process(readings).slice();
           this.distiller = distillStep(
             this.distiller,
             this.brain,
