@@ -53,9 +53,12 @@ the followed car and shifts the camera ahead to show more of the track.
 - The moment a car sets a new high on the current track, its brain is saved
   at the front of the group's hall of fame, the new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
-  seed input field changes it on demand, and any car completing
-  LAPS_PER_SEED (3) full laps advances it by 1 — finishing is a save point,
-  the finishing brain is saved first, like a crash. Each finished map's high
+  seed input field changes it on demand, and six regular brain groups must
+  each complete LAPS_PER_SEED (3) full laps before it advances by 1; mixed and
+  player finishes do not count. Each new group finisher also sends the lowest
+  scoring group into guide training from the group with the fastest lap on the
+  track. Finishing is a save point, the finishing brain is saved first, like a
+  crash. Each finished map's high
   is recorded separately per seed for HUD reference, but every generated map
   starts with a fresh comparison bar, including when a seed is revisited, so
   mutated brains have a reachable goal. Groups that finished that seed return

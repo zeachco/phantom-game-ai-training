@@ -48,6 +48,8 @@ export class CircuitRace {
 
   #experts: NeuralNetwork[] = [];
   #completedBrainIndices = new Set<string>();
+  /** regular architecture groups that have finished this track once */
+  #completedTrackGroups = new Set<string>();
   #completedFinishes = new Map<
     string,
     { score: number | null; totalFrames: number }
@@ -56,6 +58,7 @@ export class CircuitRace {
   #bestCheckpointFrames: number[] = [];
   /** fastest completed lap and finish on the current track */
   #bestLapFrames = Infinity;
+  #bestLapGroup: Group | null = null;
   #bestFinishFrames = Infinity;
   #humanFinishCelebrated = false;
   #pendingSaves = new Set<Group>();
@@ -518,7 +521,25 @@ export class CircuitRace {
     car.lastLapDelta = Number.isFinite(this.#bestLapFrames)
       ? frames - this.#bestLapFrames
       : null;
-    if (frames < this.#bestLapFrames) this.#bestLapFrames = frames;
+    if (frames < this.#bestLapFrames) {
+      this.#bestLapFrames = frames;
+      this.#bestLapGroup = this.#groupOf(car) ?? null;
+    }
+  }
+
+  /** After a new group finishes, guide the lowest-scoring other group from
+   *  the group that has set the fastest lap on this track. */
+  #trainLowestGroupFromBestLap() {
+    const guide = this.#bestLapGroup;
+    if (!guide || !Number.isFinite(this.#bestLapFrames)) return;
+    const student = this.groups
+      .filter((group) => group !== guide)
+      .sort((a, b) => a.scores.seed - b.scores.seed)[0];
+    if (!student) return;
+    this.setTrainFrom(
+      student.isMixed ? 'mixed' : student.layer,
+      guide.isMixed ? 'mixed' : guide.layer,
+    );
   }
 
   /** Record the final total before it becomes the new track reference. */
@@ -702,10 +723,12 @@ export class CircuitRace {
     this.#onSeedChanged?.(this.seed);
     this.circuit = new Circuit(this.seed);
     this.#completedBrainIndices.clear();
+    this.#completedTrackGroups.clear();
     this.#completedFinishes.clear();
     this.#humanFinishCelebrated = false;
     this.#bestCheckpointFrames = [];
     this.#bestLapFrames = Infinity;
+    this.#bestLapGroup = null;
     this.#bestFinishFrames = Infinity;
     this.seedChangeAt = 0;
     this.state.circuit = this.circuit;
@@ -740,6 +763,7 @@ export class CircuitRace {
   public initialize() {
     this.#bestCheckpointFrames = [];
     this.#bestLapFrames = Infinity;
+    this.#bestLapGroup = null;
     this.#bestFinishFrames = Infinity;
     this.#humanFinishCelebrated = false;
     Object.assign(this.state, defaultState);
@@ -789,6 +813,7 @@ export class CircuitRace {
       group.teacher =
         group.trainFrom === null ? null : this.#teacherBrain(group.trainFrom);
     let savePoint = false;
+    let newlyFinishedGroup = false;
     for (const car of this.state.cars) {
       const alive = !car.damaged;
       const racing = !car.finished;
@@ -796,6 +821,15 @@ export class CircuitRace {
       car.teacher = group?.teacher ?? null;
       car.distillRun = group?.distillRun ?? false;
       car.update(this.state.obstacles, this.circuit);
+      // Let the guide complete two laps, then switch this same car to its own
+      // brain on the next frame. Keeping the pool intact preserves its exact
+      // position, velocity, checkpoint progress, and lap timing.
+      if (car.completedLap && car.laps >= 2 && group?.distillRun) {
+        this.#keepTrainedBrain(group);
+        group.trainFrom = null;
+        group.distillRun = false;
+        saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
+      }
       this.#recordCheckpointTiming(car);
       if (car.completedLap) this.#recordLapTiming(car);
       if (racing && car.finished && !car.damaged) this.#recordFinishTiming(car);
@@ -845,6 +879,14 @@ export class CircuitRace {
               ? 'mixed'
               : String(car.brainLayers);
         this.#completedBrainIndices.add(brainIndex);
+        if (
+          group &&
+          !group.isMixed &&
+          !this.#completedTrackGroups.has(group.key)
+        ) {
+          this.#completedTrackGroups.add(group.key);
+          newlyFinishedGroup = true;
+        }
         const previousFinish = this.#completedFinishes.get(brainIndex);
         if (
           !previousFinish ||
@@ -871,7 +913,9 @@ export class CircuitRace {
       }
     }
 
-    if (this.#completedBrainIndices.size >= 3 && !this.seedChangeAt) {
+    if (newlyFinishedGroup) this.#trainLowestGroupFromBestLap();
+
+    if (this.#completedTrackGroups.size >= 6 && !this.seedChangeAt) {
       this.flushPendingSaves();
       this.seedChangeAt = now + 10_000;
     }
