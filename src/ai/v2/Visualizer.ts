@@ -345,28 +345,64 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       );
     }
 
-    const half = (ctx.canvas.width - MARGIN * 3) / 2;
-    const expertLabels = indexLabels(network.experts.length);
-    this.#drawNetwork(
-      ctx,
-      network,
-      MARGIN,
-      half,
-      expertLabels,
-      this.#mainLinks,
-    );
-
     const expert = network.activeExpert;
-    if (expert) {
-      this.#drawNetwork(
-        ctx,
-        expert,
-        MARGIN * 2 + half,
-        half,
-        CONTROL_LABELS,
-        this.#expertLinks,
-      );
+    if (expert) this.#drawMixedView(ctx, network, expert);
+  }
+
+  /** The selector and its active expert read one shared sensor row, while
+   * their distinct decisions remain on opposite sides of the center gap. */
+  #drawMixedView(
+    ctx: CanvasRenderingContext2D,
+    selector: MixedNetwork,
+    expert: NeuralNetwork,
+  ) {
+    const half = Math.max(1, (ctx.canvas.width - MARGIN * 3) / 2);
+    const left = MARGIN;
+    const right = MARGIN * 2 + half;
+    const sharedInputs = nodePositions(
+      selector.levels[0]?.inputs.length ?? 0,
+      MARGIN,
+      ctx.canvas.width - MARGIN,
+    );
+    const selectorLayouts = this.#layout(
+      ctx,
+      selector,
+      left,
+      half,
+      indexLabels(selector.experts.length),
+    ).map((layout) => ({ ...layout }));
+    const expertLayouts = this.#layout(
+      ctx,
+      expert,
+      right,
+      half,
+      CONTROL_LABELS,
+    ).map((layout) => ({ ...layout }));
+    for (const layouts of [selectorLayouts, expertLayouts]) {
+      const input = layouts[layouts.length - 1];
+      if (input) {
+        input.inputX = sharedInputs;
+        input.bottom = ctx.canvas.height - MARGIN;
+      }
     }
+    if (this.renderLines) {
+      this.#mainLinks.draw(ctx, selector, selectorLayouts, left, half, 'mixed-selector');
+      this.#expertLinks.draw(ctx, expert, expertLayouts, right, half, 'mixed-expert');
+    }
+    this.#drawNodes(ctx, selectorLayouts, true);
+    this.#drawNodes(ctx, expertLayouts, true);
+    const first = selectorLayouts[selectorLayouts.length - 1];
+    this.#drawRow(
+      ctx,
+      sharedInputs,
+      first?.bottom ?? ctx.canvas.height - MARGIN,
+      rowRadius(ctx.canvas.width - MARGIN * 2, sharedInputs.length),
+      selector.levels[0]?.inputs ?? [],
+      'rgba(0, 0, 0, 0.65)',
+      'orange',
+      'green',
+      true,
+    );
   }
 
   #drawNetwork(
@@ -455,7 +491,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
    * Each node is one thin socket ring, and the arc around it is the gauge,
    * whole rows stroked in a single pass per sign.
    */
-  #drawNodes(ctx: CanvasRenderingContext2D, layouts: LevelLayout[]) {
+  #drawNodes(ctx: CanvasRenderingContext2D, layouts: LevelLayout[], skipFirstInputs = false) {
     ctx.setLineDash(NO_DASH);
     ctx.lineWidth = 2;
     ctx.textAlign = 'center';
@@ -465,17 +501,19 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       const { level, top, bottom, radius, inputX, outputX, labels } =
         layouts[i];
 
-      this.#drawRow(
-        ctx,
-        inputX,
-        bottom,
-        radius,
-        level.inputs,
-        'rgba(0, 0, 0, 0.65)',
-        'orange',
-        'green',
-        true,
-      );
+      if (!(skipFirstInputs && i === layouts.length - 1)) {
+        this.#drawRow(
+          ctx,
+          inputX,
+          bottom,
+          radius,
+          level.inputs,
+          'rgba(0, 0, 0, 0.65)',
+          'orange',
+          'green',
+          true,
+        );
+      }
       this.#drawRow(
         ctx,
         outputX,
