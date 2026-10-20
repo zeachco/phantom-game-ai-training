@@ -663,6 +663,12 @@ export class CircuitRace {
     if (car.useAI) {
       const group = this.#groupOf(car);
       if (group) {
+        if (group.distillRun) {
+          this.#keepTrainedBrain(group);
+          group.trainFrom = null;
+          group.distillRun = false;
+          saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
+        }
         this.#settle(group, car);
         if (
           !group.distillRun &&

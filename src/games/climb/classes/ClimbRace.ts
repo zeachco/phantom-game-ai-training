@@ -619,6 +619,12 @@ export class ClimbRace {
     if (player.useAI) {
       const group = this.#groupOf(player);
       if (group) {
+        if (group.distillRun) {
+          this.#keepTrainedBrain(group);
+          group.trainFrom = null;
+          group.distillRun = false;
+          saveTrainFrom('climb', group.isMixed ? 'mixed' : group.layer, null);
+        }
         this.#settle(group, player);
         // freeze the ghost when the record holder dies
         if (
@@ -626,7 +632,29 @@ export class ClimbRace {
           group.scores.seed > 0 &&
           (player.brain?.score ?? 0) >= group.scores.seed - Number.EPSILON
         ) {
-          group.ghostScore = player.brain?.score ?? 0;
+          // The record holder has left the live race. Promote the best
+          // remaining climber as the group's new active champion so the next
+          // generation and the local save follow the surviving line.
+          const nextBest = group.pool
+            .filter((candidate) => candidate !== player && !candidate.damaged)
+            .reduce<Player | null>(
+              (best, candidate) =>
+                !best || (candidate.brain?.score ?? 0) > (best.brain?.score ?? 0)
+                  ? candidate
+                  : best,
+              null,
+            );
+          if (nextBest?.brain) {
+            group.scores.seed = nextBest.brain.score;
+            group.seedBest = {
+              brain: JSON.parse(JSON.stringify(nextBest.brain)) as NeuralNetwork,
+              score: nextBest.brain.score,
+            };
+            group.ghostScore = player.brain?.score ?? 0;
+            this.#promote(group, nextBest);
+          } else {
+            group.ghostScore = player.brain?.score ?? 0;
+          }
           this.#pendingSaves.add(group);
         }
       }

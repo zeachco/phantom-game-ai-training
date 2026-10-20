@@ -638,6 +638,12 @@ export class CaveRace {
     if (ball.useAI) {
       const group = this.#groupOf(ball);
       if (group) {
+        if (group.distillRun) {
+          this.#keepTrainedBrain(group);
+          group.trainFrom = null;
+          group.distillRun = false;
+          saveTrainFrom('cave', group.isMixed ? 'mixed' : group.layer, null);
+        }
         // A gauge death is the ball's natural end of run: promote its brain
         // when it is the group's best so the next spawn mutates from it.
         this.#settle(group, ball);
