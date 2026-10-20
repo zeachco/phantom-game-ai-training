@@ -14,6 +14,7 @@ import {
 } from '../../../ai/utils';
 import { layerColor } from '../../../utilities/ai/colors';
 import { lerp } from '../../../utilities/math';
+import { globalRecordFromScores } from '../../../utilities/scoreRecords';
 import {
   loadTrainFroms,
   saveTrainFrom,
@@ -361,6 +362,7 @@ export class ClimbRace {
   public setTrainFrom(
     value: number | 'mixed',
     target: number | 'mixed' | null,
+    persist = true,
   ): boolean {
     const group = this.groups.find((candidate) =>
       value === 'mixed' ? candidate.isMixed : candidate.layer === value,
@@ -368,7 +370,7 @@ export class ClimbRace {
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
     if (target !== null) group.distillRun = true;
-    saveTrainFrom('climb', value, target);
+    if (persist) saveTrainFrom('climb', value, target);
     // a training run needs exactly one student player, so restart the group
     // with a single fresh one instead of leaving its whole swarm on the teacher
     if (target !== null) this.#restartAsStudent(group);
@@ -613,8 +615,30 @@ export class ClimbRace {
     this.state.living += group.pool.length;
   }
 
-  #onDeath(player: Player) {
+  /** Restart the weakest group as a student of the strongest available
+   *  champion, ranking groups by the global dashboard total. */
+  #autoTrainAfterGroupDeath(student: Group) {
+    const globalScore = (group: Group) =>
+      globalRecordFromScores(group.scores).globalScore;
+    if (globalScore(student) > Math.min(...this.groups.map(globalScore))) return;
+    const guide = this.groups
+      .filter(
+        (group) =>
+          group !== student &&
+          this.#teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
+      )
+      .sort((a, b) => globalScore(b) - globalScore(a))[0];
+    if (!guide || globalScore(guide) - globalScore(student) < 1) return;
+    this.setTrainFrom(
+      student.isMixed ? 'mixed' : student.layer,
+      guide.isMixed ? 'mixed' : guide.layer,
+      false,
+    );
+  }
+
+  #onDeath(player: Player): Group | null {
     this.state.living--;
+    let deadGroup: Group | null = null;
 
     if (player.useAI) {
       const group = this.#groupOf(player);
@@ -627,6 +651,8 @@ export class ClimbRace {
           saveTrainFrom('climb', group.isMixed ? 'mixed' : group.layer, null);
         }
         if (!wasDistillRun) this.#settle(group, player);
+        if (!wasDistillRun && group.pool.every((candidate) => candidate.damaged))
+          deadGroup = group;
         // freeze the ghost when the record holder dies
         if (
           !wasDistillRun &&
@@ -667,6 +693,7 @@ export class ClimbRace {
       this.#onHumanCrash?.();
     }
     this.flushPendingSaves();
+    return deadGroup;
   }
 
   #regenerateTower() {
@@ -754,15 +781,20 @@ export class ClimbRace {
       group.teacher =
         group.trainFrom === null ? null : this.#teacherBrain(group.trainFrom);
     let highest = 0;
+    const deadGroups = new Set<Group>();
     for (const player of this.state.players) {
       const alive = !player.damaged;
       const group = this.#groupOf(player);
       player.teacher = group?.teacher ?? null;
       player.distillRun = group?.distillRun ?? false;
       player.update(now);
-      if (alive && player.damaged) this.#onDeath(player);
+      if (alive && player.damaged) {
+        const deadGroup = this.#onDeath(player);
+        if (deadGroup) deadGroups.add(deadGroup);
+      }
       if (!player.damaged && player.y > highest) highest = player.y;
     }
+    for (const group of deadGroups) this.#autoTrainAfterGroupDeath(group);
     this.state.highestY = highest;
     // expired corpses leave the list: AI pools clean up at their respawn,
     // but a human corpse has no group to do that for it

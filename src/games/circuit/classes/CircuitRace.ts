@@ -25,6 +25,7 @@ import {
   brainId,
   defaultState,
   type Group,
+  globalRecordFromScores,
   loadScores,
   saveScores,
 } from '../utilities';
@@ -381,6 +382,7 @@ export class CircuitRace {
   public setTrainFrom(
     value: number | 'mixed',
     target: number | 'mixed' | null,
+    persist = true,
   ): boolean {
     const group = this.groups.find((candidate) =>
       value === 'mixed' ? candidate.isMixed : candidate.layer === value,
@@ -388,7 +390,7 @@ export class CircuitRace {
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
     if (target !== null) group.distillRun = true;
-    saveTrainFrom('circuit', value, target);
+    if (persist) saveTrainFrom('circuit', value, target);
     // a training run needs exactly one student car, so restart the group with
     // a single fresh one instead of leaving its whole swarm on the teacher
     if (target !== null) this.#restartAsStudent(group);
@@ -524,23 +526,24 @@ export class CircuitRace {
   }
 
   /** A fully crashed group can restart as a student if it has the lowest
-   *  current track score. The strongest other group supplies the guide. */
+   *  global dashboard score. The strongest other group supplies the guide. */
   #autoTrainAfterGroupDeath(student: Group) {
-    const lowestScore = Math.min(
-      ...this.groups.map((group) => group.scores.seed),
-    );
-    if (student.scores.seed > lowestScore) return;
+    const globalScore = (group: Group) =>
+      globalRecordFromScores(group.scores).globalScore;
+    const lowestScore = Math.min(...this.groups.map(globalScore));
+    if (globalScore(student) > lowestScore) return;
     const guide = this.groups
       .filter(
         (group) =>
           group !== student &&
           this.#teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
       )
-      .sort((a, b) => b.scores.seed - a.scores.seed)[0];
-    if (!guide) return;
+      .sort((a, b) => globalScore(b) - globalScore(a))[0];
+    if (!guide || globalScore(guide) - globalScore(student) < 1) return;
     this.setTrainFrom(
       student.isMixed ? 'mixed' : student.layer,
       guide.isMixed ? 'mixed' : guide.layer,
+      false,
     );
   }
 

@@ -8,6 +8,7 @@ import {
 } from '../../../ai/Mixed';
 import { NeuralNetwork } from '../../../ai/Network';
 import { brainIoMatches } from '../../../ai/distill';
+import { globalRecordFromScores } from '../../../utilities/scoreRecords';
 import {
   type fileUtilities,
   networkLevelSizes,
@@ -365,6 +366,7 @@ export class CaveRace {
   public setTrainFrom(
     value: number | 'mixed',
     target: number | 'mixed' | null,
+    persist = true,
   ): boolean {
     const group = this.groups.find((candidate) =>
       value === 'mixed' ? candidate.isMixed : candidate.layer === value,
@@ -372,7 +374,7 @@ export class CaveRace {
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
     if (target !== null) group.distillRun = true;
-    saveTrainFrom('cave', value, target);
+    if (persist) saveTrainFrom('cave', value, target);
     // a training run needs exactly one student ball, so restart the group with
     // a single fresh one instead of leaving its whole swarm on the teacher
     if (target !== null) this.#restartAsStudent(group);
@@ -631,9 +633,31 @@ export class CaveRace {
     this.state.living += group.pool.length;
   }
 
-  #onDeath(ball: Ball) {
+  /** Restart the weakest group as a student of the strongest available
+   *  champion, ranking groups by the global dashboard total. */
+  #autoTrainAfterGroupDeath(student: Group) {
+    const globalScore = (group: Group) =>
+      globalRecordFromScores(group.scores).globalScore;
+    if (globalScore(student) > Math.min(...this.groups.map(globalScore))) return;
+    const guide = this.groups
+      .filter(
+        (group) =>
+          group !== student &&
+          this.#teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
+      )
+      .sort((a, b) => globalScore(b) - globalScore(a))[0];
+    if (!guide || globalScore(guide) - globalScore(student) < 1) return;
+    this.setTrainFrom(
+      student.isMixed ? 'mixed' : student.layer,
+      guide.isMixed ? 'mixed' : guide.layer,
+      false,
+    );
+  }
+
+  #onDeath(ball: Ball): Group | null {
     this.state.living--;
     ball.deathTime = performance.now();
+    let deadGroup: Group | null = null;
 
     if (ball.useAI) {
       const group = this.#groupOf(ball);
@@ -648,6 +672,8 @@ export class CaveRace {
         // A gauge death is the ball's natural end of run: promote its brain
         // when it is the group's best so the next spawn mutates from it.
         if (!wasDistillRun) this.#settle(group, ball);
+        if (!wasDistillRun && group.pool.every((candidate) => candidate.damaged))
+          deadGroup = group;
         if (ball.deathCause === 'gauge') this.#pendingSaves.add(group);
         if (
           !wasDistillRun &&
@@ -667,6 +693,7 @@ export class CaveRace {
       this.spawnHuman();
       this.#onHumanCrash?.();
     }
+    return deadGroup;
   }
 
   #regenerateCave() {
@@ -753,6 +780,7 @@ export class CaveRace {
     // Stream the cave to cover every living ball.
     let minS = Infinity;
     let maxS = -Infinity;
+    const deadGroups = new Set<Group>();
     for (const ball of this.state.balls) {
       if (ball.damaged) continue;
       minS = Math.min(minS, ball.s);
@@ -797,7 +825,10 @@ export class CaveRace {
       ball.update(this.cave);
       if (racing && ball.finished && !ball.damaged)
         this.#recordFinishTiming(ball);
-      if (alive && ball.damaged) this.#onDeath(ball);
+      if (alive && ball.damaged) {
+        const deadGroup = this.#onDeath(ball);
+        if (deadGroup) deadGroups.add(deadGroup);
+      }
       if (racing && ball.finished && !ball.damaged) {
         const group = this.#groupOf(ball);
         if (group) {
@@ -817,6 +848,7 @@ export class CaveRace {
         }
       }
     }
+    for (const group of deadGroups) this.#autoTrainAfterGroupDeath(group);
 
     for (let i = this.state.balls.length - 1; i >= 0; i--) {
       const ball = this.state.balls[i];
