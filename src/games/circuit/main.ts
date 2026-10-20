@@ -628,16 +628,21 @@ export default async (state: typeof defaultState) => {
       }
       // the human car draws last, above every other car, no sensor fan
       const corpseNow = gameNow();
-      // off-screen cars cost a transform and two blits for nothing
+      // off-screen cars cost a transform and two blits for nothing, and past
+      // index 50 only the focused car and each group's original model (slot 0)
+      // still earn a draw; the human is excluded up front and drawn below
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         if (car === state.human) continue;
+        const keep = car === camTarget || car.brain.mutationIndex === 0;
         const box = car.aabb;
         if (
-          box.maxX < viewMinX ||
-          box.minX > viewMaxX ||
-          box.maxY < viewMinY ||
-          box.minY > viewMaxY
+          !keep &&
+          (i > 50 ||
+            box.maxX < viewMinX ||
+            box.minX > viewMaxX ||
+            box.maxY < viewMinY ||
+            box.minY > viewMaxY)
         )
           continue;
         if (car.damaged) {
@@ -673,6 +678,10 @@ export default async (state: typeof defaultState) => {
           camTarget?.distillErrors ?? null,
         );
       }
+      // the loss graph follows the student's distiller, null outside a run
+      panel.groupPanel.drawLossGraph(
+        camTarget?.distiller?.lossHistory ?? null,
+      );
       // The KeyS shortcut toggles the stats, now an inline DOM block in the cockpit.
       if (domUpdateDue) {
         const statsOn = neuralVisualizer.renderStats;

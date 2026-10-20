@@ -498,9 +498,16 @@ export default async (state: typeof defaultState) => {
     }
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
+      // off-screen cars cost a transform and a blit for nothing, and past
+      // index 50 only the focused car, the human and each group's original
+      // model (slot 0) still earn a draw
+      const keep =
+        car === camTarget ||
+        car === state.player ||
+        car.brain.mutationIndex === 0;
       if (
-        i !== 0 &&
-        (car.aabb.maxY < carViewMinY || car.aabb.minY > carViewMaxY)
+        !keep &&
+        (i > 50 || car.aabb.maxY < carViewMinY || car.aabb.minY > carViewMaxY)
       )
         continue;
       carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
@@ -550,6 +557,10 @@ export default async (state: typeof defaultState) => {
         camTarget?.distillErrors ?? null,
       );
     }
+    // the loss graph follows the student's distiller, null outside a run
+    panel.groupPanel.drawLossGraph(
+      camTarget?.distiller?.lossHistory ?? null,
+    );
     if (!state.playing) {
       carCtx.font = 'bold 24px Arial';
       carCtx.textBaseline = 'middle';
