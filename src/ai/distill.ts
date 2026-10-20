@@ -1,4 +1,5 @@
 import { type NeuralNetwork, type OutputRanges, teachingRate } from './Network';
+import { learningStepPercent } from '../utilities/learningRate';
 
 /**
  * Distillation data. A teacher drives the entity, so every frame hands the
@@ -84,7 +85,7 @@ export class Distiller {
     inputs: number[],
     frames: number,
   ): void {
-    const rate = teachingRate(frames);
+    const rate = teachingRate(frames) * learningStepPercent() / 100;
     // the live sample first, because it is the behaviour being copied right
     // now; its error is the one the driven car is experiencing
     const liveLoss = brain.train(inputs, teacher.process(inputs), rate, this.outputRanges);

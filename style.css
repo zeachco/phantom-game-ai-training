@@ -406,6 +406,11 @@ canvas {
   color: var(--ui-accent);
 }
 
+.group-panel-row input[type="range"] {
+  width: 42%;
+  accent-color: var(--ui-accent);
+}
+
 .group-panel-select {
   max-width: 60%;
   min-height: 24px;

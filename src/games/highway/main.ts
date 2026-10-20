@@ -87,6 +87,7 @@ export default async (state: typeof defaultState) => {
 
   // distillation targets: which group each group imitates, per group key
   const trainFroms = new Map<string, number | 'mixed'>();
+  const learningOnlyGroups = new Set<string>();
   for (const [student, target] of loadTrainFroms('highway'))
     trainFroms.set(String(student), target);
   const groupKeyOf = (car: Car): number | 'mixed' =>
@@ -127,7 +128,7 @@ export default async (state: typeof defaultState) => {
   /** true while the group is teacher-driven: its run is disqualified from
    *  saves and its score is frozen by the car itself */
   const isDistilling = (value: number | 'mixed'): boolean =>
-    trainFroms.has(String(value));
+    trainFroms.has(String(value)) || learningOnlyGroups.has(String(value));
 
   /**
    * The end of a run: every distillation selection goes back to free training,
@@ -141,6 +142,7 @@ export default async (state: typeof defaultState) => {
       saveTrainFrom('highway', student, null);
     }
     trainFroms.clear();
+    learningOnlyGroups.clear();
   };
 
   // the group of the brain the visualizer is drawing; the "all" readouts
@@ -164,12 +166,17 @@ export default async (state: typeof defaultState) => {
     trainFrom: (value) => trainFroms.get(String(value)) ?? null,
     setTrainFrom: (value, target) => {
       if (target !== null && value === target) return false;
-      if (target === null) trainFroms.delete(String(value));
-      else trainFroms.set(String(value), target);
+      if (target === null) {
+        const wasLearning = trainFroms.delete(String(value));
+        if (wasLearning) learningOnlyGroups.add(String(value));
+      } else {
+        learningOnlyGroups.delete(String(value));
+        trainFroms.set(String(value), target);
+      }
       saveTrainFrom('highway', value, target);
-      // a training run fields a single student car, so the run restarts with
-      // that one car instead of leaving the group's swarm on the teacher
-      initialize();
+      // Starting a guide run needs one student car; freeing it keeps that car
+      // alive and disqualified until it dies under its own model.
+      if (target !== null) initialize();
       return true;
     },
     teacherScore: (v) => {
@@ -425,7 +432,8 @@ export default async (state: typeof defaultState) => {
         ? trainFroms.get(String(groupKeyOf(car)))
         : undefined;
       car.teacher = target === undefined ? null : championOf(target);
-      car.distillRun = target !== undefined;
+      car.distillRun =
+        target !== undefined || learningOnlyGroups.has(String(groupKeyOf(car)));
       car.update(road.borders, state.traffic, deathRays);
       if (alive && performance.now() - car.bornAt > config.CAR_LIFETIME_CAP) {
         car.damaged = true;
@@ -439,6 +447,8 @@ export default async (state: typeof defaultState) => {
       }
       if (alive && car.damaged) {
         state.living--;
+        const group = groupKeyOf(car);
+        if (learningOnlyGroups.has(String(group))) keepTrainedBrain(car);
       }
     }
     state.sortedCars = state.cars.sort((a, b) => b.brain.score - a.brain.score);

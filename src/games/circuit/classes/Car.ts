@@ -332,7 +332,7 @@ export class Car {
           this.distillErrors = this.distiller.lastErrors;
         } else {
           this.#lastTeacher = null;
-          this.teacherFrames = 0;
+          if (!this.distillRun) this.teacherFrames = 0;
           this.distiller = null;
           this.distillErrors = null;
           outputs = this.brain.process(inputs);

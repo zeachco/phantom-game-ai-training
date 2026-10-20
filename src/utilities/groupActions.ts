@@ -15,6 +15,7 @@ import {
   lastSyncAt,
 } from '../ai/serverSync';
 import { showToast } from './toast';
+import { learningStepPercent, saveLearningStepPercent } from './learningRate';
 
 /** The server group key for a follow value: '1'..'9' or 'mixed'. */
 export function groupKeyFor(game: string, value: number | 'mixed'): string {
@@ -178,6 +179,29 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   const globalVal = mkRow('global');
   const remoteVal = mkRow('remote');
   const syncVal = mkRow('last sync');
+  const learningRow = document.createElement('div');
+  learningRow.className = 'group-panel-row';
+  learningRow.hidden = true;
+  const learningName = document.createElement('label');
+  learningName.className = 'group-panel-name';
+  learningName.textContent = 'learn per step';
+  const learningControl = document.createElement('input');
+  learningControl.type = 'range';
+  learningControl.min = '0';
+  learningControl.max = '100';
+  learningControl.step = '1';
+  learningControl.value = String(learningStepPercent());
+  learningControl.id = `learning-step-${game}`;
+  learningName.htmlFor = learningControl.id;
+  const learningValue = document.createElement('span');
+  learningValue.className = 'group-panel-value';
+  learningValue.textContent = `${learningControl.value}%`;
+  learningRow.append(learningName, learningControl, learningValue);
+  readouts.appendChild(learningRow);
+  learningControl.addEventListener('input', () => {
+    saveLearningStepPercent(Number(learningControl.value));
+    learningValue.textContent = `${learningControl.value}%`;
+  });
   el.appendChild(readouts);
 
   let value: number | 'mixed' = 0;
@@ -196,12 +220,14 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     const group = all ? (displayedGroup?.() ?? null) : value;
     if (all) {
       shownVal.textContent = group === null ? '—' : label(group);
+      learningRow.hidden = true;
     } else {
       // a run ending resets the group to free training without a follow change
       const stored = targetValue(trainFrom(value));
       if (trainSelect.value !== stored) trainSelect.value = stored;
       // the closed select wears the color of the group it points at
       const target = trainFrom(value);
+      learningRow.hidden = target === null;
       trainSelect.style.color =
         target === null ? '' : (groupColor?.(target) ?? '');
       teacherVal.textContent = fmt(teacherScore(value));

@@ -371,11 +371,11 @@ export class CaveRace {
     );
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
-    group.distillRun = target !== null;
+    if (target !== null) group.distillRun = true;
     saveTrainFrom('cave', value, target);
     // a training run needs exactly one student ball, so restart the group with
     // a single fresh one instead of leaving its whole swarm on the teacher
-    this.#restartAsStudent(group);
+    if (target !== null) this.#restartAsStudent(group);
     return true;
   }
 
@@ -401,7 +401,7 @@ export class CaveRace {
    */
   #endDistillRuns() {
     for (const group of this.groups) {
-      if (group.trainFrom === null) continue;
+      if (group.trainFrom === null && !group.distillRun) continue;
       this.#keepTrainedBrain(group);
       group.trainFrom = null;
       group.distillRun = false;
@@ -638,7 +638,8 @@ export class CaveRace {
     if (ball.useAI) {
       const group = this.#groupOf(ball);
       if (group) {
-        if (group.distillRun) {
+        const wasDistillRun = group.distillRun;
+        if (wasDistillRun) {
           this.#keepTrainedBrain(group);
           group.trainFrom = null;
           group.distillRun = false;
@@ -646,10 +647,10 @@ export class CaveRace {
         }
         // A gauge death is the ball's natural end of run: promote its brain
         // when it is the group's best so the next spawn mutates from it.
-        this.#settle(group, ball);
+        if (!wasDistillRun) this.#settle(group, ball);
         if (ball.deathCause === 'gauge') this.#pendingSaves.add(group);
         if (
-          !group.distillRun &&
+          !wasDistillRun &&
           group.scores.seed > 0 &&
           ball.brain.score >= group.scores.seed - Number.EPSILON
         ) {

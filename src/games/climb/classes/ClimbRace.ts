@@ -367,11 +367,11 @@ export class ClimbRace {
     );
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
-    group.distillRun = target !== null;
+    if (target !== null) group.distillRun = true;
     saveTrainFrom('climb', value, target);
     // a training run needs exactly one student player, so restart the group
     // with a single fresh one instead of leaving its whole swarm on the teacher
-    this.#restartAsStudent(group);
+    if (target !== null) this.#restartAsStudent(group);
     return true;
   }
 
@@ -399,7 +399,7 @@ export class ClimbRace {
    */
   #endDistillRuns() {
     for (const group of this.groups) {
-      if (group.trainFrom === null) continue;
+      if (group.trainFrom === null && !group.distillRun) continue;
       this.#keepTrainedBrain(group);
       group.trainFrom = null;
       group.distillRun = false;
@@ -619,16 +619,17 @@ export class ClimbRace {
     if (player.useAI) {
       const group = this.#groupOf(player);
       if (group) {
-        if (group.distillRun) {
+        const wasDistillRun = group.distillRun;
+        if (wasDistillRun) {
           this.#keepTrainedBrain(group);
           group.trainFrom = null;
           group.distillRun = false;
           saveTrainFrom('climb', group.isMixed ? 'mixed' : group.layer, null);
         }
-        this.#settle(group, player);
+        if (!wasDistillRun) this.#settle(group, player);
         // freeze the ghost when the record holder dies
         if (
-          !group.distillRun &&
+          !wasDistillRun &&
           group.scores.seed > 0 &&
           (player.brain?.score ?? 0) >= group.scores.seed - Number.EPSILON
         ) {

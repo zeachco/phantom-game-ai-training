@@ -387,11 +387,11 @@ export class CircuitRace {
     );
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
-    group.distillRun = target !== null;
+    if (target !== null) group.distillRun = true;
     saveTrainFrom('circuit', value, target);
     // a training run needs exactly one student car, so restart the group with
     // a single fresh one instead of leaving its whole swarm on the teacher
-    this.#restartAsStudent(group);
+    if (target !== null) this.#restartAsStudent(group);
     return true;
   }
 
@@ -418,7 +418,7 @@ export class CircuitRace {
    */
   #endDistillRuns() {
     for (const group of this.groups) {
-      if (group.trainFrom === null) continue;
+      if (group.trainFrom === null && !group.distillRun) continue;
       this.#keepTrainedBrain(group);
       group.trainFrom = null;
       group.distillRun = false;
@@ -689,15 +689,15 @@ export class CircuitRace {
       const group = this.#groupOf(car);
       if (group) {
         const wasDistillRun = group.distillRun;
-        if (group.distillRun) {
+        if (wasDistillRun) {
           this.#keepTrainedBrain(group);
           group.trainFrom = null;
           group.distillRun = false;
           saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
         }
-        this.#settle(group, car);
+        if (!wasDistillRun) this.#settle(group, car);
         if (
-          !group.distillRun &&
+          !wasDistillRun &&
           group.scores.seed > 0 &&
           car.brain.score >= group.scores.seed - Number.EPSILON
         ) {
