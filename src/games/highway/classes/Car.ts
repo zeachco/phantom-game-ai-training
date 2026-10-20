@@ -39,7 +39,7 @@ export class Car {
    *  for free training; set by the game loop every frame */
   public teacher: NeuralNetwork | null = null;
   /** the car belongs to a teacher-driven training run, even when the teacher
-   *  is missing (no champion to copy yet): its score stays frozen too */
+   *  is missing (no champion to copy yet) */
   public distillRun = false;
   /** frames this car has been distilling, the step decays over them */
   public teacherFrames = 0;
@@ -149,9 +149,9 @@ export class Car {
 
     // Reward vertical progress only: forward travel decreases y, so the
     // gain is old_y - y. Lateral movement and total distance earn nothing.
-    // A teacher-driven run is not the student's own output: its score is not
-    // updated, not even while the teacher is missing (nothing trains then).
-    if (this.brain && !this.teacher && !this.distillRun)
+    // The teacher supplies the controls, but this is still the trainee's run:
+    // retain the progress made along the teacher-driven trajectory.
+    if (this.brain)
       this.brain.score += old_y - this.y;
 
     this.#createPolygon();
@@ -177,7 +177,10 @@ export class Car {
         // distillation: the teacher drives the car, the own brain
         // backpropagates toward the teacher's applied output on the same
         // inputs
-        outputs = this.teacher.process(inputs);
+        // Network.process reuses its output arrays. distillStep evaluates
+        // several probe inputs, so keep the live teacher action before those
+        // probes overwrite it.
+        outputs = this.teacher.process(inputs).slice();
         this.distiller = distillStep(
           this.distiller,
           this.brain,

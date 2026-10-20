@@ -796,8 +796,7 @@ export default async (state: typeof defaultState) => {
   /**
    * Hand a trained student's weights to the next generation: the brain becomes
    * the group's saved base model, so the next run mutates from what the
-   * student learned. It keeps the score the group already had, a teacher-driven
-   * run never sets a record.
+   * student learned, along with the score earned during the driven run.
    */
   function keepTrainedBrain(car: Car) {
     // if no teacher ever drove the car nothing was distilled: the student's
@@ -808,7 +807,7 @@ export default async (state: typeof defaultState) => {
       value === 'mixed'
         ? (state.sortedMixed[MIXED_LEVELS] ?? [])
         : (state.sortedModels[value] ?? []);
-    const trained = trainedBrain(car.brain, saved[0]?.score ?? 0);
+    const trained = trainedBrain(car.brain, car.brain.score);
     if (value === 'mixed') {
       state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(saved, trained, 1);
       io.saveBestModels([trained], 1);
@@ -820,8 +819,8 @@ export default async (state: typeof defaultState) => {
 
   function endExperiment() {
     if (state.playing) {
-      // teacher-driven cars are disqualified as records, but their weights
-      // carry over to the next run
+      // Teacher-driven cars carry their learned weights and score into the
+      // next generation without competing in the normal save pass.
       const finalSort = state.sortedCars.filter((c) => c.useAI);
       const trained = finalSort.filter((c) => isDistilling(groupKeyOf(c)));
       io.saveBestModels(
