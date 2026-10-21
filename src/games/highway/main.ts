@@ -567,6 +567,8 @@ export default async (state: typeof defaultState) => {
     if (!paused && !state.living) endExperiment();
   });
   function initialize() {
+    // a re-init replaces the camera car, so drop its old keyboard bindings
+    state.player?.controls.dispose();
     Object.assign(state, defaultState);
     state.playing = true;
     camSet = false;

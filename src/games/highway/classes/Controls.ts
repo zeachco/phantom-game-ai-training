@@ -1,10 +1,17 @@
 import { ControlType } from '../types';
+import { isEditableTarget } from '../../../utilities/dom';
 
 export class Controls {
   public forward: number = 0;
   public left: number = 0;
   public right: number = 0;
   public reverse: number = 0;
+
+  /** the bound handlers, kept so dispose() can remove them again — a
+   *  re-init replaces the camera car, not just its body */
+  #keydown?: (event: KeyboardEvent) => void;
+  #keyup?: (event: KeyboardEvent) => void;
+
   constructor(type: ControlType) {
     switch (type) {
       case ControlType.KEYS:
@@ -17,7 +24,9 @@ export class Controls {
   }
 
   #addKeyboardListeners() {
-    document.onkeydown = (event) => {
+    this.#keydown = (event) => {
+      // typing in a form field never drives the car
+      if (isEditableTarget(event.target)) return;
       switch (event.key) {
         case 'ArrowLeft':
           this.left = 1;
@@ -33,7 +42,7 @@ export class Controls {
           break;
       }
     };
-    document.onkeyup = (event) => {
+    this.#keyup = (event) => {
       switch (event.key) {
         case 'ArrowLeft':
           this.left = 0;
@@ -49,5 +58,14 @@ export class Controls {
           break;
       }
     };
+    document.addEventListener('keydown', this.#keydown);
+    document.addEventListener('keyup', this.#keyup);
+  }
+
+  public dispose() {
+    if (this.#keydown) document.removeEventListener('keydown', this.#keydown);
+    if (this.#keyup) document.removeEventListener('keyup', this.#keyup);
+    this.#keydown = undefined;
+    this.#keyup = undefined;
   }
 }
