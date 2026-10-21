@@ -1,7 +1,10 @@
-import { MIXED_KIND, MIXED_LEVELS } from '../../ai/Mixed';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
-import type { Ball } from './classes/Ball';
+import { layerColor } from '../../utilities/ai/colors';
+import type { ScoreBoardRow } from '../../utilities/scoreBoard';
+import { config } from './classes/Config';
+import { Ball } from './classes/Ball';
 import type { Cave } from './classes/Cave';
 
 /** summarized score per group: the seed entry is the live high score on the
@@ -59,6 +62,8 @@ export interface Group {
 export const defaultState = {
   /** alive balls and the corpses still on the cave, both draw and score */
   balls: [] as Ball[],
+  /** the balls sorted by score, rebuilt on HUD ticks for the board */
+  sortedBalls: [] as Ball[],
   /** live car count: dips while a group's corpses linger, climbs back when
    *  that whole group respawns */
   living: 0,
@@ -147,4 +152,79 @@ export function foldScores(scores: GroupScores, newSeed: number) {
   // A returning cave is a new training run: its former record is reference
   // data only, so mutations can establish a reachable fresh record.
   scores.seed = 0;
+}
+
+/**
+ * The shared left scoreboard rows, best first: frozen group ghosts plus the
+ * live balls, current cave only. Running balls use their live score, ghosts
+ * the frozen dead record; a ghost stays hidden while a board ball already
+ * shows that score, so the leader is never doubled by its own ghost.
+ */
+export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
+  const entries: (Ball | Group)[] = [];
+  const topBalls = state.sortedBalls;
+  const topCount = Math.min(topBalls.length, config.SCORES_NB);
+  const displayedBalls = Array.from(
+    new Set([
+      ...topBalls.slice(0, topCount),
+      ...state.groups.flatMap((group) =>
+        group.distillRun ? group.pool.slice(0, 1) : [],
+      ),
+    ]),
+  );
+  for (const group of state.groups) {
+    if (group.ghostScore <= 0) continue;
+    const shown = displayedBalls.some(
+      (ball) => ball.brain.score === group.ghostScore,
+    );
+    if (!shown) entries.push(group);
+  }
+  entries.push(...displayedBalls);
+  entries.sort((a, b) => {
+    const scoreA = a instanceof Ball ? a.brain.score : a.ghostScore;
+    const scoreB = b instanceof Ball ? b.brain.score : b.ghostScore;
+    return scoreB - scoreA;
+  });
+
+  return entries.map((ref): ScoreBoardRow => {
+    if (ref instanceof Ball) {
+      if (ref === state.human)
+        return {
+          emoji: '🕹',
+          text: `${ref.label} ${Math.round(ref.brain.score)}`,
+          color: ref.damaged ? '#def' : ref.color,
+        };
+      const group = state.groups.find(
+        (g) =>
+          g.key ===
+          (ref.brain instanceof MixedNetwork
+            ? 'mixed'
+            : String(ref.brainLayers)),
+      );
+      // Current cave only: a ball leads when it holds its group's live
+      // current-cave high. History lives in the weights, not in the board.
+      const groupHigh = group?.scores.seed || 0;
+      const leads =
+        groupHigh > 0 && ref.brain.score >= groupHigh - Number.EPSILON;
+      const emoji = leads
+        ? ref.damaged
+          ? '🏆'
+          : '💚'
+        : ref.damaged
+          ? '💀'
+          : '💜';
+      return {
+        emoji,
+        text: `${ref.label} ${Math.round(ref.brain.score)}`,
+        color: ref.damaged ? '#def' : ref.color,
+      };
+    }
+    return {
+      emoji: '👻',
+      text: `${brainId(ref.layer, undefined)} ${Math.round(ref.ghostScore)}`,
+      color: ref.isMixed
+        ? config.MIXED_COLOR
+        : layerColor(ref.layer, config.MAX_NETWORK_LAYERS),
+    };
+  });
 }

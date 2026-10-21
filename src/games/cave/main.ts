@@ -25,7 +25,7 @@ import { CaveRace } from './classes/CaveRace';
 import { ChaseCamera } from './classes/ChaseCamera';
 import { config, isDemo } from './classes/Config';
 import { SensorViz } from './classes/SensorViz';
-import type { defaultState, Group } from './utilities';
+import { type defaultState, scoreBoardRows } from './utilities';
 import { gameNow } from '../../utilities/gameClock';
 
 type CaveState = typeof defaultState;
@@ -116,11 +116,9 @@ export default async (state: CaveState) => {
     },
   });
 
-  // Top-left board: each brain group's best (highest) score, replacing the
-  // old seed readout. It refreshes on the throttled HUD tick.
-  const scoreBoard = createScoreBoard('Best');
-  scoreBoard.el.title = 'best score per brain group';
-  scoreBoard.el.setAttribute('aria-label', 'Best score per brain group');
+  // Top-left board: the shared scoreboard rows (ghosts and live balls, best
+  // first). It refreshes on the throttled HUD tick.
+  const scoreBoard = createScoreBoard();
   stage.appendChild(scoreBoard.el);
 
   // ---- side panel: brain follow keys, group actions and the live network
@@ -195,14 +193,19 @@ export default async (state: CaveState) => {
   const legend = document.createElement('div');
   legend.className = 'side-panel-legend';
   [
-    'At a glance',
+    'Score board',
+    '💀 crashed',
+    '🏆 crashed with a higher score',
+    '💜 ball is racing',
+    '💚 ball is leading its group on this cave',
+    '👻 cave record, frozen when its holder died',
     '🕹 human ball, WASD/arrows or a DualShock (left stick + A to jump)',
+    '🎓 ball is being trained by another brain group (one student, score disqualified)',
     '🎯 the followed ball is drawn solid, the rest fade to 50%',
     '🥅 the next gate ring glows and grows',
     '🪙 a spinning coin adds score and a temporary speed boost',
     '🧭 V toggles the wireframe view',
     '📉 the section gauge kills a ball that stops progressing',
-    '🎓 ball is being trained by another brain group (one student, score disqualified)',
   ].forEach((line, i) => {
     const el = document.createElement('span');
     el.textContent = line;
@@ -453,85 +456,6 @@ export default async (state: CaveState) => {
     panel.setRunning(running, state.living > 0);
   }
 
-  /** A group's best score: the highest of its current-cave live high and every
-   *  frozen per-seed record, so the board is a stable all-time record. */
-  function groupBestScore(group: Group): number {
-    let best = group.scores.seed;
-    for (const key of Object.keys(group.scores.history)) {
-      const value = group.scores.history[key];
-      if (typeof value === 'number' && value > best) best = value;
-    }
-    return best;
-  }
-
-  function bestBall(group: Group): Ball | undefined {
-    return group.pool.reduce<Ball | undefined>(
-      (best, ball) =>
-        !best || ball.brain.score > best.brain.score ? ball : best,
-      undefined,
-    );
-  }
-
-  /** Refresh the top-left board with each group's best score, in a stable
-   *  order (layers 1..9, then mixed). The row treatment mirrors the 2D
-   *  games: the group keeps its brain color and its emoji says whether the
-   *  visible record is live, dead, or from an earlier cave. */
-  function updateScoreBoard() {
-    const ordered = [...race.groups].sort((a, b) =>
-      a.isMixed === b.isMixed ? a.layer - b.layer : a.isMixed ? 1 : -1,
-    );
-    const rows = ordered.map((group) => {
-      const best = groupBestScore(group);
-      const leader = bestBall(group);
-      const liveScore = leader?.brain.score ?? -Infinity;
-      const currentRecord = group.scores.seed;
-      const isHistorical = best > liveScore + Number.EPSILON;
-      const isCurrentLeader =
-        currentRecord > 0 && liveScore >= currentRecord - Number.EPSILON;
-      const emoji = isHistorical
-        ? '👻'
-        : leader?.damaged
-          ? isCurrentLeader
-            ? '🏆'
-            : '💀'
-          : isCurrentLeader
-            ? '💚'
-            : '💜';
-      const label = group.isMixed ? 'mixed' : `brain ${group.layer}`;
-      const score = best > 0 ? String(Math.round(best)) : '—';
-      const color = group.isMixed
-        ? config.MIXED_COLOR
-        : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-      const textColor = leader?.damaged && !isHistorical ? '#def' : color;
-      return { emoji, text: `${label} ${score}`, color: textColor };
-    });
-    for (const group of ordered) {
-      if (!group.distillRun) continue;
-      const trainee = group.pool[0];
-      if (!trainee) continue;
-      const label = group.isMixed
-        ? 'mixed trainee'
-        : `brain ${group.layer} trainee`;
-      const color = group.isMixed
-        ? config.MIXED_COLOR
-        : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-      rows.push({
-        emoji: '🎓',
-        text: `${label} ${Math.round(trainee.brain.score)}`,
-        color,
-      });
-    }
-    scoreBoard.update(
-      {
-        text: `${state.living}/${state.balls.length} balls`,
-        color: getColorScale(
-          Math.min(1, state.living / Math.max(1, state.balls.length)),
-        ),
-      },
-      rows,
-    );
-  }
-
   /** The 3D viewport and the panel split the window, exactly like the
    *  circuit game. */
   let viewWidth = window.innerWidth;
@@ -675,7 +599,16 @@ export default async (state: CaveState) => {
         'aria-label',
         `Position ${rank} of ${balls.length}`,
       );
-      updateScoreBoard();
+      race.refreshLeaderboard();
+      scoreBoard.update(
+        {
+          text: `${state.living}/${state.balls.length} balls`,
+          color: getColorScale(
+            Math.min(1, state.living / Math.max(1, state.balls.length)),
+          ),
+        },
+        scoreBoardRows(state),
+      );
       if (!isFollowedAlive) return;
       const gateNumber = Math.min(followed.nextGate + 1, config.GATES_PER_SEED);
       gateCountEl.textContent = `gate ${gateNumber}/${config.GATES_PER_SEED}`;

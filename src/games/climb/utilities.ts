@@ -209,15 +209,10 @@ export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
       const groupHigh = group?.scores.seed || 0;
       const leads =
         groupHigh > 0 && (ref.brain?.score ?? 0) >= groupHigh - Number.EPSILON;
-      const passedGhost =
-        !ref.damaged && (group?.ghostScore ?? 0) > 0 &&
-        (ref.brain?.score ?? 0) > group.ghostScore + Number.EPSILON;
-      const emoji = passedGhost
-        ? '🏆'
-        : leads
-          ? ref.damaged
-            ? '🏆'
-            : '💚'
+      const emoji = leads
+        ? ref.damaged
+          ? '🏆'
+          : '💚'
         : ref.damaged
           ? '💀'
           : '💜';

@@ -900,4 +900,9 @@ export class CaveRace {
       saveScores(group);
     }
   }
+
+  public refreshLeaderboard() {
+    this.state.balls.sort((a, b) => b.brain.score - a.brain.score);
+    this.state.sortedBalls = this.state.balls;
+  }
 }
