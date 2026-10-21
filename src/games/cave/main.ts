@@ -11,6 +11,7 @@ import {
   updateTimingLine,
 } from '../../utilities/cockpit';
 import { createFrameMeter, isEditableTarget } from '../../utilities/dom';
+import { readSeedFromHash, writeSeedToHash } from '../../utilities/urlSeed';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
@@ -56,7 +57,7 @@ io.compactSaves();
  * entry point to coordinate rendering, input and the HUD.
  */
 export default async (state: CaveState) => {
-  const seed = readSeed();
+  const seed = readSeedFromHash('cave');
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   // the GPU budget goes to the training pool, not pixels: 1 = native, 2 = half
@@ -110,7 +111,7 @@ export default async (state: CaveState) => {
 
   const race = new CaveRace(state, io, seed, scene, {
     onSeedChanged: (nextSeed) => {
-      location.hash = `cave=${nextSeed}`;
+      writeSeedToHash('cave', nextSeed);
       state.cave?.setWireframe(wireframe);
       if (debugPath) state.cave?.debugPath();
     },
@@ -695,8 +696,3 @@ export default async (state: CaveState) => {
   });
   window.addEventListener('beforeunload', () => race.saveAll());
 };
-
-function readSeed() {
-  const match = location.hash.match(/cave=(\d+)/);
-  return match ? Number.parseInt(match[1], 10) : 0;
-}

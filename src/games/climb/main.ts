@@ -22,6 +22,7 @@ import {
   scoreRecordForGroup,
 } from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
+import { readSeedFromHash, writeSeedToHash } from '../../utilities/urlSeed';
 import { CAMERA_LERP, climbCameraCenterY } from './camera';
 import { ClimbRace } from './classes/ClimbRace';
 import { config, isDemo } from './classes/Config';
@@ -215,19 +216,8 @@ export default async (state: typeof defaultState) => {
   const shouldUpdateDom = createUpdateLimiter(20);
   let lastCountdownTenths = -1;
 
-  function writeSeed(seed: number) {
-    history.replaceState(
-      null,
-      '',
-      `${location.pathname}${location.search}#climb=${seed}`,
-    );
-  }
-
-  const seed = (() => {
-    const match = location.hash.match(/climb=(\d+)/);
-    return match ? parseInt(match[1], 10) : 0;
-  })();
-  writeSeed(seed);
+  const seed = readSeedFromHash('climb');
+  writeSeedToHash('climb', seed);
 
   const race = new ClimbRace(state, io, seed, {
     onReset: () => {
@@ -238,7 +228,7 @@ export default async (state: typeof defaultState) => {
       humanFollow = false;
     },
     onSeedChanged: (nextSeed) => {
-      writeSeed(nextSeed);
+      writeSeedToHash('climb', nextSeed);
       camSet = false;
       camTop = 0;
       seedCountdown.hidden = true;

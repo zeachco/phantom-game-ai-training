@@ -25,6 +25,7 @@ import {
   scoreRecordForGroup,
 } from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
+import { readSeedFromHash, writeSeedToHash } from '../../utilities/urlSeed';
 import type { Car } from './classes/Car';
 import { CircuitRace } from './classes/CircuitRace';
 import { config, isDemo } from './classes/Config';
@@ -279,19 +280,8 @@ export default async (state: typeof defaultState) => {
   const loop = new GameLoop();
 
   /** The race owns simulation state; this function coordinates browser UI. */
-  function writeSeed(seed: number) {
-    history.replaceState(
-      null,
-      '',
-      `${location.pathname}${location.search}#circuit=${seed}`,
-    );
-  }
-
-  const seed = (() => {
-    const match = location.hash.match(/circuit=(\d+)/);
-    return match ? parseInt(match[1], 10) : 0;
-  })();
-  writeSeed(seed);
+  const seed = readSeedFromHash('circuit');
+  writeSeedToHash('circuit', seed);
 
   const humanCelebration = document.createElement('div');
   humanCelebration.className = 'human-celebration';
@@ -331,7 +321,7 @@ export default async (state: typeof defaultState) => {
     },
     onHumanFinish: showHumanCelebration,
     onSeedChanged: (nextSeed) => {
-      writeSeed(nextSeed);
+      writeSeedToHash('circuit', nextSeed);
       timingBoard.setSeed(nextSeed);
       hideHumanCelebration();
       finishCountdown.hidden = true;
