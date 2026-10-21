@@ -1,13 +1,13 @@
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
-import { layerColor } from '../../utilities/ai/colors';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
+import { scoreBoardRows as sharedScoreBoardRows } from '../../utilities/scoreBoard';
 import {
   globalRecordFromScores,
   scoreRecordForGroup,
 } from '../../utilities/scoreRecords';
-import { Car } from './classes/Car';
+import type { Car } from './classes/Car';
 import type { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
 import type { Obstacle } from './classes/Obstacle';
@@ -176,74 +176,21 @@ export function globalRecordForGroup(
 
 /**
  * The shared left scoreboard rows, best first: group record ghosts plus the
- * live cars, current track only. A ghost stays hidden while a board car
- * already shows that score, so the leader is never doubled by its own ghost.
+ * live cars, current track only. The row logic lives in the shared
+ * scoreBoard component; this adapter only extracts the circuit's data.
  */
 export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
-  const entries: (Car | Group)[] = [];
-  const topCars = state.sortedCars;
-  const topCount = Math.min(topCars.length, config.SCORES_NB);
-  const displayedCars = Array.from(
-    new Set([
-      ...topCars.slice(0, topCount),
-      ...state.groups.flatMap((group) =>
-        group.distillRun ? group.pool.slice(0, 1) : [],
-      ),
-    ]),
-  );
-  for (const group of state.groups) {
-    if (group.ghostScore <= 0) continue;
-    const shown = displayedCars.some(
-      (car) => car.brain.score === group.ghostScore,
-    );
-    if (!shown) entries.push(group);
-  }
-  entries.push(...displayedCars);
-  entries.sort((a, b) => {
-    const scoreA = a instanceof Car ? a.brain.score : a.ghostScore;
-    const scoreB = b instanceof Car ? b.brain.score : b.ghostScore;
-    return scoreB - scoreA;
-  });
-
-  return entries.map((ref): ScoreBoardRow => {
-    if (ref instanceof Car) {
-      if (ref === state.human)
-        return {
-          emoji: '🕹',
-          text: `${ref.label} ${Math.round(ref.brain.score)}`,
-          color: ref.damaged ? '#def' : ref.color,
-        };
-      const group = state.groups.find(
-        (g) =>
-          g.key ===
-          (ref.brain instanceof MixedNetwork
-            ? 'mixed'
-            : String(ref.brainLayers)),
-      );
-      // Current track only: a car leads when it holds its group's live
-      // current-map high. History lives in the weights, not in the board.
-      const groupHigh = group?.scores.seed || 0;
-      const leads =
-        groupHigh > 0 && ref.brain.score >= groupHigh - Number.EPSILON;
-      const emoji = leads
-        ? ref.damaged
-          ? '🏆'
-          : '💚'
-        : ref.damaged
-          ? '💀'
-          : '💜';
-      return {
-        emoji,
-        text: `${ref.label} ${Math.round(ref.brain.score)}`,
-        color: ref.damaged ? '#def' : ref.color,
-      };
-    }
-    return {
-      emoji: '👻',
-      text: `${brainId(ref.layer, undefined)} ${Math.round(ref.ghostScore)}`,
-      color: ref.isMixed
-        ? config.MIXED_COLOR
-        : layerColor(ref.layer, config.MAX_NETWORK_LAYERS),
-    };
+  return sharedScoreBoardRows({
+    sorted: state.sortedCars,
+    groups: state.groups,
+    topCount: config.SCORES_NB,
+    trainees: state.groups.flatMap((group) =>
+      group.distillRun ? group.pool.slice(0, 1) : [],
+    ),
+    human: state.human,
+    brainKeyOf: (car) =>
+      car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers),
+    maxLayers: config.MAX_NETWORK_LAYERS,
+    mixedColor: config.MIXED_COLOR,
   });
 }

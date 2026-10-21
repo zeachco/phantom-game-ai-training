@@ -6,7 +6,8 @@ import {
   savedMixedNetworkColor,
 } from '../../utilities/ai/colors';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
-import { Car } from './classes/Car';
+import { buildScoreBoardRows } from '../../utilities/scoreBoard';
+import type { Car } from './classes/Car';
 import { config } from './classes/Config';
 
 export const defaultState = {
@@ -47,7 +48,12 @@ const modelColor = (model: ModelsByLayerCount[number]) =>
       )
     : layerColor(model.levels.length, config.MAX_NETWORK_LAYERS);
 
-/** The rows of the scoreboard, best first: saved ghosts plus the live cars. */
+/**
+ * The rows of the scoreboard, best first: saved ghosts plus the live cars.
+ * The ordering and ghost handling live in the shared scoreBoard component;
+ * the highway's saved-model ghosts are records, not duplicates of live
+ * scores, so the ghost de-duplication stays off.
+ */
 export function scoreEntries(state: typeof defaultState): ScoreBoardRow[] {
   const liveCars = Array.from(
     new Set([
@@ -55,45 +61,43 @@ export function scoreEntries(state: typeof defaultState): ScoreBoardRow[] {
       ...state.cars.filter((car) => car.distillRun),
     ]),
   );
-  const displayedScoreCars: (Car | ModelsByLayerCount[number])[] = [
-    ...state.sortedModels.map((m) => m[0]).filter(Boolean),
-    ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
-    ...liveCars,
-  ].sort((a, b) => {
-    const scoreA = a instanceof Car ? a.brain.score : a.score;
-    const scoreB = b instanceof Car ? b.brain.score : b.score;
-    return scoreB - scoreA;
-  });
-
-  return displayedScoreCars.map((ref) => {
-    if (ref instanceof Car) {
-      const previous = previousSave(state, ref.brain);
-      const previousScore = previous?.score || 0;
-      const diff = ref.brain.score - previousScore;
+  return buildScoreBoardRows({
+    ghosts: [
+      ...state.sortedModels.map((m) => m[0]).filter(Boolean),
+      ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
+    ],
+    ghostScore: (model) => model.score,
+    ghostRow: (model) => {
+      const symb = model.diff > 0 ? `+${model.diff.toFixed(2)}` : '';
+      const emoji = isMixed(model) ? '🧭' : '👻';
+      const name = isMixed(model)
+        ? `${model.version}-${model.mutationIndex}`
+        : `${model.levels.length}-${model.version}-${model.mutationIndex}`;
+      return {
+        emoji,
+        text: `${name} ${Math.round(model.score)} ${symb}`,
+        color: modelColor(model),
+      };
+    },
+    lives: liveCars,
+    liveScore: (car) => car.brain.score,
+    liveRow: (car) => {
+      const previous = previousSave(state, car.brain);
+      const diff = car.brain.score - (previous?.score || 0);
       let emoji = '';
       let add = '';
       if (diff > 0) {
-        emoji = ref.damaged ? '🏆' : '💚';
+        emoji = car.damaged ? '🏆' : '💚';
         add = ` +${diff.toFixed(2)}`;
       } else {
-        emoji = ref.damaged ? '💀' : '💜';
+        emoji = car.damaged ? '💀' : '💜';
       }
       return {
         emoji,
-        text: `${ref.label} ${Math.round(ref.brain.score)}${add}`,
-        color: ref.damaged ? '#def' : ref.color,
+        text: `${car.label} ${Math.round(car.brain.score)}${add}`,
+        color: car.damaged ? '#def' : car.color,
       };
-    }
-
-    const symb = ref.diff > 0 ? `+${ref.diff.toFixed(2)}` : '';
-    const emoji = isMixed(ref) ? '🧭' : '👻';
-    const name = isMixed(ref)
-      ? `${ref.version}-${ref.mutationIndex}`
-      : `${ref.levels.length}-${ref.version}-${ref.mutationIndex}`;
-    return {
-      emoji,
-      text: `${name} ${Math.round(ref.score)} ${symb}`,
-      color: modelColor(ref),
-    };
+    },
+    dedupeGhosts: false,
   });
 }
