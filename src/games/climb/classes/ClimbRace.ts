@@ -1,12 +1,6 @@
-import {
-  expertSlotIds,
-  hydrateExperts,
-  MIXED_KIND,
-  MIXED_LEVELS,
-  MixedNetwork,
-} from '../../../ai/Mixed';
-import { NeuralNetwork } from '../../../ai/Network';
 import { brainIoMatches } from '../../../ai/distill';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../../ai/Mixed';
+import { NeuralNetwork } from '../../../ai/Network';
 import {
   type fileUtilities,
   networkLevelSizes,
@@ -14,6 +8,16 @@ import {
 } from '../../../ai/utils';
 import { layerColor } from '../../../utilities/ai/colors';
 import { lerp } from '../../../utilities/math';
+import {
+  expertLibraryShape,
+  refreshExperts,
+} from '../../../utilities/race/expertLibrary';
+import {
+  isExplorerSlot,
+  type SlotPolicy,
+  slotMutation,
+  slotSource,
+} from '../../../utilities/race/slotPolicy';
 import { globalRecordFromScores } from '../../../utilities/scoreRecords';
 import {
   loadTrainFroms,
@@ -41,6 +45,19 @@ export type ClimbModelIo = ReturnType<typeof fileUtilities>;
  * respawns, and seed progression. The entry point only coordinates canvases
  * and browser controls.
  */
+
+/** the explorer/scout slot policy for this game's pool shapes and the
+ *  floors a group has banked on the current seed */
+const slotPolicy: SlotPolicy<Group> = {
+  poolSize: config.CARS_PER_GROUP,
+  finishedPoolSize: config.FINISHED_CARS_PER_GROUP,
+  explorerSlots: config.EXPLORER_CARS,
+  explorerLimit: config.EXPLORER_FLOOR_LIMIT,
+  mutationLadderCap: config.MUTATION_LADDER_CAP,
+  finishedSwarmDivisor: config.FINISHED_SWARM_DIVISOR,
+  progress: (group) => group.scores.seed,
+};
+
 export class ClimbRace {
   public tower: Tower;
   public seed: number;
@@ -94,72 +111,6 @@ export class ClimbRace {
     );
   }
 
-  #slotMutation(group: Group, slot: number) {
-    if (slot === 0) return 0;
-    if (this.#isScoutSlot(group, slot))
-      // scouts stay close to the old line they re-explore: bottom rung
-      return Math.max(
-        Number.MIN_VALUE,
-        this.#maxMutation() / config.MUTATION_LADDER_CAP,
-      );
-    const divisor = group.mutationOnly
-      ? config.FINISHED_SWARM_DIVISOR
-      : Math.min(slot, config.MUTATION_LADDER_CAP);
-    return Math.max(Number.MIN_VALUE, this.#maxMutation() / divisor);
-  }
-
-  /** floors banked by this group on the current seed: 0 right after the
-   *  seed changed */
-  #groupSeedFloors(group: Group) {
-    return group.scores.seed;
-  }
-
-  /** the last slots of a pool skip the champion mutation and start from a
-   *  blank random brain — but only while the group is still struggling. Once
-   *  its players have banked EXPLORER_FLOOR_LIMIT floors on this seed, the
-   *  line is proven and the slot reverts to a regular mutation player */
-  #isExplorerSlot(group: Group, slot: number) {
-    if (slot === 0) return false;
-    if (this.#groupSeedFloors(group) >= config.EXPLORER_FLOOR_LIMIT)
-      return false;
-    const size = group.mutationOnly
-      ? config.FINISHED_CARS_PER_GROUP
-      : config.CARS_PER_GROUP;
-    return slot >= size - config.EXPLORER_CARS;
-  }
-
-  /** the second-to-last slot of a full pool re-explores the oldest kept
-   *  hall of fame line, so a second family of weights is always being
-   *  retrained in case the champion line fails to adapt to the next tower */
-  #isScoutSlot(group: Group, slot: number) {
-    if (group.mutationOnly || group.isMixed) return false;
-    return slot === config.CARS_PER_GROUP - 1 - config.EXPLORER_CARS;
-  }
-
-  /** oldest line of the hall of fame, null while only one is kept */
-  #scoutSource(group: Group): {
-    brain: NeuralNetwork;
-    score: number;
-  } | null {
-    const library = this.state.sortedModels[group.layer] || [];
-    if (library.length < 2) return null;
-    const saved = library[library.length - 1] as NeuralNetwork;
-    return { brain: saved, score: saved.score || 0 };
-  }
-
-  /** brain a slot mutates from, null = a fresh random brain (explorers,
-   *  or a group with no champion yet) */
-  #slotSource(
-    group: Group,
-    slot: number,
-  ): { brain: NeuralNetwork; score: number } | null {
-    if (!group.best) return null;
-    if (this.#isExplorerSlot(group, slot)) return null;
-    if (this.#isScoutSlot(group, slot))
-      return this.#scoutSource(group) ?? group.best;
-    return group.best;
-  }
-
   #spawnPlayer(group: Group, slot: number) {
     // Every layer starts from the same centered ground position, like the
     // human and the tower's first centered platform. Variation belongs in the
@@ -184,17 +135,22 @@ export class ClimbRace {
     player.color = group.isMixed
       ? config.MIXED_COLOR
       : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
-    const source = this.#slotSource(group, slot);
+    const source = slotSource(group, slot, this.state.sortedModels, slotPolicy);
     if (source && player.brain) {
       player.brain.mutationIndex = slot;
-      player.brain.mutationFactor = this.#slotMutation(group, slot);
+      player.brain.mutationFactor = slotMutation(
+        group,
+        slot,
+        this.#maxMutation(),
+        slotPolicy,
+      );
       try {
         player.brain.mutate(source.brain);
       } catch {
         // the saved brain no longer fits the current sensors: this player keeps
         // the constructor's random brain and starts fresh
       }
-    } else if (this.#isExplorerSlot(group, slot) && player.brain) {
+    } else if (isExplorerSlot(group, slot, slotPolicy) && player.brain) {
       // explorers keep the constructor's random brain: nothing to mutate
       // from, the factor records the full re-roll in the HUD stats
       player.brain.mutationIndex = slot;
@@ -204,39 +160,16 @@ export class ClimbRace {
   }
 
   #refreshExperts() {
-    this.#experts = [];
-    if (!config.MIXED_ENABLED) return this.#experts;
-
     const { inputCount, outputCount } = getClimbBrainDimensions();
-    const hydrated = hydrateExperts(
-      this.state.sortedModels,
+    this.#experts = refreshExperts(
+      this.state,
       inputCount,
       outputCount,
       config.MIXED_EXPERTS_PER_LAYER,
+      config.MIXED_MIN_EXPERTS,
+      config.MIXED_ENABLED,
     );
-    if (hydrated.length < config.MIXED_MIN_EXPERTS) return this.#experts;
-    this.#experts = hydrated;
-    this.#invalidateStaleMixed();
     return this.#experts;
-  }
-
-  /** A mixed champion is only as valid as the expert library it was trained
-   *  against. When a regular layer promotes a new champion the library grows
-   *  and the saved selector routes to slots that no longer exist: drop the
-   *  champion so the group starts fresh instead of failing at every respawn. */
-  #invalidateStaleMixed() {
-    const champion = this.state.sortedMixed[MIXED_LEVELS]?.[0];
-    if (!champion) return;
-    const levels = champion.levels || [];
-    const width = levels.length
-      ? levels[levels.length - 1].weights?.[0]?.length
-      : undefined;
-    const savedIds = (champion.expertIds || []).join();
-    if (
-      width !== this.#experts.length ||
-      (savedIds && savedIds !== expertSlotIds(this.#experts).join())
-    )
-      this.state.sortedMixed[MIXED_LEVELS] = [];
   }
 
   #buildPools() {
@@ -620,7 +553,8 @@ export class ClimbRace {
   #autoTrainAfterGroupDeath(student: Group) {
     const globalScore = (group: Group) =>
       globalRecordFromScores(group.scores).globalScore;
-    if (globalScore(student) > Math.min(...this.groups.map(globalScore))) return;
+    if (globalScore(student) > Math.min(...this.groups.map(globalScore)))
+      return;
     const guide = this.groups
       .filter(
         (group) =>
@@ -651,7 +585,10 @@ export class ClimbRace {
           saveTrainFrom('climb', group.isMixed ? 'mixed' : group.layer, null);
         }
         if (!wasDistillRun) this.#settle(group, player);
-        if (!wasDistillRun && group.pool.every((candidate) => candidate.damaged))
+        if (
+          !wasDistillRun &&
+          group.pool.every((candidate) => candidate.damaged)
+        )
           deadGroup = group;
         // freeze the ghost when the record holder dies
         if (
@@ -666,7 +603,8 @@ export class ClimbRace {
             .filter((candidate) => candidate !== player && !candidate.damaged)
             .reduce<Player | null>(
               (best, candidate) =>
-                !best || (candidate.brain?.score ?? 0) > (best.brain?.score ?? 0)
+                !best ||
+                (candidate.brain?.score ?? 0) > (best.brain?.score ?? 0)
                   ? candidate
                   : best,
               null,
@@ -674,7 +612,9 @@ export class ClimbRace {
           if (nextBest?.brain) {
             group.scores.seed = nextBest.brain.score;
             group.seedBest = {
-              brain: JSON.parse(JSON.stringify(nextBest.brain)) as NeuralNetwork,
+              brain: JSON.parse(
+                JSON.stringify(nextBest.brain),
+              ) as NeuralNetwork,
               score: nextBest.brain.score,
             };
             group.ghostScore = player.brain?.score ?? 0;
@@ -750,7 +690,7 @@ export class ClimbRace {
     // Mixed selector saves depend on the current regular expert library. Do
     // this check before building any tower pools so stale routing weights
     // are removed instead of failing later during mutation.
-    const experts = hydrateExperts(
+    const { width, slotIds } = expertLibraryShape(
       this.state.sortedModels,
       inputCount,
       outputCount,
@@ -760,10 +700,10 @@ export class ClimbRace {
       MIXED_LEVELS,
       MIXED_KIND,
       () => ({
-        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, experts.length],
+        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, width],
         kind: MIXED_KIND,
         requireKind: true,
-        expertIds: expertSlotIds(experts),
+        expertIds: slotIds,
       }),
     );
     this.state.tower = this.tower;

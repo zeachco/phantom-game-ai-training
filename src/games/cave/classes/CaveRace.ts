@@ -1,20 +1,25 @@
 import type { Scene } from 'three';
-import {
-  expertSlotIds,
-  hydrateExperts,
-  MIXED_KIND,
-  MIXED_LEVELS,
-  MixedNetwork,
-} from '../../../ai/Mixed';
-import { NeuralNetwork } from '../../../ai/Network';
 import { brainIoMatches } from '../../../ai/distill';
-import { globalRecordFromScores } from '../../../utilities/scoreRecords';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../../ai/Mixed';
+import { NeuralNetwork } from '../../../ai/Network';
 import {
   type fileUtilities,
   networkLevelSizes,
   PLAYER_COLOR,
 } from '../../../ai/utils';
+import { gameNow } from '../../../utilities/gameClock';
 import { lerp } from '../../../utilities/math';
+import {
+  expertLibraryShape,
+  refreshExperts,
+} from '../../../utilities/race/expertLibrary';
+import {
+  isExplorerSlot,
+  type SlotPolicy,
+  slotMutation,
+  slotSource,
+} from '../../../utilities/race/slotPolicy';
+import { globalRecordFromScores } from '../../../utilities/scoreRecords';
 import {
   loadTrainFroms,
   saveTrainFrom,
@@ -33,9 +38,27 @@ import {
 import { Ball, getCaveBrainDimensions } from './Ball';
 import { Cave } from './Cave';
 import { config } from './Config';
-import { gameNow } from '../../../utilities/gameClock';
 
 export type CaveModelIo = ReturnType<typeof fileUtilities>;
+
+/** the explorer/scout slot policy for this game's pool shapes and the
+ *  gates a group has banked on the current seed; the demo profile is
+ *  mutations only, so no explorer or scout ever replaces one of its slots */
+const slotPolicy: SlotPolicy<Group> = {
+  poolSize: config.CARS_PER_GROUP,
+  finishedPoolSize: config.FINISHED_CARS_PER_GROUP,
+  explorerSlots: config.EXPLORER_CARS,
+  explorerLimit: config.EXPLORER_LAP_LIMIT,
+  mutationLadderCap: config.MUTATION_LADDER_CAP,
+  finishedSwarmDivisor: config.FINISHED_SWARM_DIVISOR,
+  progress: (group) => {
+    let gates = 0;
+    for (const key of Object.keys(group.gateTimes))
+      gates += group.gateTimes[key].length;
+    return gates;
+  },
+  demo: config.DEMO,
+};
 
 /**
  * Owns the non-visual part of a cave run: model pools, score promotion,
@@ -117,64 +140,6 @@ export class CaveRace {
     );
   }
 
-  #slotMutation(group: Group, slot: number) {
-    if (slot === 0) return 0;
-    if (this.#isScoutSlot(group, slot))
-      return Math.max(
-        Number.MIN_VALUE,
-        this.#maxMutation() / config.MUTATION_LADDER_CAP,
-      );
-    const divisor = group.mutationOnly
-      ? config.FINISHED_SWARM_DIVISOR
-      : Math.min(slot, config.MUTATION_LADDER_CAP);
-    return Math.max(Number.MIN_VALUE, this.#maxMutation() / divisor);
-  }
-
-  /** gates claimed by this group's balls on the current seed, accumulated
-   *  across pool respawns: 0 right after the seed changed */
-  #groupSeedGates(group: Group) {
-    let gates = 0;
-    for (const key of Object.keys(group.gateTimes))
-      gates += group.gateTimes[key].length;
-    return gates;
-  }
-
-  #isExplorerSlot(group: Group, slot: number) {
-    // the demo profile is mutations only, so no random explorer and no scout
-    // ever replaces one of its three slots
-    if (config.DEMO) return false;
-    if (slot === 0) return false;
-    if (this.#groupSeedGates(group) >= config.EXPLORER_LAP_LIMIT) return false;
-    const size = group.mutationOnly
-      ? config.FINISHED_CARS_PER_GROUP
-      : config.CARS_PER_GROUP;
-    return slot >= size - config.EXPLORER_CARS;
-  }
-
-  #isScoutSlot(group: Group, slot: number) {
-    if (config.DEMO) return false;
-    if (group.mutationOnly || group.isMixed) return false;
-    return slot === config.CARS_PER_GROUP - 1 - config.EXPLORER_CARS;
-  }
-
-  #scoutSource(group: Group): { brain: NeuralNetwork; score: number } | null {
-    const library = this.state.sortedModels[group.layer] || [];
-    if (library.length < 2) return null;
-    const saved = library[library.length - 1] as NeuralNetwork;
-    return { brain: saved, score: saved.score || 0 };
-  }
-
-  #slotSource(
-    group: Group,
-    slot: number,
-  ): { brain: NeuralNetwork; score: number } | null {
-    if (!group.best) return null;
-    if (this.#isExplorerSlot(group, slot)) return null;
-    if (this.#isScoutSlot(group, slot))
-      return this.#scoutSource(group) ?? group.best;
-    return group.best;
-  }
-
   #spawnBall(group: Group, slot: number) {
     const spawn = this.cave.getSpawn();
     const ball = new Ball(
@@ -194,17 +159,22 @@ export class CaveRace {
       0,
       this.cave,
     );
-    const source = this.#slotSource(group, slot);
+    const source = slotSource(group, slot, this.state.sortedModels, slotPolicy);
     if (source && ball.brain) {
       ball.brain.mutationIndex = slot;
-      ball.brain.mutationFactor = this.#slotMutation(group, slot);
+      ball.brain.mutationFactor = slotMutation(
+        group,
+        slot,
+        this.#maxMutation(),
+        slotPolicy,
+      );
       try {
         ball.brain.mutate(source.brain);
       } catch {
         // the saved brain no longer fits the current sensors: this ball keeps
         // the constructor's random brain and starts fresh
       }
-    } else if (this.#isExplorerSlot(group, slot) && ball.brain) {
+    } else if (isExplorerSlot(group, slot, slotPolicy) && ball.brain) {
       ball.brain.mutationIndex = slot;
       ball.brain.mutationFactor = 1;
     }
@@ -212,39 +182,16 @@ export class CaveRace {
   }
 
   #refreshExperts() {
-    this.#experts = [];
-    if (!config.MIXED_ENABLED) return this.#experts;
-
     const { inputCount, outputCount } = getCaveBrainDimensions();
-    const hydrated = hydrateExperts(
-      this.state.sortedModels,
+    this.#experts = refreshExperts(
+      this.state,
       inputCount,
       outputCount,
       config.MIXED_EXPERTS_PER_LAYER,
+      config.MIXED_MIN_EXPERTS,
+      config.MIXED_ENABLED,
     );
-    if (hydrated.length < config.MIXED_MIN_EXPERTS) return this.#experts;
-    this.#experts = hydrated;
-    this.#invalidateStaleMixed();
     return this.#experts;
-  }
-
-  /** A mixed champion is only as valid as the expert library it was trained
-   *  against. When a regular layer promotes a new champion the library grows
-   *  and the saved selector routes to slots that no longer exist: drop the
-   *  champion so the group starts fresh instead of failing at every respawn. */
-  #invalidateStaleMixed() {
-    const champion = this.state.sortedMixed[MIXED_LEVELS]?.[0];
-    if (!champion) return;
-    const levels = champion.levels || [];
-    const width = levels.length
-      ? levels[levels.length - 1].weights?.[0]?.length
-      : undefined;
-    const savedIds = (champion.expertIds || []).join();
-    if (
-      width !== this.#experts.length ||
-      (savedIds && savedIds !== expertSlotIds(this.#experts).join())
-    )
-      this.state.sortedMixed[MIXED_LEVELS] = [];
   }
 
   #buildPools() {
@@ -639,7 +586,8 @@ export class CaveRace {
   #autoTrainAfterGroupDeath(student: Group) {
     const globalScore = (group: Group) =>
       globalRecordFromScores(group.scores).globalScore;
-    if (globalScore(student) > Math.min(...this.groups.map(globalScore))) return;
+    if (globalScore(student) > Math.min(...this.groups.map(globalScore)))
+      return;
     const guide = this.groups
       .filter(
         (group) =>
@@ -673,7 +621,10 @@ export class CaveRace {
         // A gauge death is the ball's natural end of run: promote its brain
         // when it is the group's best so the next spawn mutates from it.
         if (!wasDistillRun) this.#settle(group, ball);
-        if (!wasDistillRun && group.pool.every((candidate) => candidate.damaged))
+        if (
+          !wasDistillRun &&
+          group.pool.every((candidate) => candidate.damaged)
+        )
           deadGroup = group;
         if (ball.deathCause === 'gauge') this.#pendingSaves.add(group);
         if (
@@ -752,7 +703,7 @@ export class CaveRace {
       }),
     );
 
-    const experts = hydrateExperts(
+    const { width, slotIds } = expertLibraryShape(
       this.state.sortedModels,
       inputCount,
       outputCount,
@@ -762,10 +713,10 @@ export class CaveRace {
       MIXED_LEVELS,
       MIXED_KIND,
       () => ({
-        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, experts.length],
+        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, width],
         kind: MIXED_KIND,
         requireKind: true,
-        expertIds: expertSlotIds(experts),
+        expertIds: slotIds,
       }),
     );
     this.state.cave = this.cave;

@@ -1,18 +1,23 @@
-import {
-  expertSlotIds,
-  hydrateExperts,
-  MIXED_KIND,
-  MIXED_LEVELS,
-  MixedNetwork,
-} from '../../../ai/Mixed';
 import { brainIoMatches } from '../../../ai/distill';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../../ai/Mixed';
 import { NeuralNetwork } from '../../../ai/Network';
 import {
   type fileUtilities,
   networkLevelSizes,
   PLAYER_COLOR,
 } from '../../../ai/utils';
+import { gameNow } from '../../../utilities/gameClock';
 import { lerp } from '../../../utilities/math';
+import {
+  expertLibraryShape,
+  refreshExperts,
+} from '../../../utilities/race/expertLibrary';
+import {
+  isExplorerSlot,
+  type SlotPolicy,
+  slotMutation,
+  slotSource,
+} from '../../../utilities/race/slotPolicy';
 import {
   loadTrainFroms,
   saveTrainFrom,
@@ -32,9 +37,25 @@ import {
 import { Car, getCircuitBrainDimensions } from './Car';
 import { Circuit } from './Circuit';
 import { config } from './Config';
-import { gameNow } from '../../../utilities/gameClock';
 
 export type CircuitModelIo = ReturnType<typeof fileUtilities>;
+
+/** the explorer/scout slot policy for this game's pool shapes and the
+ *  laps a group has banked on the current seed */
+const slotPolicy: SlotPolicy<Group> = {
+  poolSize: config.CARS_PER_GROUP,
+  finishedPoolSize: config.FINISHED_CARS_PER_GROUP,
+  explorerSlots: config.EXPLORER_CARS,
+  explorerLimit: config.EXPLORER_LAP_LIMIT,
+  mutationLadderCap: config.MUTATION_LADDER_CAP,
+  finishedSwarmDivisor: config.FINISHED_SWARM_DIVISOR,
+  progress: (group) => {
+    let laps = 0;
+    for (const key of Object.keys(group.lapTimes))
+      laps += group.lapTimes[key].length;
+    return laps;
+  },
+};
 
 /**
  * Owns the non-visual part of a circuit race: model pools, score promotion,
@@ -118,75 +139,6 @@ export class CircuitRace {
     );
   }
 
-  #slotMutation(group: Group, slot: number) {
-    if (slot === 0) return 0;
-    if (this.#isScoutSlot(group, slot))
-      // scouts stay close to the old line they re-explore: bottom rung
-      return Math.max(
-        Number.MIN_VALUE,
-        this.#maxMutation() / config.MUTATION_LADDER_CAP,
-      );
-    const divisor = group.mutationOnly
-      ? config.FINISHED_SWARM_DIVISOR
-      : Math.min(slot, config.MUTATION_LADDER_CAP);
-    return Math.max(Number.MIN_VALUE, this.#maxMutation() / divisor);
-  }
-
-  /** laps completed by this group's cars on the current seed, accumulated
-   *  across pool respawns: 0 right after the seed changed */
-  #groupSeedLaps(group: Group) {
-    let laps = 0;
-    for (const key of Object.keys(group.lapTimes))
-      laps += group.lapTimes[key].length;
-    return laps;
-  }
-
-  /** the last slots of a pool skip the champion mutation and start from a
-   *  blank random brain — but only while the group is still struggling. Once
-   *  its cars have banked EXPLORER_LAP_LIMIT laps on this seed, the line is
-   *  proven, a blank brain can no longer beat it, and the slot reverts to a
-   *  regular mutation car */
-  #isExplorerSlot(group: Group, slot: number) {
-    if (slot === 0) return false;
-    if (this.#groupSeedLaps(group) >= config.EXPLORER_LAP_LIMIT) return false;
-    const size = group.mutationOnly
-      ? config.FINISHED_CARS_PER_GROUP
-      : config.CARS_PER_GROUP;
-    return slot >= size - config.EXPLORER_CARS;
-  }
-
-  /** the second-to-last slot of a full pool re-explores the oldest kept
-   *  hall of fame line, so a second family of weights is always being
-   *  retrained in case the champion line fails to adapt to the next track */
-  #isScoutSlot(group: Group, slot: number) {
-    if (group.mutationOnly || group.isMixed) return false;
-    return slot === config.CARS_PER_GROUP - 1 - config.EXPLORER_CARS;
-  }
-
-  /** oldest line of the hall of fame, null while only one is kept */
-  #scoutSource(group: Group): {
-    brain: NeuralNetwork;
-    score: number;
-  } | null {
-    const library = this.state.sortedModels[group.layer] || [];
-    if (library.length < 2) return null;
-    const saved = library[library.length - 1] as NeuralNetwork;
-    return { brain: saved, score: saved.score || 0 };
-  }
-
-  /** brain a slot mutates from, null = a fresh random brain (explorers,
-   *  or a group with no champion yet) */
-  #slotSource(
-    group: Group,
-    slot: number,
-  ): { brain: NeuralNetwork; score: number } | null {
-    if (!group.best) return null;
-    if (this.#isExplorerSlot(group, slot)) return null;
-    if (this.#isScoutSlot(group, slot))
-      return this.#scoutSource(group) ?? group.best;
-    return group.best;
-  }
-
   #spawnCar(group: Group, slot: number) {
     const spawn = this.circuit.getSpawn();
     const car = new Car(
@@ -206,17 +158,22 @@ export class CircuitRace {
             })
         : undefined,
     );
-    const source = this.#slotSource(group, slot);
+    const source = slotSource(group, slot, this.state.sortedModels, slotPolicy);
     if (source && car.brain) {
       car.brain.mutationIndex = slot;
-      car.brain.mutationFactor = this.#slotMutation(group, slot);
+      car.brain.mutationFactor = slotMutation(
+        group,
+        slot,
+        this.#maxMutation(),
+        slotPolicy,
+      );
       try {
         car.brain.mutate(source.brain);
       } catch {
         // the saved brain no longer fits the current sensors: this car keeps
         // the constructor's random brain and starts fresh
       }
-    } else if (this.#isExplorerSlot(group, slot) && car.brain) {
+    } else if (isExplorerSlot(group, slot, slotPolicy) && car.brain) {
       // explorers keep the constructor's random brain: nothing to mutate
       // from, the factor records the full re-roll in the HUD stats
       car.brain.mutationIndex = slot;
@@ -226,39 +183,16 @@ export class CircuitRace {
   }
 
   #refreshExperts() {
-    this.#experts = [];
-    if (!config.MIXED_ENABLED) return this.#experts;
-
     const { inputCount, outputCount } = getCircuitBrainDimensions();
-    const hydrated = hydrateExperts(
-      this.state.sortedModels,
+    this.#experts = refreshExperts(
+      this.state,
       inputCount,
       outputCount,
       config.MIXED_EXPERTS_PER_LAYER,
+      config.MIXED_MIN_EXPERTS,
+      config.MIXED_ENABLED,
     );
-    if (hydrated.length < config.MIXED_MIN_EXPERTS) return this.#experts;
-    this.#experts = hydrated;
-    this.#invalidateStaleMixed();
     return this.#experts;
-  }
-
-  /** A mixed champion is only as valid as the expert library it was trained
-   *  against. When a regular layer promotes a new champion the library grows
-   *  and the saved selector routes to slots that no longer exist: drop the
-   *  champion so the group starts fresh instead of failing at every respawn. */
-  #invalidateStaleMixed() {
-    const champion = this.state.sortedMixed[MIXED_LEVELS]?.[0];
-    if (!champion) return;
-    const levels = champion.levels || [];
-    const width = levels.length
-      ? levels[levels.length - 1].weights?.[0]?.length
-      : undefined;
-    const savedIds = (champion.expertIds || []).join();
-    if (
-      width !== this.#experts.length ||
-      (savedIds && savedIds !== expertSlotIds(this.#experts).join())
-    )
-      this.state.sortedMixed[MIXED_LEVELS] = [];
   }
 
   #buildPools() {
@@ -794,7 +728,7 @@ export class CircuitRace {
     // Mixed selector saves depend on the current regular expert library. Do
     // this check before building any map pools so stale routing weights are
     // removed instead of failing later during mutation.
-    const experts = hydrateExperts(
+    const { width, slotIds } = expertLibraryShape(
       this.state.sortedModels,
       inputCount,
       outputCount,
@@ -804,10 +738,10 @@ export class CircuitRace {
       MIXED_LEVELS,
       MIXED_KIND,
       () => ({
-        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, experts.length],
+        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, width],
         kind: MIXED_KIND,
         requireKind: true,
-        expertIds: expertSlotIds(experts),
+        expertIds: slotIds,
       }),
     );
     this.state.circuit = this.circuit;
@@ -898,8 +832,8 @@ export class CircuitRace {
           car === this.state.human
             ? 'human'
             : car.brain instanceof MixedNetwork
-            ? 'mixed'
-            : String(car.brainLayers);
+              ? 'mixed'
+              : String(car.brainLayers);
         this.#completedBrainIndices.add(brainIndex);
         if (
           group &&
