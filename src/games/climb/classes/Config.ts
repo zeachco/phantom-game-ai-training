@@ -1,9 +1,7 @@
 import { CTRL_COLORS } from '../../../ai/utils';
+import { isDemo, likelyLagsOnHeavyJs } from '../../../utilities/env';
 
-/** `?demo=true` is the light showcase profile: the hosted demo skips the
- *  model panel entirely and runs a small population. */
-export const isDemo =
-  typeof window !== 'undefined' && location.href.includes('demo=true');
+export { isDemo, likelyLagsOnHeavyJs };
 
 /** `?slots=N` overrides the per-platform sensor slot count, e.g. ?slots=15. */
 export const SLOTS = (() => {
@@ -20,15 +18,6 @@ export const SLOTS = (() => {
  * platform to left wall, current platform to right wall, combo value).
  */
 export const CLIMB_INPUT_COUNT = SLOTS * 4 + 8;
-
-export function likelyLagsOnHeavyJs(): boolean {
-  if (typeof window === 'undefined') return true;
-  if (isDemo) return true;
-  const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
-  const memory =
-    (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8; // Chromium only, GiB, rounded to 0.25..8
-  return cores <= 4 || memory <= 4;
-}
 
 class Config {
   // population

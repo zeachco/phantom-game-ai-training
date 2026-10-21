@@ -1,19 +1,7 @@
 import { CTRL_COLORS } from '../../../ai/utils';
+import { isDemo, likelyLagsOnHeavyJs } from '../../../utilities/env';
 
-/** `?demo=true` is the light showcase profile: the cave runs a tiny
- *  mutation-only population, so a hosted demo never grinds a weak machine. */
-export const isDemo =
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).get('demo') === 'true';
-
-export function likelyLagsOnHeavyJs(): boolean {
-  if (typeof window === 'undefined') return true;
-  if (isDemo) return true;
-  const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
-  const memory =
-    (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8; // Chromium only, GiB, rounded down to 0.25..8
-  return cores <= 4 || memory <= 4;
-}
+export { isDemo, likelyLagsOnHeavyJs };
 
 class Config {
   // population

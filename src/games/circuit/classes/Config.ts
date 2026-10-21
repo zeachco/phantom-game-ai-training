@@ -1,18 +1,7 @@
 import { CTRL_COLORS } from '../../../ai/utils';
+import { isDemo, likelyLagsOnHeavyJs } from '../../../utilities/env';
 
-/** `?demo=true` is the light showcase profile: the hosted demo skips the
- *  model panel entirely and runs a small population. */
-export const isDemo =
-  typeof window !== 'undefined' && location.href.includes('demo=true');
-
-export function likelyLagsOnHeavyJs(): boolean {
-  if (typeof window === 'undefined') return true;
-  if (isDemo) return true;
-  const cores = navigator.hardwareConcurrency ?? 8; // undefined on very old browsers
-  const memory =
-    (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8; // Chromium only, GiB, rounded to 0.25..8
-  return cores <= 4 || memory <= 4;
-}
+export { isDemo, likelyLagsOnHeavyJs };
 
 class Config {
   // population
