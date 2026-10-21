@@ -1,5 +1,1 @@
-export enum ControlType {
-  KEYS,
-  DUMMY,
-  AI,
-}
+export { ControlType } from '../../utilities/types';
