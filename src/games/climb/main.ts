@@ -13,6 +13,7 @@ import {
   createCanvas,
   createFrameMeter,
   createUpdateLimiter,
+  isEditableTarget,
   resizeCanvas,
 } from '../../utilities/dom';
 import { createSidePanel } from '../../utilities/sidePanel';
@@ -250,14 +251,7 @@ export default async (state: typeof defaultState) => {
     race.applyUserSeed(Math.floor(Math.random() * 1000));
 
   const onKey = (e: KeyboardEvent) => {
-    const t = e.target as HTMLElement | null;
-    if (
-      t &&
-      (t instanceof HTMLInputElement ||
-        t instanceof HTMLTextAreaElement ||
-        t.isContentEditable)
-    )
-      return;
+    if (isEditableTarget(e.target)) return;
     if (e.code === 'KeyR') race.applyUserSeed(Math.floor(Math.random() * 1000));
   };
   document.addEventListener('keydown', onKey);

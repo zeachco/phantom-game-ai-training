@@ -13,6 +13,7 @@ import {
 import {
   createCanvas,
   createFrameMeter,
+  createLegend,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
@@ -164,9 +165,7 @@ export default async (state: typeof defaultState) => {
     displayedGroup: () => displayedGroup,
   };
 
-  const legend = document.createElement('div');
-  legend.className = 'side-panel-legend';
-  [
+  const legend = createLegend([
     'Score board',
     '💀 crashed, fades out over 3s from 50% opacity',
     '🏆 crashed with a higher score',
@@ -178,12 +177,7 @@ export default async (state: typeof defaultState) => {
     '🎓 car is being trained by another brain group (one student, score disqualified)',
     '🏁 next checkpoint glows',
     '🚧 gray obstacle (circle or wall)',
-  ].forEach((line, i) => {
-    const el = document.createElement('span');
-    el.textContent = line;
-    if (i === 0) el.className = 'legend-title';
-    legend.append(el);
-  });
+  ]);
 
   const about = document.createElement('div');
   about.className = 'side-panel-about';

@@ -185,3 +185,12 @@ export function mulberry32(seed: number): Rng {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** Center a gamepad axis or stick around zero: values inside the deadzone
+ *  read as 0, and the rest is rescaled so full travel is kept at the edges. */
+export function applyDeadzone(value: number, deadzone = 0.12): number {
+  const magnitude = Math.abs(value);
+  if (magnitude <= deadzone) return 0;
+  return (Math.sign(value) * (magnitude - deadzone)) / (1 - deadzone);
+}
+

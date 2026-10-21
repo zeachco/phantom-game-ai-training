@@ -152,3 +152,32 @@ export function resizeCanvas(
   ctx.restore();
   return false;
 }
+
+/** true when the event target is (or sits inside) a form field or an
+ *  editable region — game shortcuts must not fire while typing there */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement))
+    return false;
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable ||
+    !!target.closest('input, textarea, select')
+  );
+}
+
+/** A legend block for the side panel: one span per line, the first line
+ *  styled as the title. */
+export function createLegend(lines: string[]): HTMLDivElement {
+  const legend = document.createElement('div');
+  legend.className = 'side-panel-legend';
+  lines.forEach((line, i) => {
+    const el = document.createElement('span');
+    el.textContent = line;
+    if (i === 0) el.className = 'legend-title';
+    legend.append(el);
+  });
+  return legend;
+}
+

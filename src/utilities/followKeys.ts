@@ -1,3 +1,5 @@
+import { isEditableTarget } from './dom';
+
 export interface FollowKeyHandlers {
   /** 1-9: follow the best runner of that brain layer */
   digit: (layer: number) => void;
@@ -15,15 +17,7 @@ export interface FollowKeyHandlers {
 export function bindFollowKeys(handlers: FollowKeyHandlers): () => void {
   const onKey = (ev: KeyboardEvent) => {
     if (ev.repeat || ev.isComposing) return;
-    const target = ev.target as HTMLElement | null;
-    if (
-      target &&
-      (target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        target.isContentEditable)
-    )
-      return;
+    if (isEditableTarget(ev.target)) return;
     if (ev.code === 'Backquote') handlers.mixed();
     else if (ev.code === 'Digit0') handlers.all();
     else if (ev.code.startsWith('Digit')) {

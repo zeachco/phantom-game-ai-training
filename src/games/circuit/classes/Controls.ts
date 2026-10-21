@@ -1,14 +1,7 @@
 import { ControlType } from '../types';
-
-const GAMEPAD_DEADZONE = 0.12;
-
-function applyDeadzone(value: number) {
-  const magnitude = Math.abs(value);
-  if (magnitude <= GAMEPAD_DEADZONE) return 0;
-  return (
-    (Math.sign(value) * (magnitude - GAMEPAD_DEADZONE)) / (1 - GAMEPAD_DEADZONE)
-  );
-}
+import { applyDeadzone } from '../../../utilities/math';
+import { findStandardGamepad } from '../../../utilities/inputs/gamepadApi';
+import { isEditableTarget } from '../../../utilities/dom';
 
 export class Controls {
   /** signed throttle: > 0 gas, < 0 brake / reverse, 0 neutral — floats welcome */
@@ -62,21 +55,13 @@ export class Controls {
    * exposed as "Wireless Controller" in most browsers. The standard mapping
    * keeps this working when the browser does not include that name in id. */
   #findGamepad(): Gamepad | undefined {
-    if (typeof navigator === 'undefined' || !navigator.getGamepads) return;
-
-    const pads = Array.from(navigator.getGamepads()).filter(
-      (pad): pad is Gamepad => !!pad && pad.connected,
-    );
-    const current = pads.find((pad) => pad.index === this.#gamepadIndex);
-    if (current) return current;
-
-    const dualshock = pads.find((pad) =>
-      /dualshock|playstation|wireless controller|sony/i.test(pad.id),
-    );
-    const standard = pads.find((pad) => pad.mapping === 'standard');
-    const selected = dualshock || standard;
-    this.#gamepadIndex = selected?.index;
-    return selected;
+    const found = findStandardGamepad(this.#gamepadIndex);
+    if (!found) {
+      this.#gamepadIndex = undefined;
+      return;
+    }
+    this.#gamepadIndex = found.index;
+    return found.pad;
   }
 
   #buttonValue(pad: Gamepad, index: number) {
@@ -142,15 +127,7 @@ export class Controls {
   #addKeyboardListeners() {
     const down = (e: KeyboardEvent) => {
       // typing in a form field never drives the car
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t instanceof HTMLInputElement ||
-          t instanceof HTMLTextAreaElement ||
-          t instanceof HTMLSelectElement ||
-          t.isContentEditable)
-      )
-        return;
+      if (isEditableTarget(e.target)) return;
       const map = this.#keyToOutput(e.key);
       if (map === undefined) return;
       e.preventDefault();

@@ -10,7 +10,7 @@ import {
   createSpeedo,
   updateTimingLine,
 } from '../../utilities/cockpit';
-import { createFrameMeter } from '../../utilities/dom';
+import { createFrameMeter, isEditableTarget } from '../../utilities/dom';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
@@ -669,12 +669,7 @@ export default async (state: CaveState) => {
   window.addEventListener('keydown', (event) => {
     if (event.code === 'KeyV' || event.key.toLowerCase() === 'v') {
       if (event.repeat || event.isComposing) return;
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable || target.closest('input, textarea, select'))
-      )
-        return;
+      if (isEditableTarget(event.target)) return;
       event.preventDefault();
       wireframe = !wireframe;
       state.cave?.setWireframe(wireframe);

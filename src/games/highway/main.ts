@@ -17,6 +17,7 @@ import { drawGamepadControls } from '../../utilities/driveIndicators';
 import {
   createCanvas,
   createFrameMeter,
+  createLegend,
   createUpdateLimiter,
   resizeCanvas,
 } from '../../utilities/dom';
@@ -188,9 +189,7 @@ export default async (state: typeof defaultState) => {
     displayedGroup: () => displayedGroup,
   };
 
-  const legend = document.createElement('div');
-  legend.className = 'side-panel-legend';
-  [
+  const legend = createLegend([
     'Score board',
     '👶 first generation',
     '🎓 car is being trained by another brain group (one student, score disqualified)',
@@ -199,12 +198,7 @@ export default async (state: typeof defaultState) => {
     '💜 car is racing',
     '💚 car is besting the best score',
     '👻 ghost car from a previous generation',
-  ].forEach((line, i) => {
-    const el = document.createElement('span');
-    el.textContent = line;
-    if (i === 0) el.className = 'legend-title';
-    legend.append(el);
-  });
+  ]);
 
   const frameMeter = createFrameMeter();
 
