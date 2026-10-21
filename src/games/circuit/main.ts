@@ -1,4 +1,4 @@
-import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
+import { MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
@@ -19,6 +19,7 @@ import {
 } from '../../utilities/dom';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
+import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
 import {
   globalRecordFromScores,
@@ -101,32 +102,24 @@ export default async (state: typeof defaultState) => {
     followTarget = undefined;
   };
 
-  const resetBrainSaves = (value: number | 'mixed') => {
-    if (value === 'mixed') {
-      if (!confirm(`Reset the saved weights of ${brainId(0, undefined)}?`))
-        return;
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    } else if (value === 0) {
-      if (!confirm('Reset all the saved circuit weights?')) return;
-      io.discardGameModels();
-    } else {
-      if (!confirm(`Reset the saved weights of ${brainId(value)}?`)) return;
-      io.discardModel(value);
-      // the mixed selector's output width and expert slots are pinned to the
-      // saved brains it routes to, so dropping one invalidates its routing
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    }
-    console.info(
-      `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
-    );
-    if (value === 0) race.initialize();
-    else {
-      race.resetBrainGroup(value);
-      camSet = false;
-      followTarget = undefined;
-      lastFollowed = undefined;
-    }
-  };
+  const resetBrainSaves = makeResetBrainSaves({
+    io,
+    game: 'circuit',
+    mixedLabel: 'the mixed brain',
+    layerLabel: (layer) => brainId(layer),
+    onReset: (value) => {
+      console.info(
+        `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
+      );
+      if (value === 0) race.initialize();
+      else {
+        race.resetBrainGroup(value);
+        camSet = false;
+        followTarget = undefined;
+        lastFollowed = undefined;
+      }
+    },
+  });
 
   // the race is built further down, but the group-action callbacks above are
   // already wired to it: keep the binding assignable so they can no-op until

@@ -1,4 +1,4 @@
-import { MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
+import { MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
@@ -9,6 +9,7 @@ import { createCockpit } from '../../utilities/cockpit';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
+import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import {
   createCanvas,
   createFrameMeter,
@@ -58,26 +59,19 @@ export default async (state: typeof defaultState) => {
   let humanFollow = false;
   let camSet = false;
 
-  const resetBrainSaves = (value: number | 'mixed') => {
-    if (value === 0) {
-      if (!confirm('Reset all the saved climb weights?')) return;
-      io.discardGameModels();
-      console.info('Reset saved weights of all brains');
-      race.initialize();
-    } else if (value === 'mixed') {
-      if (!confirm(`Reset the saved weights of ${brainId(0, undefined)}?`))
-        return;
-      io.discardModel(MIXED_LEVELS, 'mixed');
-    } else {
-      if (!confirm(`Reset the saved weights of ${brainId(value, undefined)}?`))
-        return;
-      io.discardModel(value);
-      // the mixed selector's output width and expert slots are pinned to the
-      // saved brains it routes to, so dropping one invalidates its routing
-      io.discardModel(MIXED_LEVELS, 'mixed');
-    }
-    race.resetBrainGroup(value);
-  };
+  const resetBrainSaves = makeResetBrainSaves({
+    io,
+    game: 'climb',
+    mixedLabel: 'the mixed brain',
+    layerLabel: (layer) => brainId(layer),
+    onReset: (value) => {
+      if (value === 0) {
+        console.info('Reset saved weights of all brains');
+        race.initialize();
+      }
+      race.resetBrainGroup(value);
+    },
+  });
 
   // the group of the brain the visualizer is drawing; the "all" readouts
   // report on it

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../ai/Mixed';
+import { MixedNetwork } from '../../ai/Mixed';
 import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
@@ -15,6 +15,7 @@ import { readSeedFromHash, writeSeedToHash } from '../../utilities/urlSeed';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
+import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
 import {
   globalRecordFromScores,
@@ -135,26 +136,19 @@ export default async (state: CaveState) => {
   const FOLLOW_SWITCH_SCORE_GAP = 5;
   const FOLLOW_SWITCH_MIN_MS = 5_000;
 
-  const resetBrainSaves = (value: number | 'mixed') => {
-    if (value === 'mixed') {
-      if (!confirm(`Reset the saved weights of the mixed brain?`)) return;
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    } else if (value === 0) {
-      if (!confirm('Reset all the saved cave weights?')) return;
-      io.discardGameModels();
-    } else {
-      if (!confirm(`Reset the saved weights of brain ${value}?`)) return;
-      io.discardModel(value);
-      // the mixed selector's output width and expert slots are pinned to the
-      // saved brains it routes to, so dropping one invalidates its routing
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    }
-    console.info(
-      `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
-    );
-    race.initialize();
-    followTarget = undefined;
-  };
+  const resetBrainSaves = makeResetBrainSaves({
+    io,
+    game: 'cave',
+    mixedLabel: 'the mixed brain',
+    layerLabel: (layer) => `brain ${layer}`,
+    onReset: (value) => {
+      console.info(
+        `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
+      );
+      race.initialize();
+      followTarget = undefined;
+    },
+  });
 
   // the group of the brain the visualizer is drawing; the "all" readouts
   // report on it

@@ -23,6 +23,7 @@ import {
 } from '../../utilities/dom';
 import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
+import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
 import { bestSavedModelScore } from '../../utilities/scoreRecords';
 import {
@@ -67,25 +68,18 @@ export default async (state: typeof defaultState) => {
   let camY = 0;
   let camSet = false;
 
-  const resetBrainSaves = (value: number | 'mixed') => {
-    if (value === 'mixed') {
-      if (!confirm('Reset the saved mixed brain weights?')) return;
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    } else if (value === 0) {
-      if (!confirm('Reset all the saved highway weights?')) return;
-      io.discardGameModels();
-    } else {
-      if (!confirm(`Reset the saved weights of brain ${value}?`)) return;
-      io.discardModel(value);
-      // the mixed selector's output width and expert slots are pinned to the
-      // saved brains it routes to, so dropping one invalidates its routing
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    }
-    console.info(
-      `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
-    );
-    initialize();
-  };
+  const resetBrainSaves = makeResetBrainSaves({
+    io,
+    game: 'highway',
+    mixedLabel: 'the mixed brain',
+    layerLabel: (layer) => `brain ${layer}`,
+    onReset: (value) => {
+      console.info(
+        `Reset saved weights of ${value === 0 ? 'all brains' : value}`,
+      );
+      initialize();
+    },
+  });
 
   // distillation targets: which group each group imitates, per group key
   const trainFroms = new Map<string, number | 'mixed'>();
