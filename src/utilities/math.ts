@@ -168,8 +168,92 @@ export function vecLength(x: number, y: number) {
   return Math.sqrt(x * x + y * y);
 }
 
-export function ratio(value, min = 0, max = 1) {
-  return Math.max(min, Math.min(value, max));
+export function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+export function ratio(value: number, min = 0, max = 1): number {
+  return clamp(value, min, max);
+}
+
+/**
+ * The offset of the crossing of segment AB over segment CD: the parameter t
+ * on AB where they meet, or -1 when the segments do not cross.
+ */
+export function segmentIntersectionOffset(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+): number {
+  const tTop = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
+  const uTop = (cy - ay) * (ax - bx) - (cx - ax) * (ay - by);
+  const bottom = (dy - cy) * (bx - ax) - (dx - cx) * (by - ay);
+
+  if (bottom === 0) return -1;
+  const t = tTop / bottom;
+  const u = uTop / bottom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
+}
+
+/** true when two axis-aligned boxes overlap, touching edges included */
+export function aabbOverlap(a: AABB, b: AABB): boolean {
+  return !(
+    a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY
+  );
+}
+
+/**
+ * The four corners of the oriented rectangle around (x, y): a vehicle box of
+ * radius `rad` and half-width angle `alpha`, `angle` measured from north. The
+ * points are written in place and reused every frame, only their coordinates
+ * move.
+ */
+export function orientedRectPolygon(
+  x: number,
+  y: number,
+  angle: number,
+  rad: number,
+  alpha: number,
+  points: Vector[],
+): void {
+  const a0 = angle - alpha;
+  points[0].x = x - Math.sin(a0) * rad;
+  points[0].y = y - Math.cos(a0) * rad;
+  const a1 = angle + alpha;
+  points[1].x = x - Math.sin(a1) * rad;
+  points[1].y = y - Math.cos(a1) * rad;
+  const a2 = Math.PI + angle - alpha;
+  points[2].x = x - Math.sin(a2) * rad;
+  points[2].y = y - Math.cos(a2) * rad;
+  const a3 = Math.PI + angle + alpha;
+  points[3].x = x - Math.sin(a3) * rad;
+  points[3].y = y - Math.cos(a3) * rad;
+}
+
+/** tighten `box` to the bounds of `points`, written in place */
+export function updateAABB(points: Vector[], box: AABB): void {
+  let minX = points[0].x;
+  let maxX = points[0].x;
+  let minY = points[0].y;
+  let maxY = points[0].y;
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i];
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  box.minX = minX;
+  box.maxX = maxX;
+  box.minY = minY;
+  box.maxY = maxY;
 }
 
 /** deterministic 32-bit PRNG, same seed → same sequence, for seeded maps */

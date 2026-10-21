@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { DistillDriver, type Distiller } from '../../../ai/distill';
-import { CTRL_COLORS, clamp } from '../../../ai/utils';
+import { CTRL_COLORS } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
-import { lerp } from '../../../utilities/math';
+import { clamp, lerp } from '../../../utilities/math';
 import { ControlType } from '../types';
 import type { Cave, RadialHit } from './Cave';
 import { config } from './Config';
@@ -422,18 +422,18 @@ export class Ball {
         inputs.push(Math.min(1, this.speed * invMax));
         inputs.push(
           clamp(
-            -1,
-            1,
             (this.vx * this.fx + this.vy * this.fy + this.vz * this.fz) *
               invMax,
+            -1,
+            1,
           ),
         );
         inputs.push(
           clamp(
-            -1,
-            1,
             (this.vx * this.rx + this.vy * this.ry + this.vz * this.rz) *
               invMax,
+            -1,
+            1,
           ),
         );
         inputs.push(this.grounded ? 1 : 0);
@@ -471,13 +471,13 @@ export class Ball {
             const threat = (1 - d) * Math.max(0, 1 - lateral / 45);
             if (threat > columnProximity) {
               columnProximity = threat;
-              columnSide = clamp(-1, 1, offset * 4);
+              columnSide = clamp(offset * 4, -1, 1);
             }
           }
         }
         inputs.push(this.grounded ? 0 : 1);
-        inputs.push(clamp(0, 1, cave.platformAt(this.s, surfaceA)));
-        inputs.push(clamp(0, 1, cave.coinAt(this.s, surfaceA)));
+        inputs.push(clamp(cave.platformAt(this.s, surfaceA), 0, 1));
+        inputs.push(clamp(cave.coinAt(this.s, surfaceA), 0, 1));
         inputs.push(platformAhead);
         inputs.push(coinAhead);
         inputs.push(columnProximity);
@@ -604,7 +604,7 @@ export class Ball {
       const crossZ = this.fx * dy - this.fy * dx;
       const dot = this.fx * dx + this.fy * dy + this.fz * dz;
       const around = crossX * this.ux + crossY * this.uy + crossZ * this.uz;
-      this.gateDelta = clamp(-1, 1, Math.atan2(around, dot) / Math.PI);
+      this.gateDelta = clamp(Math.atan2(around, dot) / Math.PI, -1, 1);
       // The same bearing, measured from where the ball is actually heading:
       // the velocity direction while it moves, the cave tangent while not.
       // Yaw is the turn to line up with the gate, pitch the climb to it, so
@@ -635,20 +635,20 @@ export class Ball {
       const dirY = dy / dist;
       const dirZ = dz / dist;
       this.gateHeading = clamp(
-        -1,
-        1,
         Math.atan2(
           dirX * rxv + dirY * ryv + dirZ * rzv,
           dirX * hx + dirY * hy + dirZ * hz,
         ) / Math.PI,
-      );
-      this.gatePitch = clamp(
         -1,
         1,
+      );
+      this.gatePitch = clamp(
         Math.asin(
-          clamp(-1, 1, dirX * this.ux + dirY * this.uy + dirZ * this.uz),
+          clamp(dirX * this.ux + dirY * this.uy + dirZ * this.uz, -1, 1),
         ) /
           (Math.PI / 2),
+        -1,
+        1,
       );
     } else {
       this.gateDelta = 0;
@@ -697,8 +697,8 @@ export class Ball {
     );
     const dt = 1 / substeps;
     // normalized stick vector: diagonals are not faster than axes
-    let sx = clamp(-1, 1, this.controls.moveX);
-    let sy = clamp(-1, 1, this.controls.moveY);
+    let sx = clamp(this.controls.moveX, -1, 1);
+    let sy = clamp(this.controls.moveY, -1, 1);
     const stick = Math.hypot(sx, sy);
     if (stick > 1) {
       sx /= stick;
@@ -862,7 +862,7 @@ export class Ball {
           this.vz = nz * vn2 + tz * keep;
         }
         if (-vn > config.BALL_CRASH_SPEED) {
-          this.deathPenalty = lerp(1, 5, clamp(0, 1, -vn / (this.speed || 1)));
+          this.deathPenalty = lerp(1, 5, clamp(-vn / (this.speed || 1), 0, 1));
           this.damaged = true;
         }
       }

@@ -1,5 +1,5 @@
 import { ControlType } from '../types';
-import { applyDeadzone } from '../../../utilities/math';
+import { applyDeadzone, clamp } from '../../../utilities/math';
 import { findStandardGamepad } from '../../../utilities/inputs/gamepadApi';
 import { isEditableTarget } from '../../../utilities/dom';
 
@@ -83,8 +83,8 @@ export class Controls {
   }
 
   #syncOutputs() {
-    this.moveX = Math.max(-1, Math.min(1, this.#keyboardX + this.#gamepadX));
-    this.moveY = Math.max(-1, Math.min(1, this.#keyboardY + this.#gamepadY));
+    this.moveX = clamp(this.#keyboardX + this.#gamepadX, -1, 1);
+    this.moveY = clamp(this.#keyboardY + this.#gamepadY, -1, 1);
   }
 
   /** Read the browser's standard gamepad mapping. DualShock controllers are

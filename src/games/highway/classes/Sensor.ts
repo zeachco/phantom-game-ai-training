@@ -1,4 +1,9 @@
-import { lerp, segmentHitsAABB, type Vector } from '../../../utilities/math';
+import {
+  lerp,
+  segmentHitsAABB,
+  segmentIntersectionOffset,
+  type Vector,
+} from '../../../utilities/math';
 import type { Car } from './Car';
 import { config } from './Config';
 import type { DeathRay } from './DeathRay';
@@ -134,17 +139,16 @@ export class Sensor {
 
   /** parametric t in [0,1] where the current ray meets (cx,cy)-(dx,dy) */
   #rayHit(cx: number, cy: number, dx: number, dy: number): number {
-    const ax = this.#rayAx;
-    const ay = this.#rayAy;
-    const bx = this.#rayBx;
-    const by = this.#rayBy;
-    const tTop = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
-    const uTop = (cy - ay) * (ax - bx) - (cx - ax) * (ay - by);
-    const bottom = (dy - cy) * (bx - ax) - (dx - cx) * (by - ay);
-    if (bottom === 0) return -1;
-    const t = tTop / bottom;
-    const u = uTop / bottom;
-    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
+    return segmentIntersectionOffset(
+      this.#rayAx,
+      this.#rayAy,
+      this.#rayBx,
+      this.#rayBy,
+      cx,
+      cy,
+      dx,
+      dy,
+    );
   }
 
   #castRays() {

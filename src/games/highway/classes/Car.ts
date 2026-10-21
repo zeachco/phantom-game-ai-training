@@ -3,8 +3,11 @@ import { DistillDriver, type Distiller } from '../../../ai/distill';
 import { getRandomColor } from '../../../utilities/colors';
 import {
   type AABB,
+  aabbOverlap,
+  orientedRectPolygon,
   polysIntersect,
   type Vector,
+  updateAABB,
 } from '../../../utilities/math';
 import carImg from '../../../assets/car.png';
 import { ControlType } from '../types';
@@ -208,14 +211,7 @@ export class Car {
     }
     for (let i = 0; i < traffic.length; i++) {
       const other = traffic[i].aabb;
-      if (
-        box.maxX < other.minX ||
-        box.minX > other.maxX ||
-        box.maxY < other.minY ||
-        box.minY > other.maxY
-      ) {
-        continue;
-      }
+      if (!aabbOverlap(box, other)) continue;
       if (polysIntersect(this.polygon, traffic[i].polygon)) {
         return true;
       }
@@ -224,42 +220,15 @@ export class Car {
   }
 
   #createPolygon() {
-    const points = this.polygon;
-    const rad = this.rad;
-    const alpha = this.alpha;
-    const a = this.angle;
-    const x = this.x;
-    const y = this.y;
-
-    const a0 = a - alpha;
-    points[0].x = x - Math.sin(a0) * rad;
-    points[0].y = y - Math.cos(a0) * rad;
-    const a1 = a + alpha;
-    points[1].x = x - Math.sin(a1) * rad;
-    points[1].y = y - Math.cos(a1) * rad;
-    const a2 = Math.PI + a - alpha;
-    points[2].x = x - Math.sin(a2) * rad;
-    points[2].y = y - Math.cos(a2) * rad;
-    const a3 = Math.PI + a + alpha;
-    points[3].x = x - Math.sin(a3) * rad;
-    points[3].y = y - Math.cos(a3) * rad;
-
-    const box = this.aabb;
-    let minX = points[0].x;
-    let maxX = points[0].x;
-    let minY = points[0].y;
-    let maxY = points[0].y;
-    for (let i = 1; i < 4; i++) {
-      const p = points[i];
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
-    box.minX = minX;
-    box.maxX = maxX;
-    box.minY = minY;
-    box.maxY = maxY;
+    orientedRectPolygon(
+      this.x,
+      this.y,
+      this.angle,
+      this.rad,
+      this.alpha,
+      this.polygon,
+    );
+    updateAABB(this.polygon, this.aabb);
   }
 
   #move() {

@@ -1,4 +1,9 @@
-import { lerp, segmentHitsAABB, type Vector } from '../../../utilities/math';
+import {
+  lerp,
+  segmentHitsAABB,
+  segmentIntersectionOffset,
+  type Vector,
+} from '../../../utilities/math';
 import type { Car } from './Car';
 import type { Segment } from './Circuit';
 import { config } from './Config';
@@ -96,7 +101,7 @@ export class Sensor {
         projectedY,
         obstacle.width / 2,
       );
-      const linkHit = intersectionOffset(
+      const linkHit = segmentIntersectionOffset(
         ray[0].x,
         ray[0].y,
         ray[1].x,
@@ -152,7 +157,7 @@ export class Sensor {
           projectedY,
           obstacle.width / 2,
         );
-        const linkOffset = intersectionOffset(
+        const linkOffset = segmentIntersectionOffset(
           ax,
           ay,
           bx,
@@ -174,7 +179,7 @@ export class Sensor {
       const poly = obstacle.polygon;
       for (let j = 0; j < poly.length; j++) {
         const next = poly[(j + 1) % poly.length];
-        const offset = intersectionOffset(
+        const offset = segmentIntersectionOffset(
           ax,
           ay,
           bx,
@@ -191,7 +196,7 @@ export class Sensor {
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
       if (!segmentHitsAABB(ax, ay, bx, by, segment)) continue;
-      const offset = intersectionOffset(
+      const offset = segmentIntersectionOffset(
         ax,
         ay,
         bx,
@@ -274,24 +279,4 @@ function circleIntersectionOffset(
   const second = (-b + root) / (2 * a);
   if (first >= 0 && first <= 1) return first;
   return second >= 0 && second <= 1 ? second : -1;
-}
-
-function intersectionOffset(
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  cx: number,
-  cy: number,
-  dx: number,
-  dy: number,
-) {
-  const tTop = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
-  const uTop = (cy - ay) * (ax - bx) - (cx - ax) * (ay - by);
-  const bottom = (dy - cy) * (bx - ax) - (dx - cx) * (by - ay);
-
-  if (bottom === 0) return -1;
-  const t = tTop / bottom;
-  const u = uTop / bottom;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
 }

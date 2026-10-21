@@ -1,4 +1,9 @@
-import { mulberry32, type Rng, type Vector } from '../../../utilities/math';
+import {
+  clamp,
+  mulberry32,
+  type Rng,
+  type Vector,
+} from '../../../utilities/math';
 import { Checkpoint } from './Checkpoint';
 import { config } from './Config';
 import { Obstacle } from './Obstacle';
@@ -554,7 +559,7 @@ export class Circuit {
       const dy = b.y - a.y;
       const length2 = dx * dx + dy * dy;
       let t = length2 ? ((x - a.x) * dx + (y - a.y) * dy) / length2 : 0;
-      t = Math.max(0, Math.min(1, t));
+      t = clamp(t, 0, 1);
       const px = a.x + dx * t;
       const py = a.y + dy * t;
       const distance = (x - px) * (x - px) + (y - py) * (y - py);

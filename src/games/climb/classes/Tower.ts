@@ -1,5 +1,4 @@
-import { clamp } from '../../../ai/utils';
-import { lerp, mulberry32, type Rng } from '../../../utilities/math';
+import { clamp, lerp, mulberry32, type Rng } from '../../../utilities/math';
 import { config } from './Config';
 
 /** one one-way platform: its top surface sits at y, the body hangs below */
@@ -74,7 +73,7 @@ export class Tower {
    *  at its seed difficulty. */
   difficultyAt(y: number) {
     const progressHeight = config.SEED_TARGET_FLOORS * config.FLOOR_HEIGHT;
-    const progress = Math.min(1, Math.max(0, y) / progressHeight);
+    const progress = clamp(Math.max(0, y) / progressHeight, 0, 1);
     return Math.max(this.difficulty(), progress);
   }
 
@@ -101,17 +100,17 @@ export class Tower {
     const d = this.difficultyAt(this.#rowY);
     const rng = this.#rng;
     const w = clamp(
-      config.PLATFORM_MIN_WIDTH * 0.7,
-      config.TOWER_WIDTH,
       lerp(config.PLATFORM_MAX_WIDTH, config.PLATFORM_MIN_WIDTH, d) *
         (0.85 + rng() * 0.3),
+      config.PLATFORM_MIN_WIDTH * 0.7,
+      config.TOWER_WIDTH,
     );
     // where a player standing on the previous row could land
     this.#landingLo = Math.max(0, this.#bandLo);
     this.#landingHi = Math.min(config.TOWER_WIDTH, this.#bandHi);
     const landing =
       this.#landingLo + rng() * Math.max(0, this.#landingHi - this.#landingLo);
-    const x = clamp(0, config.TOWER_WIDTH - w, landing - w / 2);
+    const x = clamp(landing - w / 2, 0, config.TOWER_WIDTH - w);
     this.platforms.push({ x, y: this.#rowY, w });
     this.#bandLo = x - config.JUMP_REACH;
     this.#bandHi = x + w + config.JUMP_REACH;

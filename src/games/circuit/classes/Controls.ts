@@ -1,5 +1,5 @@
 import { ControlType } from '../types';
-import { applyDeadzone } from '../../../utilities/math';
+import { applyDeadzone, clamp } from '../../../utilities/math';
 import { findStandardGamepad } from '../../../utilities/inputs/gamepadApi';
 import { isEditableTarget } from '../../../utilities/dom';
 
@@ -67,7 +67,7 @@ export class Controls {
   #buttonValue(pad: Gamepad, index: number) {
     const button = pad.buttons[index];
     if (!button) return 0;
-    return Math.max(0, Math.min(1, button.value || (button.pressed ? 1 : 0)));
+    return clamp(button.value || (button.pressed ? 1 : 0), 0, 1);
   }
 
   /** Polling is intentional: Gamepad API values are stateful and must be read

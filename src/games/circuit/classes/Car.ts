@@ -1,14 +1,18 @@
 import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { DistillDriver, type Distiller } from '../../../ai/distill';
-import { CTRL_COLORS, clamp } from '../../../ai/utils';
+import { CTRL_COLORS } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import {
   type AABB,
+  aabbOverlap,
+  clamp,
   closestPointOnPolygon,
   getIntersection,
   lerp,
+  orientedRectPolygon,
   polysIntersect,
   type Vector,
+  updateAABB,
 } from '../../../utilities/math';
 import carImg from '../../../assets/car.png';
 import { ControlType } from '../types';
@@ -452,7 +456,7 @@ export class Car {
     const cross = cosA * this.vx - sinA * this.vy;
     const dot = -sinA * this.vx - cosA * this.vy;
     if (cross === 0 && dot === 0) return 0;
-    return Math.max(-1, Math.min(1, Math.atan2(cross, dot) / Math.PI));
+    return clamp(Math.atan2(cross, dot) / Math.PI, -1, 1);
   }
 
   /** signed angle between the heading and the next gate, in [-1, 1] */
@@ -473,14 +477,7 @@ export class Car {
     for (let i = 0; i < obstacles.length; i++) {
       const obstacle = obstacles[i];
       const other = obstacle.aabb;
-      if (
-        box.maxX < other.minX ||
-        box.minX > other.maxX ||
-        box.maxY < other.minY ||
-        box.minY > other.maxY
-      ) {
-        continue;
-      }
+      if (!aabbOverlap(box, other)) continue;
       if (polysIntersect(this.polygon, obstacle.polygon)) {
         if (this.brain) {
           this.brain.score -= this.#obstaclePenalty(obstacle);
@@ -513,7 +510,7 @@ export class Car {
     if (nLen > 1e-6) {
       nx /= nLen;
       ny /= nLen;
-      directness = clamp(0, 1, (mx * nx + my * ny) / mLen);
+      directness = clamp((mx * nx + my * ny) / mLen, 0, 1);
     }
     return lerp(
       config.OBSTACLE_PENALTY_MIN,
@@ -523,42 +520,15 @@ export class Car {
   }
 
   #createPolygon() {
-    const points = this.polygon;
-    const rad = this.rad;
-    const alpha = this.alpha;
-    const a = this.angle;
-    const x = this.x;
-    const y = this.y;
-
-    const a0 = a - alpha;
-    points[0].x = x - Math.sin(a0) * rad;
-    points[0].y = y - Math.cos(a0) * rad;
-    const a1 = a + alpha;
-    points[1].x = x - Math.sin(a1) * rad;
-    points[1].y = y - Math.cos(a1) * rad;
-    const a2 = Math.PI + a - alpha;
-    points[2].x = x - Math.sin(a2) * rad;
-    points[2].y = y - Math.cos(a2) * rad;
-    const a3 = Math.PI + a + alpha;
-    points[3].x = x - Math.sin(a3) * rad;
-    points[3].y = y - Math.cos(a3) * rad;
-
-    const box = this.aabb;
-    let minX = points[0].x;
-    let maxX = points[0].x;
-    let minY = points[0].y;
-    let maxY = points[0].y;
-    for (let i = 1; i < 4; i++) {
-      const p = points[i];
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
-    box.minX = minX;
-    box.maxX = maxX;
-    box.minY = minY;
-    box.maxY = maxY;
+    orientedRectPolygon(
+      this.x,
+      this.y,
+      this.angle,
+      this.rad,
+      this.alpha,
+      this.polygon,
+    );
+    updateAABB(this.polygon, this.aabb);
   }
 
   #move() {

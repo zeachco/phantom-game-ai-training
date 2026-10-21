@@ -1,7 +1,8 @@
 import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
 import { DistillDriver, type Distiller } from '../../../ai/distill';
-import { CTRL_COLORS, clamp } from '../../../ai/utils';
+import { CTRL_COLORS } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
+import { clamp } from '../../../utilities/math';
 import { ControlType } from '../types';
 import { CLIMB_INPUT_COUNT, config } from './Config';
 import { Controls } from './Controls';
@@ -152,7 +153,7 @@ export class Player {
     const jumpPressed = jumpHeld && !this.#prevJumpHeld;
     if (jumpPressed) this.jumpBuffer = config.JUMP_BUFFER_FRAMES;
 
-    const input = clamp(-1, 1, this.controls.right - this.controls.left);
+    const input = clamp(this.controls.right - this.controls.left, -1, 1);
     const accel = this.grounded ? config.ACCEL : config.AIR_ACCEL;
     if (input !== 0) {
       // Braking input should not leave a grounded player sliding away from
@@ -181,7 +182,7 @@ export class Player {
       // Horizontal momentum and the landing combo both buy airtime. Combo
       // strength is linear: x2 is 1.1x the launch strength, x3 is 1.2x, and
       // so on, capped at x10. Height remains proportional to impulse².
-      const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
+      const speedRatio = clamp(Math.abs(this.vx) / config.MAX_SPEED, 0, 1);
       const heightMultiplier =
         1 + (config.MAX_JUMP_HEIGHT_MULTIPLIER - 1) * speedRatio;
       const comboStrength =
@@ -328,7 +329,7 @@ export class Player {
     }
     const next = lo;
     if (next >= platforms.length) return null;
-    const speedRatio = clamp(0, 1, Math.abs(this.vx) / config.MAX_SPEED);
+    const speedRatio = clamp(Math.abs(this.vx) / config.MAX_SPEED, 0, 1);
     const index = next + Math.round(3 * speedRatio);
     return platforms[Math.min(index, platforms.length - 1)];
   }
@@ -377,7 +378,7 @@ export class Player {
     if (focused && this.sensor && !this.damaged)
       this.sensor.draw(ctx, this.x, this.y + PLAYER_HEIGHT * 0.5, this.color);
     const alpha = this.damaged
-      ? clamp(0, 1, 0.5 * (1 - (now - this.deathTime) / config.DEAD_LIFETIME))
+      ? clamp(0.5 * (1 - (now - this.deathTime) / config.DEAD_LIFETIME), 0, 1)
       : focused
         ? 1
         : 0.5;

@@ -1,4 +1,4 @@
-import { clamp } from '../../../ai/utils';
+import { clamp } from '../../../utilities/math';
 import { config, SLOTS } from './Config';
 import type { Platform, Tower } from './Tower';
 
@@ -101,8 +101,8 @@ export class Sensor {
       slots[s] = plat;
       const r = s * 4;
       if (plat) {
-        readings[r] = clamp(-1, 1, (plat.x + plat.w * 0.5 - x) / L);
-        readings[r + 1] = clamp(-1, 1, (plat.y - bodyY) / L);
+        readings[r] = clamp((plat.x + plat.w * 0.5 - x) / L, -1, 1);
+        readings[r + 1] = clamp((plat.y - bodyY) / L, -1, 1);
         readings[r + 2] = 1;
         readings[r + 3] = Math.min(1, plat.w / config.PLATFORM_MAX_WIDTH);
       } else {
@@ -116,16 +116,16 @@ export class Sensor {
     // Body channels.
     const o = this.slotCount * 4;
     const W = config.TOWER_WIDTH;
-    readings[o] = clamp(0, 1, x / W);
-    readings[o + 1] = clamp(0, 1, (W - x) / W);
-    readings[o + 2] = clamp(-1, 1, vx / config.MAX_SPEED);
-    readings[o + 3] = clamp(-1, 1, vy / config.JUMP_SPEED);
+    readings[o] = clamp(x / W, 0, 1);
+    readings[o + 1] = clamp((W - x) / W, 0, 1);
+    readings[o + 2] = clamp(vx / config.MAX_SPEED, -1, 1);
+    readings[o + 3] = clamp(vy / config.JUMP_SPEED, -1, 1);
     readings[o + 4] = grounded ? 1 : 0;
-    readings[o + 5] = current ? clamp(0, 1, current.x / W) : 0;
+    readings[o + 5] = current ? clamp(current.x / W, 0, 1) : 0;
     readings[o + 6] = current
-      ? clamp(0, 1, (W - current.x - current.w) / W)
+      ? clamp((W - current.x - current.w) / W, 0, 1)
       : 0;
-    readings[o + 7] = clamp(0, 1, comboValue / config.MAX_COMBO);
+    readings[o + 7] = clamp(comboValue / config.MAX_COMBO, 0, 1);
   }
 
   /** draw the tracked platforms, only ever used for the followed player */

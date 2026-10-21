@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mulberry32 } from '../../../utilities/math';
+import { clamp, mulberry32 } from '../../../utilities/math';
 import caveWallTextureUrl from '../assets/cave-wall.jpg';
 import obstacleRockTextureUrl from '../assets/obstacle-rock.jpg';
 import { config } from './Config';
@@ -201,7 +201,7 @@ export class Cave {
   constructor(seed: number, scene: THREE.Scene) {
     this.seed = seed;
     this.difficulty =
-      Math.min(1, Math.max(0, seed) / config.CAVE_DIFFICULTY_SEED_BASE) *
+      clamp(Math.max(0, seed) / config.CAVE_DIFFICULTY_SEED_BASE, 0, 1) *
       config.CAVE_DIFFICULTY;
     this.bandHalfWidth =
       config.CAVE_BAND_HALF_WIDTH -
@@ -479,7 +479,7 @@ export class Cave {
    *  first ones a ball ever sees */
   #depth(s: number) {
     const t = (s - config.SPAWN_OFFSET) / config.CAVE_DEPTH_RAMP;
-    return Math.max(0, Math.min(1, t));
+    return clamp(t, 0, 1);
   }
 
   /** cached feature cell, exposed for the path check and debug tooling */
@@ -1186,7 +1186,7 @@ export class Cave {
 
   /** Radius profile sampled by the rock mesh and analytic sensor rays. */
   radius(s: number, a: number) {
-    const floor = Math.max(0, Math.min(1, -Math.cos(a) * 2));
+    const floor = clamp(-Math.cos(a) * 2, 0, 1);
     if (floor === 0) return this.#rawRadius(s, a);
     const arc = Math.max(0, s);
     const index = Math.floor(arc / LEN);
