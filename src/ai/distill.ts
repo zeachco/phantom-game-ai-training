@@ -153,3 +153,83 @@ export function distillStep(
   active.step(brain, teacher, inputs, frames);
   return active;
 }
+
+/**
+ * The per-entity distillation state every game's entity update repeats:
+ * the teacher-swap reset, the decayed frame counter, the probe distiller,
+ * and the error capture. The entity keeps the public surface: `teacher`
+ * and `distillRun` are set by the game loop, while `teacherFrames`,
+ * `distiller`, and `distillErrors` are read through this object.
+ */
+export class DistillDriver {
+  /** frames this entity has been distilling, the step decays over them */
+  public teacherFrames = 0;
+  /** the probe data of its training run, built on the first distilled frame */
+  public distiller: Distiller | null = null;
+  /** per-output applied error of the last live sample, for the network view */
+  public distillErrors: number[] | null = null;
+  /** the last teacher seen: a swap restarts the decayed step and the probes */
+  #lastTeacher: NeuralNetwork | null = null;
+
+  constructor(
+    public brain: NeuralNetwork,
+    private outputRanges: OutputRanges,
+  ) {}
+
+  /**
+   * A teacher-driven run is not the student's own output, so its score is
+   * not updated: whatever the frame earns is written back before returning.
+   * Returns the score to restore at frame end, or null for free training,
+   * which keeps earning.
+   */
+  freezeScore(
+    teacher: NeuralNetwork | null,
+    distillRun: boolean,
+  ): number | null {
+    return teacher || distillRun ? this.brain.score : null;
+  }
+
+  /**
+   * One brain-decision frame. While a teacher drives, returns the
+   * teacher's applied output (a copy: Network.process reuses its output
+   * array, and distillStep evaluates several probe inputs after the live
+   * action) and advances the distillation; otherwise clears the run state
+   * and returns the student's own output. `distillRun` says the entity
+   * belongs to a teacher-driven run even without a live teacher (no
+   * champion to copy yet), which keeps teacherFrames from decaying to
+   * zero.
+   */
+  frame(
+    teacher: NeuralNetwork | null,
+    distillRun: boolean,
+    inputs: number[],
+  ): number[] {
+    if (teacher) {
+      if (teacher !== this.#lastTeacher) {
+        // a new teacher: restart the decayed step and the probe ranges
+        this.#lastTeacher = teacher;
+        this.teacherFrames = 0;
+        this.distiller = null;
+      }
+      // distillation: the teacher drives the entity, the own brain
+      // backpropagates toward the teacher's applied output on the same
+      // inputs
+      const outputs = teacher.process(inputs).slice();
+      this.distiller = distillStep(
+        this.distiller,
+        this.brain,
+        teacher,
+        inputs,
+        this.teacherFrames++,
+        this.outputRanges,
+      );
+      this.distillErrors = this.distiller.lastErrors;
+      return outputs;
+    }
+    this.#lastTeacher = null;
+    if (!distillRun) this.teacherFrames = 0;
+    this.distiller = null;
+    this.distillErrors = null;
+    return this.brain.process(inputs);
+  }
+}

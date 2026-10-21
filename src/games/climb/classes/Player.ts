@@ -1,5 +1,5 @@
 import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
-import { type Distiller, distillStep } from '../../../ai/distill';
+import { DistillDriver, type Distiller } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import { ControlType } from '../types';
@@ -68,14 +68,21 @@ export class Player {
   /** the player belongs to a teacher-driven training run, even when the
    *  teacher is missing (no champion to copy yet): its score stays frozen too */
   public distillRun = false;
+  /** the distillation state: teacher-swap reset, decayed step, probes, and
+   *  the live error; null for a climber without a brain */
+  #driver: DistillDriver | null = null;
   /** frames this climber has been distilling, the step decays over them */
-  public teacherFrames = 0;
+  public get teacherFrames(): number {
+    return this.#driver?.teacherFrames ?? 0;
+  }
   /** the probe data of its training run, built on the first distilled frame */
-  public distiller: Distiller | null = null;
+  public get distiller(): Distiller | null {
+    return this.#driver?.distiller ?? null;
+  }
   /** per-output applied error of the last live sample, for the network view */
-  public distillErrors: number[] | null = null;
-  /** the last teacher seen: a swap restarts the decayed step and the probes */
-  #lastTeacher: NeuralNetwork | null = null;
+  public get distillErrors(): number[] | null {
+    return this.#driver?.distillErrors ?? null;
+  }
 
   #prevFeet: number;
   #prevJumpHeld = false;
@@ -110,6 +117,7 @@ export class Player {
       this.brain = brainBuilder
         ? brainBuilder(inputCount, outputCount)
         : new NeuralNetwork(inputCount, outputCount, brainLayers);
+      this.#driver = new DistillDriver(this.brain, CLIMB_OUTPUT_RANGES);
     }
     this.bestHeight = y;
     this.#prevFeet = y;
@@ -120,9 +128,7 @@ export class Player {
     // a teacher-driven run is not the student's own output, so its score is
     // not updated: whatever the frame earns is written back before returning
     const frozenScore =
-      (this.teacher || this.distillRun) && this.brain
-        ? this.brain.score
-        : null;
+      this.#driver?.freezeScore(this.teacher, this.distillRun) ?? null;
     if (this.damaged) {
       // Corpses ignore platforms and controls until they reach the ground.
       this.vy -= config.GRAVITY;
@@ -286,37 +292,12 @@ export class Player {
       );
       if (this.useAI) {
         const readings = this.sensor.readings;
-        let outputs: number[];
-        if (this.teacher && this.brain) {
-          if (this.teacher !== this.#lastTeacher) {
-            // a new teacher: restart the decayed step and the probe ranges
-            this.#lastTeacher = this.teacher;
-            this.teacherFrames = 0;
-            this.distiller = null;
-          }
-          // distillation: the teacher drives the climber, the own brain
-          // backpropagates toward the teacher's applied output on the same
-          // inputs
-          // Network.process reuses its output array. distillStep evaluates
-          // probe inputs after the live action, so keep the teacher's actual
-          // action before those probes overwrite it.
-          outputs = this.teacher.process(readings).slice();
-          this.distiller = distillStep(
-            this.distiller,
-            this.brain,
-            this.teacher,
-            readings,
-            this.teacherFrames++,
-            CLIMB_OUTPUT_RANGES,
-          );
-          this.distillErrors = this.distiller.lastErrors;
-        } else {
-          this.#lastTeacher = null;
-          if (!this.distillRun) this.teacherFrames = 0;
-          this.distiller = null;
-          this.distillErrors = null;
-          outputs = this.brain.process(readings);
-        }
+        // distillation: the teacher drives the climber, the own brain
+        // backpropagates toward the teacher's applied output on the same
+        // inputs; without a teacher the student drives itself
+        const outputs = this.#driver
+          ? this.#driver.frame(this.teacher, this.distillRun, readings)
+          : this.brain.process(readings);
         // the steering outputs apply in [0, 1], the range the training trains
         // toward
         this.controls.left = clampToRange(outputs[0], CLIMB_OUTPUT_RANGES[0]);

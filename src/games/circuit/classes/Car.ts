@@ -1,5 +1,5 @@
 import { type OutputRanges, clampToRange, NeuralNetwork } from '../../../ai/Network';
-import { type Distiller, distillStep } from '../../../ai/distill';
+import { DistillDriver, type Distiller } from '../../../ai/distill';
 import { CTRL_COLORS, clamp } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import {
@@ -72,14 +72,21 @@ export class Car {
   /** the car belongs to a teacher-driven training run, even when the teacher
    *  is missing (no champion to copy yet): its score stays frozen too */
   public distillRun = false;
+  /** the distillation state: teacher-swap reset, decayed step, probes, and
+   *  the live error; null for a car without a brain */
+  #driver: DistillDriver | null = null;
   /** frames this car has been distilling, the step decays over them */
-  public teacherFrames = 0;
+  public get teacherFrames(): number {
+    return this.#driver?.teacherFrames ?? 0;
+  }
   /** the probe data of its training run, built on the first distilled frame */
-  public distiller: Distiller | null = null;
+  public get distiller(): Distiller | null {
+    return this.#driver?.distiller ?? null;
+  }
   /** per-output applied error of the last live sample, for the network view */
-  public distillErrors: number[] | null = null;
-  /** the last teacher seen: a swap restarts the decayed step and the probes */
-  #lastTeacher: NeuralNetwork | null = null;
+  public get distillErrors(): number[] | null {
+    return this.#driver?.distillErrors ?? null;
+  }
   public controls: Controls;
   /** corners are reused every frame, only their coordinates move */
   public polygon: Vector[] = [
@@ -211,6 +218,7 @@ export class Car {
       this.brain = brainBuilder
         ? brainBuilder(inputCount, outputCount)
         : new NeuralNetwork(inputCount, outputCount, brainLayers);
+      this.#driver = new DistillDriver(this.brain, CIRCUIT_OUTPUT_RANGES);
     }
 
     this.img = new Image();
@@ -264,9 +272,7 @@ export class Car {
     // a teacher-driven run is not the student's own output, so its score is
     // not updated: whatever the frame earns is written back below
     const frozenScore =
-      (this.teacher || this.distillRun) && this.brain
-        ? this.brain.score
-        : null;
+      this.#driver?.freezeScore(this.teacher, this.distillRun) ?? null;
     this.controls.update();
     this.checkpointFramesRemaining--;
     this.prevX = this.x;
@@ -307,37 +313,12 @@ export class Car {
         inputs.push(this.gateDelta);
         // refresh the history after the brain has read it
         for (let i = 0; i < prev.length; i++) prev[i] = inputs[i];
-        let outputs: number[];
-        if (this.teacher) {
-          if (this.teacher !== this.#lastTeacher) {
-            // a new teacher: restart the decayed step and the probe ranges
-            this.#lastTeacher = this.teacher;
-            this.teacherFrames = 0;
-            this.distiller = null;
-          }
-          // distillation: the teacher drives the car, the own brain
-          // backpropagates toward the teacher's applied output on the same
-          // inputs
-          // Network.process reuses its output array. distillStep evaluates
-          // probe inputs after the live action, so keep the teacher's actual
-          // action before those probes overwrite it.
-          outputs = this.teacher.process(inputs).slice();
-          this.distiller = distillStep(
-            this.distiller,
-            this.brain,
-            this.teacher,
-            inputs,
-            this.teacherFrames++,
-            CIRCUIT_OUTPUT_RANGES,
-          );
-          this.distillErrors = this.distiller.lastErrors;
-        } else {
-          this.#lastTeacher = null;
-          if (!this.distillRun) this.teacherFrames = 0;
-          this.distiller = null;
-          this.distillErrors = null;
-          outputs = this.brain.process(inputs);
-        }
+        // distillation: the teacher drives the car, the own brain
+        // backpropagates toward the teacher's applied output on the same
+        // inputs; without a teacher the student drives itself
+        const outputs = this.#driver
+          ? this.#driver.frame(this.teacher, this.distillRun, inputs)
+          : this.brain.process(inputs);
         const [throttle, left, right] = outputs;
         // apply each output through its applied range, the same range the
         // training trains toward
