@@ -212,6 +212,38 @@ export async function loadBaseModels(
 }
 
 /**
+ * Fire-and-forget boot load of the base models: fetches only the missing
+ * server models, imports them into localStorage, and logs the written keys.
+ * `onWritten` runs (typically a race re-initialization) when anything was
+ * written; `onSynced` runs as soon as the latest server scores are known,
+ * even when nothing was written, so a page can resubmit local champions.
+ * `retryOnOnline` re-runs the whole load when the page reconnects. Errors
+ * are logged, never thrown.
+ */
+export function loadBaseModelsThen(
+  game: string,
+  io: { importModels(models: Record<string, unknown> | null): string[] },
+  onWritten?: () => void,
+  onSynced?: () => void,
+  retryOnOnline = false,
+): void {
+  const run = async () => {
+    try {
+      const { written, synced } = await loadBaseModels(game, io, true);
+      if (written.length) {
+        console.info(`Loaded base models: ${written.join(', ')}`);
+        onWritten?.();
+      }
+      if (synced) onSynced?.();
+    } catch (err) {
+      console.warn(`Unable to load base ${game} models`, err);
+    }
+  };
+  void run();
+  if (retryOnOnline) window.addEventListener('online', () => void run());
+}
+
+/**
  * Fetches the single best stored model of one group from the server.
  * Null when the server is unreachable, errors, or holds no model for it.
  */

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MixedNetwork } from '../../ai/Mixed';
-import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
+import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -299,17 +299,7 @@ export default async (state: CaveState) => {
   // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize.
-  void (async () => {
-    try {
-      const { written } = await loadBaseModels('cave', io, true);
-      if (written.length) {
-        console.info(`Loaded base models: ${written.join(', ')}`);
-        race.initialize();
-      }
-    } catch (err) {
-      console.warn('Unable to load base cave models', err);
-    }
-  })();
+  loadBaseModelsThen('cave', io, () => race.initialize());
   // Build the training pools from the saved `cave_` models.
   race.initialize();
   state.cave?.setWireframe(wireframe);

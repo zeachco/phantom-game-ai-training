@@ -5,7 +5,7 @@ import {
   MIXED_LEVELS,
   MixedNetwork,
 } from '../../ai/Mixed';
-import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
+import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { brainIoMatches } from '../../ai/distill';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { NeuralNetwork } from '../../ai/Network';
@@ -383,25 +383,19 @@ export default async (state: typeof defaultState) => {
   // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize.
-  const syncHighwayModels = async () => {
-    try {
-      const { written, synced } = await loadBaseModels('highway', io, true);
-      if (written.length) {
-        console.info(`Loaded base models: ${written.join(', ')}`);
-        initialize();
-      }
+  loadBaseModelsThen(
+    'highway',
+    io,
+    () => initialize(),
+    () => {
       // Existing saves do not trigger onSaved at boot. Once the latest server
-      // scores are known, submit any local champion that beats its group best.
-      if (synced) {
-        for (const [group, models] of Object.entries(io.exportModels()))
-          checkHighwayModel(group, models);
-      }
-    } catch (err) {
-      console.warn('Unable to load base highway models', err);
-    }
-  };
-  void syncHighwayModels();
-  window.addEventListener('online', () => void syncHighwayModels());
+      // scores are known, submit any local champion that beats its group
+      // best.
+      for (const [group, models] of Object.entries(io.exportModels()))
+        checkHighwayModel(group, models);
+    },
+    true,
+  );
   initialize();
   // paint the button states before the first frame, they load with their colors
   updateFollowButtons();

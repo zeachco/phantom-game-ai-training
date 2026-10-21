@@ -1,6 +1,10 @@
 import { MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
-import { loadBaseModels, makeSubmitChecker } from '../../ai/serverSync';
+import {
+  loadBaseModels,
+  loadBaseModelsThen,
+  makeSubmitChecker,
+} from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { layerColor } from '../../utilities/ai/colors';
@@ -356,7 +360,7 @@ export default async (state: typeof defaultState) => {
   const scoreBoard = createScoreBoard();
   stage.appendChild(scoreBoard.el);
   const runningCategories = new Set<string>();
-  if (new URLSearchParams(window.location.search).get('demo') === 'true') {
+  if (isDemo) {
     try {
       const written = await loadDefaultModels(true);
       if (written.length)
@@ -368,19 +372,7 @@ export default async (state: typeof defaultState) => {
   // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
   // up by the re-initialize. (The ?demo=true block above already loads them.)
-  if (new URLSearchParams(window.location.search).get('demo') !== 'true') {
-    void (async () => {
-      try {
-        const { written } = await loadBaseModels('circuit', io, true);
-        if (written.length) {
-          console.info(`Loaded base models: ${written.join(', ')}`);
-          race.initialize();
-        }
-      } catch (err) {
-        console.warn('Unable to load base circuit models', err);
-      }
-    })();
-  }
+  if (!isDemo) loadBaseModelsThen('circuit', io, () => race.initialize());
   race.initialize();
   timingBoard.update();
   trackScoreBoard.update(race.seed);
