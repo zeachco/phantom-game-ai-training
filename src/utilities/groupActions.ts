@@ -6,7 +6,9 @@
  * reload / remote delete, the trainer readouts (seed best, cross-seed global
  * best, server snapshot score, last sync time) and the live loss graph of the
  * followed student's distiller, refreshed on follow change and every ~500 ms
- * while the panel is open.
+ * while the panel is open. Deleting the local saves immediately reloads the
+ * group's stored model from the server, so the group keeps running on the
+ * community best instead of a fresh random brain.
  */
 import { MIXED_KIND, MIXED_LEVELS } from '../ai/Mixed';
 import {
@@ -57,8 +59,9 @@ export interface GroupActionsOptions {
   seedBest: (groupKey: string) => number | null;
   /** cross-seed global best, null when none (highway: same as seedBest) */
   globalBest: (groupKey: string) => number | null;
-  /** reset the local saves for the value; the confirm happens inside */
-  resetLocal: (value: number | 'mixed') => void;
+  /** reset the local saves for the value; the confirm happens inside, and
+   *  false is returned when it is cancelled so the remote reload is skipped */
+  resetLocal: (value: number | 'mixed') => boolean;
   /** restart the race so an imported remote brain is picked up */
   reinitialize: () => void;
   /** every group value the game runs, e.g. [1..9, 'mixed'] */
@@ -138,7 +141,7 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   };
   const localBtn = mkBtn(
     'Delete local',
-    'Delete this group\u2019s saved brains from this browser',
+    'Delete this group\u2019s saved brains from this browser, then reload the stored model from the server',
   );
   const reloadBtn = mkBtn(
     'Reload remote',
@@ -258,9 +261,54 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     timer = setInterval(refresh, 500);
   }
 
-  localBtn.addEventListener('click', () => {
-    resetLocal(value);
-    refresh();
+  /**
+   * Fetches the stored models of the given targets into localStorage and
+   * re-initializes the race so the imported brains are picked up. The
+   * re-initialization only runs when at least one model landed; otherwise an
+   * error toast names the group with nothing on the server (or an offline
+   * request).
+   */
+  async function reloadFromServer(
+    targets: (number | 'mixed')[],
+    successPrefix: string,
+    errorPrefix: string,
+  ): Promise<void> {
+    const keys = targets.map((target) => groupKeyFor(game, target));
+    const results = await Promise.all(
+      keys.map((key) => fetchRemoteModel(game, key, io)),
+    );
+    const loaded = results.filter((score) => score !== null);
+    if (loaded.length === 0) {
+      showToast(
+        `${errorPrefix} ${targets.length > 1 ? game : keys[0]} model on the server (or offline)`,
+        { tone: 'error' },
+      );
+      return;
+    }
+    reinitialize();
+    showToast(
+      targets.length > 1
+        ? `${successPrefix} ${loaded.length} of ${keys.length} ${game} models from the server`
+        : `${successPrefix} ${keys[0]} from the server (score ${fmt(loaded[0])})`,
+      { tone: 'success' },
+    );
+  }
+
+  localBtn.addEventListener('click', async () => {
+    // the confirm and the discard happen inside; when the user backs out the
+    // local saves are kept and nothing is reloaded
+    if (!resetLocal(value)) return;
+    localBtn.disabled = true;
+    try {
+      await reloadFromServer(
+        value === 0 ? groups : [value],
+        'Deleted local and reloaded',
+        'Deleted local, but no',
+      );
+    } finally {
+      localBtn.disabled = false;
+      refresh();
+    }
   });
 
   reloadBtn.addEventListener('click', async () => {
@@ -276,24 +324,7 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
       return;
     reloadBtn.disabled = true;
     try {
-      const results = await Promise.all(
-        keys.map((key) => fetchRemoteModel(game, key, io)),
-      );
-      const loaded = results.filter((score) => score !== null);
-      if (loaded.length === 0) {
-        showToast(
-          `No ${value === 0 ? game : keys[0]} model on the server (or offline)`,
-          { tone: 'error' },
-        );
-      } else {
-        reinitialize();
-        showToast(
-          value === 0
-            ? `Reloaded ${loaded.length} of ${keys.length} ${game} models from the server`
-            : `Reloaded ${keys[0]} from the server (score ${fmt(loaded[0])})`,
-          { tone: 'success' },
-        );
-      }
+      await reloadFromServer(targets, 'Reloaded', 'No');
     } finally {
       reloadBtn.disabled = false;
       refresh();

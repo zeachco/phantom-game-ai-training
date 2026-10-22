@@ -669,3 +669,214 @@ describe('groupActions Delete remote handler', () => {
     }
   });
 });
+
+describe('groupActions Delete local handler', () => {
+  /** Records the fetch calls and answers a stored model (score 1234) for the
+   *  group asked, so every group is "on the server". */
+  function stubModelFetch(calls: string[]) {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const requested = String(url);
+      calls.push(requested);
+      const match = requested.match(/group=([^&]+)/);
+      const group = match ? decodeURIComponent(match[1]) : 'circuit_99';
+      return new Response(
+        JSON.stringify({
+          models: [
+            { group, score: 1234, model: { levels: [{ weights: [[0.1]] }] } },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    }) as typeof fetch;
+  }
+
+  function findBtn(el: FakeElement, text: string): FakeElement | undefined {
+    if (el.textContent === text && el.tagName === 'BUTTON') return el;
+    for (const child of el.children) {
+      const found = findBtn(child, text);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  async function makePanel() {
+    const state = {
+      discarded: [] as { layers: number; kind?: string }[],
+      imported: {} as Record<string, unknown[]>,
+      reinitCount: 0,
+      gameDiscarded: 0,
+      fetchCalls: [] as string[],
+    };
+    stubModelFetch(state.fetchCalls);
+    const io = {
+      importModels: (models: Record<string, unknown> | null) => {
+        for (const [key, data] of Object.entries(models ?? {}))
+          state.imported[key] = data as unknown[];
+        return Object.keys(models ?? {});
+      },
+      discardModel: (layers: number, kind?: string) => {
+        state.discarded.push({ layers, kind });
+      },
+      discardGameModels: () => {
+        state.gameDiscarded++;
+      },
+    };
+    const [{ createGroupActions }, { makeResetBrainSaves }] = await Promise.all([
+      import('../src/utilities/groupActions'),
+      import('../src/utilities/resetBrainSaves'),
+    ]);
+    const panel = createGroupActions({
+      game: 'circuit',
+      io,
+      label: (v) => String(v),
+      seedBest: () => null,
+      globalBest: () => null,
+      resetLocal: makeResetBrainSaves({
+        io,
+        game: 'circuit',
+        mixedLabel: 'the mixed brain',
+        layerLabel: (layer) => `brain ${layer}`,
+        onReset: () => {},
+      }),
+      reinitialize: () => {
+        state.reinitCount++;
+      },
+      groups: [1, 2, 3, 4, 'mixed'],
+      trainFrom: () => null,
+      setTrainFrom: () => {},
+      teacherScore: () => null,
+    });
+    return { panel, state };
+  }
+
+  test('a confirmed delete discards the local saves and reloads the stored model', async () => {
+    const env = stubEnvironment();
+    try {
+      const { panel, state } = await makePanel();
+      panel.apply(4);
+      const localBtn = findBtn(
+        panel.el as unknown as FakeElement,
+        'Delete local',
+      );
+      expect(localBtn).toBeDefined();
+      await localBtn!.listeners['click']?.[0]();
+
+      expect(env.getLastConfirm()).toBe(
+        'Delete the local save of brain 4 and reload the stored model from the server?',
+      );
+      // the brain and the pinned mixed routing are discarded
+      expect(state.discarded).toEqual([
+        { layers: 4, kind: undefined },
+        { layers: 2, kind: 'mixed' },
+      ]);
+      expect(state.gameDiscarded).toBe(0);
+      // only that group is fetched, and its model is imported
+      expect(state.fetchCalls).toHaveLength(1);
+      expect(state.fetchCalls[0]).toContain('group=circuit_4');
+      expect(state.imported['circuit_4']).toBeDefined();
+      // the server snapshot records the stored score
+      expect(
+        JSON.parse(env.store.get('phantom_base_circuit') ?? '{}'),
+      ).toEqual({ circuit_4: 1234 });
+      // and the race re-initializes to pick the imported brain up
+      expect(state.reinitCount).toBe(1);
+      expect(localBtn!.disabled).toBe(false);
+    } finally {
+      env.restore();
+    }
+  });
+
+  test('cancelling the confirm keeps the local saves and skips the reload', async () => {
+    const env = stubEnvironment();
+    try {
+      env.setConfirm(false);
+      const { panel, state } = await makePanel();
+      panel.apply(4);
+      const localBtn = findBtn(
+        panel.el as unknown as FakeElement,
+        'Delete local',
+      );
+      await localBtn!.listeners['click']?.[0]();
+
+      expect(state.discarded).toEqual([]);
+      expect(Object.keys(state.imported)).toEqual([]);
+      expect(state.fetchCalls).toHaveLength(0);
+      expect(state.reinitCount).toBe(0);
+    } finally {
+      env.restore();
+    }
+  });
+
+  test('offline: the local saves are still deleted, the race is not re-initialized', async () => {
+    const env = stubEnvironment();
+    try {
+      const { panel, state } = await makePanel();
+      globalThis.fetch = (async () => {
+        throw new Error('network down');
+      }) as typeof fetch;
+      panel.apply(4);
+      const localBtn = findBtn(
+        panel.el as unknown as FakeElement,
+        'Delete local',
+      );
+      await localBtn!.listeners['click']?.[0]();
+
+      expect(state.discarded).toEqual([
+        { layers: 4, kind: undefined },
+        { layers: 2, kind: 'mixed' },
+      ]);
+      expect(Object.keys(state.imported)).toEqual([]);
+      expect(state.reinitCount).toBe(0);
+    } finally {
+      env.restore();
+    }
+  });
+
+  test('the mixed view deletes the mixed save and reloads the stored mixed model', async () => {
+    const env = stubEnvironment();
+    try {
+      const { panel, state } = await makePanel();
+      panel.apply('mixed');
+      const localBtn = findBtn(
+        panel.el as unknown as FakeElement,
+        'Delete local',
+      );
+      await localBtn!.listeners['click']?.[0]();
+
+      expect(env.getLastConfirm()).toBe(
+        'Delete the local save of the mixed brain and reload the stored model from the server?',
+      );
+      expect(state.discarded).toEqual([{ layers: 2, kind: 'mixed' }]);
+      expect(Object.keys(state.imported)).toEqual(['circuit_mixed_2']);
+      expect(state.reinitCount).toBe(1);
+    } finally {
+      env.restore();
+    }
+  });
+
+  test('the all view deletes every local save and reloads every group', async () => {
+    const env = stubEnvironment();
+    try {
+      const { panel, state } = await makePanel();
+      panel.apply(0);
+      const localBtn = findBtn(
+        panel.el as unknown as FakeElement,
+        'Delete local',
+      );
+      await localBtn!.listeners['click']?.[0]();
+
+      expect(env.getLastConfirm()).toBe(
+        'Delete all the local circuit saves and reload the stored models from the server?',
+      );
+      expect(state.gameDiscarded).toBe(1);
+      expect(state.fetchCalls).toHaveLength(5);
+      expect(Object.keys(state.imported)).toHaveLength(5);
+      expect(state.reinitCount).toBe(1);
+    } finally {
+      env.restore();
+    }
+  });
+});

@@ -1,10 +1,12 @@
 import { MIXED_KIND, MIXED_LEVELS } from '../ai/Mixed';
 
 /**
- * The "reset saved weights" flow shared by all games: confirm, discard the
+ * The "delete local saves" flow shared by all games: confirm, discard the
  * saves (dropping the mixed routing too, since it is pinned to the saved
- * experts), then run the per-game reinitialization. Confirm texts and the
- * reinitialization itself stay at the call site.
+ * experts), then run the per-game reinitialization. It returns true once the
+ * discard happened so the group panel can follow up by reloading the group's
+ * stored model from the server, and false when the confirm is cancelled.
+ * Confirm texts and the reinitialization itself stay at the call site.
  */
 
 interface SaveIo {
@@ -30,21 +32,37 @@ export function makeResetBrainSaves({
   mixedLabel,
   layerLabel,
   onReset,
-}: ResetBrainSavesOptions): (value: number | 'mixed') => void {
-  return (value: number | 'mixed') => {
+}: ResetBrainSavesOptions): (value: number | 'mixed') => boolean {
+  return (value: number | 'mixed'): boolean => {
     if (value === 'mixed') {
-      if (!confirm(`Reset the saved weights of ${mixedLabel}?`)) return;
+      if (
+        !confirm(
+          `Delete the local save of ${mixedLabel} and reload the stored model from the server?`,
+        )
+      )
+        return false;
       io.discardModel(MIXED_LEVELS, MIXED_KIND);
     } else if (value === 0) {
-      if (!confirm(`Reset all the saved ${game} weights?`)) return;
+      if (
+        !confirm(
+          `Delete all the local ${game} saves and reload the stored models from the server?`,
+        )
+      )
+        return false;
       io.discardGameModels();
     } else {
-      if (!confirm(`Reset the saved weights of ${layerLabel(value)}?`)) return;
+      if (
+        !confirm(
+          `Delete the local save of ${layerLabel(value)} and reload the stored model from the server?`,
+        )
+      )
+        return false;
       io.discardModel(value);
       // the mixed selector's output width and expert slots are pinned to the
       // saved brains it routes to, so dropping one invalidates its routing
       io.discardModel(MIXED_LEVELS, MIXED_KIND);
     }
     onReset(value);
+    return true;
   };
 }
