@@ -5,20 +5,17 @@ export { isDemo, likelyLagsOnHeavyJs };
 
 class Config {
   // population
-  /** number of AI car slots: each slot holds one car at a time (alive or a
-   *  corpse), so the map never holds more AI cars than this */
-  public CAR_NB = 200;
   public MAX_MUTATION_LVL = 0.5;
   /** floor of the mutation schedule: exploration never fully dies, so a
    *  population that has raced many maps keeps the ability to escape the
    *  champion line it converged on */
   public MIN_MUTATION_LVL = 0.1;
   /** every brain category runs a pool of exactly thist and push many cars, slots 0..9 */
-  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 15 : 50;
+  public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 25 : 50;
   /** a group that has seen one of its cars cross the finish line respawns as a
    *  mutation-only swarm of this many cars, on slots 1..FINISHED_CARS_PER_GROUP,
    *  so the untouched champion never re-enters that pool */
-  public FINISHED_CARS_PER_GROUP = 5;
+  public FINISHED_CARS_PER_GROUP = 10;
   /** a finished group's cars mutate at max / this divisor: the brain already
    *  won this track, but the swarm keeps hunting genuinely different lines
    *  for the next one instead of freezing the champion */
@@ -215,10 +212,6 @@ class Config {
    *  the road only kills, so the obstacle is always the costlier crash */
   public OBSTACLE_PENALTY_MIN = 1;
   public OBSTACLE_PENALTY_MAX = 5;
-
-  public get CAR_PER_LEVELS() {
-    return this.CAR_NB / this.MAX_NETWORK_LAYERS;
-  }
 }
 
 export const config = new Config();

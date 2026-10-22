@@ -100,8 +100,8 @@ export default async (state: typeof defaultState) => {
   const championOf = (value: number | 'mixed'): NeuralNetwork | null => {
     const saved =
       value === 'mixed'
-        ? (state.sortedMixed[MIXED_LEVELS]?.[0] ?? null)
-        : (state.sortedModels[value]?.[0] ?? null);
+        ? state.sortedMixed[MIXED_LEVELS]?.[0] ?? null
+        : state.sortedModels[value]?.[0] ?? null;
     if (!saved) return null;
     if (typeof (saved as NeuralNetwork).process === 'function')
       return saved as NeuralNetwork;
@@ -204,8 +204,8 @@ export default async (state: typeof defaultState) => {
       v === 'mixed'
         ? config.MIXED_COLOR
         : v === 0
-          ? undefined
-          : layerColor(v, config.MAX_NETWORK_LAYERS),
+        ? undefined
+        : layerColor(v, config.MAX_NETWORK_LAYERS),
     initialOpen: true,
     onFollow: (value) => {
       follow = value;
@@ -478,6 +478,7 @@ export default async (state: typeof defaultState) => {
         continue;
       traffic.draw(carCtx);
     }
+    const timeBudget = performance.now() + 5;
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
       // off-screen cars cost a transform and a blit for nothing, and past
@@ -489,7 +490,9 @@ export default async (state: typeof defaultState) => {
         car.brain.mutationIndex === 0;
       if (
         !keep &&
-        (i > 50 || car.aabb.maxY < carViewMinY || car.aabb.minY > carViewMaxY)
+        (performance.now() > timeBudget ||
+          car.aabb.maxY < carViewMinY ||
+          car.aabb.minY > carViewMaxY)
       )
         continue;
       carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
@@ -529,7 +532,7 @@ export default async (state: typeof defaultState) => {
       displayedGroup =
         followed instanceof MixedNetwork
           ? 'mixed'
-          : (camTarget?.brainLayers ?? null);
+          : camTarget?.brainLayers ?? null;
       // a distilling car shows its brain next to its teacher, with the live
       // training error on the controls
       neuralVisualizer.renderNetwork(
@@ -659,8 +662,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     return (
       state.sortedCars.find(inCategory) ??
       state.sortedCars.find((car) => !car.damaged)
@@ -699,8 +702,8 @@ export default async (state: typeof defaultState) => {
     const value = groupKeyOf(car);
     const saved =
       value === 'mixed'
-        ? (state.sortedMixed[MIXED_LEVELS] ?? [])
-        : (state.sortedModels[value] ?? []);
+        ? state.sortedMixed[MIXED_LEVELS] ?? []
+        : state.sortedModels[value] ?? [];
     const trained = trainedBrain(car.brain, saved[0]?.score ?? 0);
     if (value === 'mixed') {
       state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(saved, trained, 1);

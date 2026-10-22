@@ -600,15 +600,18 @@ export default async (state: typeof defaultState) => {
       // off-screen cars cost a transform and two blits for nothing, and past
       // index 50 only the focused car and each group's original model (slot 0)
       // still earn a draw; the human is excluded up front and drawn below
+      const perfBudget = performance.now() + 5;
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         if (car === state.human) continue;
-        const keep = car === camTarget || car.brain.mutationIndex === 0;
+        const keep =
+          car === camTarget ||
+          car.brain.mutationIndex === 0 ||
+          performance.now() < perfBudget;
         const box = car.aabb;
         if (
           !keep &&
-          (i > 50 ||
-            box.maxX < viewMinX ||
+          (box.maxX < viewMinX ||
             box.minX > viewMaxX ||
             box.maxY < viewMinY ||
             box.minY > viewMaxY)
@@ -637,7 +640,7 @@ export default async (state: typeof defaultState) => {
         displayedGroup =
           followed instanceof MixedNetwork
             ? 'mixed'
-            : (camTarget?.brainLayers ?? null);
+            : camTarget?.brainLayers ?? null;
         // a distilling car shows its brain next to its teacher, with the live
         // training error on the controls
         neuralVisualizer.renderNetwork(
@@ -703,8 +706,8 @@ export default async (state: typeof defaultState) => {
       (follow === 'mixed'
         ? car.brain instanceof MixedNetwork
         : follow > 0
-          ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
-          : true);
+        ? car.brainLayers === follow && !(car.brain instanceof MixedNetwork)
+        : true);
     // the leaderboard sort runs on HUD ticks only, so the camera target
     // resolves the leader with a single max-score scan
     let leader: Car | undefined;

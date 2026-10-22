@@ -1,7 +1,7 @@
 import { CTRL_COLORS, type ModelsByLayerCount } from '../../../ai/utils';
 
 class Config {
-  public CAR_NB = 200;
+  public CAR_NB = 1000;
   /** floor of cars per brain type (network layer), so every layer keeps breeding */
   public MIN_CARS_PER_LAYER = 3;
   public AUTO_DISTRIBUTE_LAYERS = false;
