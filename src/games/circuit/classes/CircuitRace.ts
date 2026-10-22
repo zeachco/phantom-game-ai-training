@@ -1,39 +1,18 @@
-import { brainIoMatches } from '../../../ai/distill';
-import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../../../ai/Mixed';
-import { NeuralNetwork } from '../../../ai/Network';
-import {
-  type fileUtilities,
-  networkLevelSizes,
-  PLAYER_COLOR,
-} from '../../../ai/utils';
+import { MixedNetwork } from '../../../ai/Mixed';
+import { type fileUtilities, PLAYER_COLOR } from '../../../ai/utils';
 import { gameNow } from '../../../utilities/gameClock';
+import type { GroupBase } from '../../../utilities/groupScores';
 import { lerp } from '../../../utilities/math';
-import {
-  expertLibraryShape,
-  refreshExperts,
-} from '../../../utilities/race/expertLibrary';
+import { RaceBase, type RaceProfile } from '../../../utilities/race/RaceBase';
 import {
   isExplorerSlot,
   type SlotPolicy,
   slotMutation,
   slotSource,
 } from '../../../utilities/race/slotPolicy';
-import {
-  loadTrainFroms,
-  saveTrainFrom,
-  studentLabel,
-  trainedBrain,
-  withTrainedBrain,
-} from '../../../utilities/trainFrom';
+import { saveTrainFrom, studentLabel } from '../../../utilities/trainFrom';
 import { ControlType } from '../types';
-import {
-  brainId,
-  defaultState,
-  type Group,
-  globalRecordFromScores,
-  loadScores,
-  saveScores,
-} from '../utilities';
+import { brainId, defaultState, type Group } from '../utilities';
 import { Car, getCircuitBrainDimensions } from './Car';
 import { Circuit } from './Circuit';
 import { config } from './Config';
@@ -57,19 +36,29 @@ const slotPolicy: SlotPolicy<Group> = {
   },
 };
 
+/** the shared race lifecycle profile for this game, from its config */
+const raceProfile: RaceProfile = {
+  game: 'circuit',
+  carsPerGroup: config.CARS_PER_GROUP,
+  finishedCarsPerGroup: config.FINISHED_CARS_PER_GROUP,
+  hallOfFameSize: config.HALL_OF_FAME_SIZE,
+  deadLifetime: config.DEAD_LIFETIME,
+  maxNetworkLayers: config.MAX_NETWORK_LAYERS,
+  mixedEnabled: config.MIXED_ENABLED,
+  mixedMinExperts: config.MIXED_MIN_EXPERTS,
+  mixedHiddenNodes: config.MIXED_HIDDEN_NODES,
+  mixedExpertsPerLayer: config.MIXED_EXPERTS_PER_LAYER,
+};
+
 /**
  * Owns the non-visual part of a circuit race: model pools, score promotion,
  * deaths, respawns, and seed progression. The entry point only coordinates
  * canvases and browser controls now.
  */
-export class CircuitRace {
+export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
   public circuit: Circuit;
-  public seed: number;
   public laps = 0;
-  public readonly groups: Group[] = [];
-  public seedChangeAt = 0;
 
-  #experts: NeuralNetwork[] = [];
   #completedBrainIndices = new Set<string>();
   /** regular architecture groups that have finished this track once */
   #completedTrackGroups = new Set<string>();
@@ -83,15 +72,13 @@ export class CircuitRace {
   #bestLapFrames = Infinity;
   #bestFinishFrames = Infinity;
   #humanFinishCelebrated = false;
-  #pendingSaves = new Set<Group>();
   #onHumanCrash?: () => void;
   #onHumanFinish?: () => void;
   #onSeedChanged?: (seed: number) => void;
-  #onReset?: () => void;
 
   constructor(
-    private readonly state: typeof defaultState,
-    private readonly io: CircuitModelIo,
+    state: typeof defaultState,
+    io: CircuitModelIo,
     seed: number,
     options: {
       onHumanCrash?: () => void;
@@ -100,46 +87,31 @@ export class CircuitRace {
       onReset?: () => void;
     } = {},
   ) {
-    this.seed = seed;
+    super(state, io, seed, raceProfile, { onReset: options.onReset });
     this.circuit = new Circuit(seed);
     this.#onHumanCrash = options.onHumanCrash;
     this.#onHumanFinish = options.onHumanFinish;
     this.#onSeedChanged = options.onSeedChanged;
-    this.#onReset = options.onReset;
   }
 
   get completedFinishes() {
     return this.#completedFinishes;
   }
 
-  /** the human car has no brain, group, or saved weights */
-  public spawnHuman() {
-    const spawn = this.circuit.getSpawn();
-    const car = new Car(
-      spawn.x,
-      spawn.y,
-      spawn.angle,
-      ControlType.HUMAN,
-      config.CAR_MAX_SPEED,
-      '🕹',
-      'white',
-      1,
-    );
-    car.setColor(PLAYER_COLOR);
-    this.state.human = car;
-    this.state.cars.push(car);
-    this.state.living++;
+  protected override get entities(): Car[] {
+    return this.state.cars;
+  }
+  protected override set entities(cars: Car[]) {
+    this.state.cars = cars;
+  }
+  protected override get sortedEntities(): Car[] {
+    return this.state.sortedCars;
+  }
+  protected override set sortedEntities(cars: Car[]) {
+    this.state.sortedCars = cars;
   }
 
-  #maxMutation() {
-    return lerp(
-      config.MAX_MUTATION_LVL,
-      config.MIN_MUTATION_LVL,
-      Math.min(1, this.laps / config.MUTATION_LAP_DECAY),
-    );
-  }
-
-  #spawnCar(group: Group, slot: number) {
+  protected override spawnEntity(group: Group, slot: number): Car {
     const spawn = this.circuit.getSpawn();
     const car = new Car(
       spawn.x,
@@ -152,7 +124,7 @@ export class CircuitRace {
       group.layer,
       group.isMixed
         ? (inputCount, outputCount) =>
-            new MixedNetwork(inputCount, outputCount, this.#experts, {
+            new MixedNetwork(inputCount, outputCount, this.experts, {
               hiddenNodes: config.MIXED_HIDDEN_NODES,
               resetChance: config.MIXED_RESET_CHANCE,
             })
@@ -182,258 +154,55 @@ export class CircuitRace {
     return car;
   }
 
-  #refreshExperts() {
-    const { inputCount, outputCount } = getCircuitBrainDimensions();
-    this.#experts = refreshExperts(
-      this.state,
-      inputCount,
-      outputCount,
-      config.MIXED_EXPERTS_PER_LAYER,
-      config.MIXED_MIN_EXPERTS,
-      config.MIXED_ENABLED,
+  /** the human car has no brain, group, or saved weights */
+  public override spawnHuman() {
+    const spawn = this.circuit.getSpawn();
+    const car = new Car(
+      spawn.x,
+      spawn.y,
+      spawn.angle,
+      ControlType.HUMAN,
+      config.CAR_MAX_SPEED,
+      '🕹',
+      'white',
+      1,
     );
-    return this.#experts;
+    car.setColor(PLAYER_COLOR);
+    this.state.human = car;
+    this.state.cars.push(car);
+    this.state.living++;
   }
 
-  #buildPools() {
-    // a distilling group keeps its teacher across map rebuilds
-    const trainFroms = new Map(
-      this.groups.map((group) => [group.key, group.trainFrom]),
+  protected override respawnHuman(): void {
+    if (this.state.human) {
+      this.state.human.controls.dispose();
+      this.state.human = undefined;
+      this.spawnHuman();
+    }
+  }
+
+  protected override onRebuilt(): void {
+    this.state.population = this.entities.length;
+  }
+
+  protected override brainDimensions() {
+    return getCircuitBrainDimensions();
+  }
+
+  protected override createGroup(core: GroupBase<Car>): Group {
+    return { ...core, lapTimes: {} };
+  }
+
+  protected override poolFinished(group: Group): boolean {
+    return group.pool.some((car) => car.finished);
+  }
+
+  #maxMutation() {
+    return lerp(
+      config.MAX_MUTATION_LVL,
+      config.MIN_MUTATION_LVL,
+      Math.min(1, this.laps / config.MUTATION_LAP_DECAY),
     );
-    this.groups.length = 0;
-    const hydrated = this.#refreshExperts();
-
-    if (config.MIXED_ENABLED && hydrated.length >= config.MIXED_MIN_EXPERTS) {
-      this.groups.push({
-        key: 'mixed',
-        layer: 0,
-        isMixed: true,
-        pool: [],
-        mutationOnly: false,
-        trainFrom: trainFroms.get('mixed') ?? null,
-        distillRun: false,
-        teacher: null,
-        hydratedTeacher: null,
-        best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
-          ? {
-              brain: this.state.sortedMixed[MIXED_LEVELS][0],
-              score: this.state.sortedMixed[MIXED_LEVELS][0].score || 0,
-            }
-          : null,
-        ghostScore: 0,
-        scores: {
-          current: this.seed,
-          total: 0,
-          seed: 0,
-          phantom: 0,
-          history: {},
-          finished: {},
-        },
-        lapTimes: {},
-      });
-    }
-
-    for (let layer = 1; layer <= config.MAX_NETWORK_LAYERS; layer++) {
-      this.groups.push({
-        key: String(layer),
-        layer,
-        isMixed: false,
-        pool: [],
-        mutationOnly: false,
-        trainFrom: trainFroms.get(String(layer)) ?? null,
-        distillRun: false,
-        teacher: null,
-        hydratedTeacher: null,
-        best: this.state.sortedModels[layer]?.[0]
-          ? {
-              brain: this.state.sortedModels[layer][0],
-              score: this.state.sortedModels[layer][0].score || 0,
-            }
-          : null,
-        ghostScore: 0,
-        scores: {
-          current: this.seed,
-          total: 0,
-          seed: 0,
-          phantom: 0,
-          history: {},
-          finished: {},
-        },
-        lapTimes: {},
-      });
-    }
-
-    // restored selections must be known before the pools spawn: a distilling
-    // group only fields its single student car
-    this.#restoreTrainFroms();
-    for (const group of this.groups) {
-      group.scores = loadScores(group, this.seed);
-      // Every generated track starts with a fresh active comparison. Earlier
-      // records remain in history for the HUD, not as a ghost or race goal.
-      group.ghostScore = group.scores.seed;
-      group.mutationOnly = group.scores.finished[String(this.seed)] === true;
-      group.pool = this.#spawnSlots(group).map((slot) =>
-        this.#spawnCar(group, slot),
-      );
-    }
-    this.state.groups = this.groups;
-  }
-
-  /** Restore the persisted distillation targets the in-memory carryover did
-   *  not cover, on a fresh page load every group starts free. */
-  #restoreTrainFroms() {
-    // a group carried over with a target is mid-training: single student car,
-    // disqualified score
-    for (const group of this.groups)
-      group.distillRun = group.trainFrom !== null;
-    for (const [student, target] of loadTrainFroms('circuit')) {
-      if (student === target) continue;
-      const group = this.groups.find((candidate) =>
-        student === 'mixed' ? candidate.isMixed : candidate.layer === student,
-      );
-      if (!group || group.trainFrom !== null) continue;
-      group.trainFrom = target;
-      // a restored selection is an active training run: one student car and a
-      // disqualified score until the run ends
-      group.distillRun = true;
-    }
-  }
-
-  #groupOf(car: Car) {
-    // The human has a NeuralNetwork-shaped score holder for shared physics,
-    // but must never be mistaken for the layer-1 AI group.
-    if (!car.useAI) return undefined;
-    const key =
-      car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers);
-    return this.groups.find((group) => group.key === key);
-  }
-
-  /**
-   * Point a group at another one for distillation: the group's cars are
-   * driven by the target's champion brain while their own brains
-   * backpropagate toward it. Pass null to free the group back to its own
-   * line. A group cannot distill from itself.
-   */
-  public setTrainFrom(
-    value: number | 'mixed',
-    target: number | 'mixed' | null,
-    persist = true,
-  ): boolean {
-    const group = this.groups.find((candidate) =>
-      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
-    );
-    if (!group || (target !== null && value === target)) return false;
-    group.trainFrom = target;
-    if (target !== null) group.distillRun = true;
-    if (persist) saveTrainFrom('circuit', value, target);
-    // a training run needs exactly one student car, so restart the group with
-    // a single fresh one instead of leaving its whole swarm on the teacher
-    if (target !== null) this.#restartAsStudent(group);
-    return true;
-  }
-
-  /**
-   * Replace a group's pool with the single student car a training run drives,
-   * marking it with the training emoji so the panel and the track agree.
-   */
-  #restartAsStudent(group: Group) {
-    const corpses = new Set(group.pool);
-    const oldLiving = group.pool.filter((car) => !car.damaged).length;
-    this.state.cars = this.state.cars.filter((car) => !corpses.has(car));
-    group.pool = this.#spawnSlots(group).map((slot) =>
-      this.#spawnCar(group, slot),
-    );
-    this.state.cars.push(...group.pool);
-    this.state.living += group.pool.length - oldLiving;
-    this.state.sortedCars = this.state.cars.slice();
-  }
-
-  /**
-   * The end of a run: every distillation selection goes back to free training
-   * and its disqualification flag is dropped, together with the persisted
-   * choice so a reload starts from a clean, measurable run.
-   */
-  #endDistillRuns() {
-    for (const group of this.groups) {
-      if (group.trainFrom === null && !group.distillRun) continue;
-      this.#keepTrainedBrain(group);
-      group.trainFrom = null;
-      group.distillRun = false;
-      saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
-    }
-  }
-
-  /**
-   * Hand the student's trained weights to the next generation: the brain takes
-   * the place of the group's base model, so the next run mutates from what the
-   * student learned. Its score is the one the group already had, a disjoint
-   * run never sets a record.
-   */
-  #keepTrainedBrain(group: Group) {
-    const student = group.pool[0];
-    const brain = student?.brain;
-    // if no teacher ever drove the run nothing was distilled: the student's
-    // weights are untrained and must not replace the group's champion
-    if (!student || !brain || !student.teacherFrames) return;
-    const trained = trainedBrain(brain, group.best?.score ?? 0);
-    group.best = { brain: trained, score: trained.score };
-    if (group.isMixed) {
-      this.state.sortedMixed[MIXED_LEVELS] = withTrainedBrain(
-        this.state.sortedMixed[MIXED_LEVELS] ?? [],
-        trained,
-        config.HALL_OF_FAME_SIZE,
-      );
-    } else {
-      this.state.sortedModels[group.layer] = withTrainedBrain(
-        this.state.sortedModels[group.layer] ?? [],
-        trained,
-        config.HALL_OF_FAME_SIZE,
-      );
-    }
-    this.#persistGroup(group);
-    saveScores(group);
-  }
-
-  /** The score of the brain the group is distilling from, null for free
-   *  training or while the target has no champion yet. */
-  public teacherScore(value: number | 'mixed'): number | null {
-    const group = this.groups.find((candidate) =>
-      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
-    );
-    if (!group || group.trainFrom === null) return null;
-    return this.#teacherBrain(group.trainFrom)?.score ?? null;
-  }
-
-  /** The brain a distilling group imitates: the target group's champion,
-   *  null while the target has none yet. Champions loaded from the saves are
-   *  plain data with no methods, so a raw one is hydrated once (mixed brains
-   *  against the current expert library) and cached until it is replaced. */
-  #teacherBrain(target: number | 'mixed'): NeuralNetwork | null {
-    const key = target === 'mixed' ? 'mixed' : String(target);
-    const group = this.groups.find((candidate) => candidate.key === key);
-    const champion = group?.best?.brain ?? null;
-    if (!champion) return null;
-    if (typeof champion.process === 'function') return champion;
-    const cached = group.hydratedTeacher;
-    if (cached?.champion === champion) return cached.brain;
-    const { inputCount, outputCount } = getCircuitBrainDimensions();
-    const brain = group.isMixed
-      ? MixedNetwork.fromSave(
-          champion,
-          inputCount,
-          outputCount,
-          this.#experts,
-          {
-            hiddenNodes: config.MIXED_HIDDEN_NODES,
-          },
-        )
-      : NeuralNetwork.hydrate(champion);
-    if (!brain) return null;
-    // train-from only needs matching inputs and outputs: any depth or kind is
-    // fine, but a mismatched brain would teach a different function
-    if (!brainIoMatches(brain, inputCount, outputCount)) return null;
-    group.hydratedTeacher = { champion, brain };
-    return brain;
   }
 
   /** Record a checkpoint split before it can become the new reference. */
@@ -460,28 +229,6 @@ export class CircuitRace {
     if (frames < this.#bestLapFrames) this.#bestLapFrames = frames;
   }
 
-  /** A fully crashed group can restart as a student if it has the lowest
-   *  global dashboard score. The strongest other group supplies the guide. */
-  #autoTrainAfterGroupDeath(student: Group) {
-    const globalScore = (group: Group) =>
-      globalRecordFromScores(group.scores).globalScore;
-    const lowestScore = Math.min(...this.groups.map(globalScore));
-    if (globalScore(student) > lowestScore) return;
-    const guide = this.groups
-      .filter(
-        (group) =>
-          group !== student &&
-          this.#teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
-      )
-      .sort((a, b) => globalScore(b) - globalScore(a))[0];
-    if (!guide || globalScore(guide) - globalScore(student) < 1) return;
-    this.setTrainFrom(
-      student.isMixed ? 'mixed' : student.layer,
-      guide.isMixed ? 'mixed' : guide.layer,
-      false,
-    );
-  }
-
   /** Record the final total before it becomes the new track reference. */
   #recordFinishTiming(car: Car) {
     const frames = car.totalRaceFrames;
@@ -492,130 +239,13 @@ export class CircuitRace {
     if (frames < this.#bestFinishFrames) this.#bestFinishFrames = frames;
   }
 
-  #promote(group: Group, car: Car) {
-    // a teacher-driven run is disqualified: it would only save the teacher's
-    // behavior under the student's name
-    if (group.distillRun) return;
-    const brain = JSON.parse(JSON.stringify(car.brain)) as NeuralNetwork;
-    group.best = { brain, score: car.brain.score };
-    this.#pendingSaves.add(group);
-    const saves = group.isMixed
-      ? this.state.sortedMixed
-      : this.state.sortedModels;
-    if (group.isMixed) {
-      saves[MIXED_LEVELS] = [brain];
-      this.#refreshExperts();
-    } else {
-      // hall of fame: a rolling window of the recent lines, newest first.
-      // The older entries are what the scout slot re-explores
-      saves[group.layer] = [brain, ...(saves[group.layer] || [])].slice(
-        0,
-        config.HALL_OF_FAME_SIZE,
-      );
-    }
-  }
-
   #settle(group: Group, car: Car) {
     // a teacher-driven run is not the student's own output: it never settles
     if (group.distillRun) return;
     if (!car.useAI || car.brain.score <= group.scores.seed) return;
     group.scores.seed = car.brain.score;
     group.ghostScore = car.brain.score;
-    this.#promote(group, car);
-  }
-
-  #markFinished(group: Group) {
-    if (group.distillRun) return;
-    group.mutationOnly = true;
-    group.scores.finished[String(this.seed)] = true;
-    this.#pendingSaves.add(group);
-  }
-
-  public flushPendingSaves() {
-    for (const group of this.#pendingSaves) {
-      this.#persistGroup(group);
-      saveScores(group);
-    }
-    this.#pendingSaves.clear();
-  }
-
-  /** regular groups persist their whole hall of fame, mixed the single
-   *  champion save */
-  #persistGroup(group: Group) {
-    if (!group.best) return;
-    if (group.isMixed) this.io.saveBestModels([group.best.brain], 1);
-    else
-      this.io.saveModelList(
-        group.layer,
-        this.state.sortedModels[group.layer] || [group.best.brain],
-      );
-  }
-
-  /** Clear one saved champion and rebuild only that group's ladder. */
-  public resetBrainGroup(value: number | 'mixed') {
-    const groupIndex = this.groups.findIndex((candidate) =>
-      value === 'mixed' ? candidate.isMixed : candidate.layer === value,
-    );
-    if (groupIndex < 0) return;
-
-    const oldGroup = this.groups[groupIndex];
-    const oldPool = new Set(oldGroup.pool);
-    const oldLiving = oldGroup.pool.filter((car) => !car.damaged).length;
-    this.state.cars = this.state.cars.filter((car) => !oldPool.has(car));
-    const group: Group = {
-      ...oldGroup,
-      pool: [],
-      mutationOnly: false,
-      best: null,
-      lapTimes: {},
-    };
-    this.groups[groupIndex] = group;
-    this.#pendingSaves.delete(oldGroup);
-
-    if (group.isMixed) this.state.sortedMixed[MIXED_LEVELS] = [];
-    else this.state.sortedModels[group.layer] = [];
-    if (!group.isMixed) this.#refreshExperts();
-
-    group.pool = new Array(config.CARS_PER_GROUP);
-    for (let slot = 0; slot < config.CARS_PER_GROUP; slot++) {
-      group.pool[slot] = this.#spawnCar(group, slot);
-    }
-    this.state.cars.push(...group.pool);
-    this.state.living += group.pool.length - oldLiving;
-    this.state.sortedCars = this.state.cars.slice();
-  }
-
-  #spawnSlots(group: Group) {
-    // a teacher-driven run needs a single student, nothing more
-    if (group.distillRun) return [0];
-    if (group.mutationOnly)
-      return Array.from(
-        { length: config.FINISHED_CARS_PER_GROUP },
-        (_value, slot) => slot + 1,
-      );
-    return Array.from(
-      { length: config.CARS_PER_GROUP },
-      (_value, slot) => slot,
-    );
-  }
-
-  #respawnGroup(group: Group, now: number) {
-    if (
-      group.pool.length === 0 ||
-      group.pool.some((car) => !car.damaged) ||
-      group.pool.some((car) => now - car.deathTime <= config.DEAD_LIFETIME)
-    )
-      return;
-
-    if (!group.distillRun && group.pool.some((car) => car.finished))
-      group.mutationOnly = true;
-    const corpses = new Set(group.pool);
-    this.state.cars = this.state.cars.filter((car) => !corpses.has(car));
-    group.pool = this.#spawnSlots(group).map((slot) =>
-      this.#spawnCar(group, slot),
-    );
-    this.state.cars.push(...group.pool);
-    this.state.living += group.pool.length;
+    this.promote(group, car);
   }
 
   #onDeath(car: Car): Group | null {
@@ -624,11 +254,11 @@ export class CircuitRace {
     car.deathTime = gameNow();
 
     if (car.useAI) {
-      const group = this.#groupOf(car);
+      const group = this.groupOf(car);
       if (group) {
         const wasDistillRun = group.distillRun;
         if (wasDistillRun) {
-          this.#keepTrainedBrain(group);
+          this.keepTrainedBrain(group);
           group.trainFrom = null;
           group.distillRun = false;
           saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
@@ -640,7 +270,7 @@ export class CircuitRace {
           car.brain.score >= group.scores.seed - Number.EPSILON
         ) {
           group.ghostScore = car.brain.score;
-          this.#pendingSaves.add(group);
+          this.pendingSaves.add(group);
         }
         if (
           !wasDistillRun &&
@@ -664,7 +294,7 @@ export class CircuitRace {
   #regenerateMap() {
     // a new map ends the training run: the selection goes back to free
     // training so the next run measures the student itself
-    this.#endDistillRuns();
+    this.endDistillRuns();
     history.replaceState(
       null,
       '',
@@ -682,19 +312,7 @@ export class CircuitRace {
     this.seedChangeAt = 0;
     this.state.circuit = this.circuit;
     this.state.obstacles = this.circuit.obstacles;
-    this.#buildPools();
-
-    for (const group of this.groups) {
-      saveScores(group);
-    }
-    this.state.cars = this.groups.flatMap((group) => group.pool);
-    if (this.state.human) {
-      this.state.human.controls.dispose();
-      this.state.human = undefined;
-      this.spawnHuman();
-    }
-    this.state.population = this.state.cars.length;
-    this.state.living = this.state.cars.filter((car) => !car.damaged).length;
+    this.finishRegenerate();
   }
 
   public applyUserSeed(seed: number) {
@@ -716,42 +334,10 @@ export class CircuitRace {
     this.#humanFinishCelebrated = false;
     Object.assign(this.state, defaultState);
     this.state.playing = true;
-    const { inputCount, outputCount } = getCircuitBrainDimensions();
-    this.state.sortedModels = this.io.loadAllModelLayers(
-      config.MAX_NETWORK_LAYERS,
-      undefined,
-      (layers) => ({
-        levelSizes: networkLevelSizes(inputCount, outputCount, layers),
-      }),
-    );
-
-    // Mixed selector saves depend on the current regular expert library. Do
-    // this check before building any map pools so stale routing weights are
-    // removed instead of failing later during mutation.
-    const { width, slotIds } = expertLibraryShape(
-      this.state.sortedModels,
-      inputCount,
-      outputCount,
-      config.MIXED_EXPERTS_PER_LAYER,
-    );
-    this.state.sortedMixed = this.io.loadAllModelLayers(
-      MIXED_LEVELS,
-      MIXED_KIND,
-      () => ({
-        levelSizes: [inputCount, config.MIXED_HIDDEN_NODES, width],
-        kind: MIXED_KIND,
-        requireKind: true,
-        expertIds: slotIds,
-      }),
-    );
+    this.loadSavedModels();
     this.state.circuit = this.circuit;
     this.state.obstacles = this.circuit.obstacles;
-    this.#buildPools();
-    this.state.cars = this.groups.flatMap((group) => group.pool);
-    this.spawnHuman();
-    this.state.population = this.state.cars.length;
-    this.state.living = this.state.cars.length;
-    this.#onReset?.();
+    this.initializeCore();
   }
 
   /** Advance one simulation frame, leaving rendering and HUD updates outside. */
@@ -759,13 +345,13 @@ export class CircuitRace {
     this.circuit.updateObstacles();
     for (const group of this.groups)
       group.teacher =
-        group.trainFrom === null ? null : this.#teacherBrain(group.trainFrom);
+        group.trainFrom === null ? null : this.teacherBrain(group.trainFrom);
     let savePoint = false;
     const deadGroups = new Set<Group>();
     for (const car of this.state.cars) {
       const alive = !car.damaged;
       const racing = !car.finished;
-      const group = this.#groupOf(car);
+      const group = this.groupOf(car);
       car.teacher = group?.teacher ?? null;
       car.distillRun = group?.distillRun ?? false;
       car.update(this.state.obstacles, this.circuit);
@@ -773,7 +359,7 @@ export class CircuitRace {
       // brain on the next frame. Keeping the pool intact preserves its exact
       // position, velocity, checkpoint progress, and lap timing.
       if (car.completedLap && car.laps >= 2 && group?.distillRun) {
-        this.#keepTrainedBrain(group);
+        this.keepTrainedBrain(group);
         group.trainFrom = null;
         group.distillRun = false;
         saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
@@ -786,24 +372,24 @@ export class CircuitRace {
         if (deadGroup) deadGroups.add(deadGroup);
       }
       if (racing && car.finished && !car.damaged) {
-        const group = this.#groupOf(car);
+        const group = this.groupOf(car);
         if (group) {
           this.#settle(group, car);
-          this.#markFinished(group);
+          this.markFinished(group);
         }
       }
       if (car.passedCheckpoint) {
         car.passedCheckpoint = false;
         savePoint = true;
-        const group = this.#groupOf(car);
+        const group = this.groupOf(car);
         if (group) {
           this.#settle(group, car);
-          this.#pendingSaves.add(group);
+          this.pendingSaves.add(group);
         }
       }
     }
 
-    for (const group of deadGroups) this.#autoTrainAfterGroupDeath(group);
+    for (const group of deadGroups) this.autoTrainAfterGroupDeath(group);
 
     for (let i = this.state.cars.length - 1; i >= 0; i--) {
       const car = this.state.cars[i];
@@ -814,12 +400,12 @@ export class CircuitRace {
       )
         this.state.cars.splice(i, 1);
     }
-    for (const group of this.groups) this.#respawnGroup(group, now);
+    for (const group of this.groups) this.respawnGroup(group, now);
 
     for (const car of this.state.cars) {
       const completedLap = car.completedLap;
       car.completedLap = false;
-      const group = this.#groupOf(car);
+      const group = this.groupOf(car);
       if (completedLap && group && car.useAI && car.completedLapAt > 0) {
         const key = group.isMixed
           ? `mixed-${group.pool.indexOf(car)}`
@@ -874,19 +460,5 @@ export class CircuitRace {
     }
     if (this.seedChangeAt && now >= this.seedChangeAt) this.#advanceSeed();
     if (savePoint) this.flushPendingSaves();
-  }
-
-  public saveAll() {
-    for (const group of this.groups) {
-      this.#persistGroup(group);
-      saveScores(group);
-    }
-  }
-
-  /** Reorders the live car list by score. Only the throttled HUD reads the
-   *  order, so the per-frame update never pays for the sort. */
-  public refreshLeaderboard() {
-    this.state.cars.sort((a, b) => b.brain.score - a.brain.score);
-    this.state.sortedCars = this.state.cars;
   }
 }
