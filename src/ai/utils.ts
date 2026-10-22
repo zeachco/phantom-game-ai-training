@@ -66,7 +66,7 @@ export function networkLevelSizes(
  * or mutate. JSON is untrusted here: malformed rows, ragged matrices, and
  * changed sensor/control dimensions all otherwise fail later in the game loop.
  */
-export function isModelShapeValid(
+function isModelShapeValid(
   model: unknown,
   shape: ModelShape,
 ): model is ModelsByLayerCount[number] {

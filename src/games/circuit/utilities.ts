@@ -2,13 +2,8 @@ import { MixedNetwork } from '../../ai/Mixed';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   brainId,
-  clearScoreRecords as clearScoreRecordsForGame,
-  foldScores,
   type GroupBase,
   type GroupScores,
-  loadScores as loadScoresForGame,
-  saveScores as saveScoresForGame,
-  scoreKey as scoreKeyForGame,
 } from '../../utilities/groupScores';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { scoreBoardRows as sharedScoreBoardRows } from '../../utilities/scoreBoard';
@@ -21,18 +16,8 @@ import type { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
 import type { Obstacle } from './classes/Obstacle';
 
-/** The shared group-score store, parameterized by the game prefix. Each game
- *  keeps these thin wrappers so call sites and storage keys stay unchanged. */
 export type { GroupScores };
-export { brainId, foldScores };
-export const scoreKey = (group: Group): string =>
-  scoreKeyForGame('circuit', group);
-export const loadScores = (group: Group, seed: number): GroupScores =>
-  loadScoresForGame('circuit', group, seed);
-export const saveScores = (group: Group, scores?: GroupScores): void =>
-  saveScoresForGame('circuit', group, scores ?? group.scores);
-export const clearScoreRecords = (): void =>
-  clearScoreRecordsForGame('circuit');
+export { brainId };
 
 /** a training group: the shared group shape plus the circuit's own fields */
 export interface Group extends GroupBase<Car> {

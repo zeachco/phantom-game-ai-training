@@ -3,13 +3,8 @@ import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   brainId,
-  clearScoreRecords as clearScoreRecordsForGame,
-  foldScores,
   type GroupBase,
   type GroupScores,
-  loadScores as loadScoresForGame,
-  saveScores as saveScoresForGame,
-  scoreKey as scoreKeyForGame,
 } from '../../utilities/groupScores';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { scoreBoardRows as sharedScoreBoardRows } from '../../utilities/scoreBoard';
@@ -17,17 +12,8 @@ import type { Ball } from './classes/Ball';
 import type { Cave } from './classes/Cave';
 import { config } from './classes/Config';
 
-/** The shared group-score store, parameterized by the game prefix. Each game
- *  keeps these thin wrappers so call sites and storage keys stay unchanged. */
 export type { GroupScores };
-export { brainId, foldScores };
-export const scoreKey = (group: Group): string =>
-  scoreKeyForGame('cave', group);
-export const loadScores = (group: Group, seed: number): GroupScores =>
-  loadScoresForGame('cave', group, seed);
-export const saveScores = (group: Group, scores?: GroupScores): void =>
-  saveScoresForGame('cave', group, scores ?? group.scores);
-export const clearScoreRecords = (): void => clearScoreRecordsForGame('cave');
+export { brainId };
 
 /** a training group: the shared group shape plus the cave's own fields */
 export interface Group extends GroupBase<Ball> {

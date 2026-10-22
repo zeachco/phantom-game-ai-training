@@ -14,10 +14,6 @@ export function rand(min = -1, max = 1): number {
   return min + Math.random() * (max - min);
 }
 
-export function randInt(min = -1, max = 1) {
-  return Math.round(rand(max, min));
-}
-
 export function lerp(A: number, B: number, t: number) {
   return A + (B - A) * t;
 }
@@ -142,30 +138,8 @@ export function closestPointOnPolygon(
   return out;
 }
 
-export function easeInCirc(x: number): number {
-  return 1 - Math.sqrt(1 - x ** 2);
-}
-
 export function sum(...nbs: number[]) {
   return nbs.reduce((acc, nb) => acc + nb, 0);
-}
-
-/**
- * Return between -Math.PI and Math.PI
- */
-export function getAngle(x: number, y: number) {
-  return Math.atan2(y, x);
-}
-
-export function angleOffset(a1: number, a2: number) {
-  let diffAngle = a1 - a2;
-  if (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
-  if (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-  return diffAngle;
-}
-
-export function vecLength(x: number, y: number) {
-  return Math.sqrt(x * x + y * y);
 }
 
 export function clamp(value: number, min: number, max: number): number {

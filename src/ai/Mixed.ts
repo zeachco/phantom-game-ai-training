@@ -16,7 +16,7 @@ const MIN_MUT_FACTOR = 0.1;
 /** input -> hidden -> experts, picking a brain does not deserve more depth */
 export const MIXED_LEVELS = 2;
 
-export interface MixedOptions {
+interface MixedOptions {
   /** nodes of the single hidden layer of the selector */
   hiddenNodes?: number;
   /** odds [0-1] of rerolling every weight leading to one expert */
