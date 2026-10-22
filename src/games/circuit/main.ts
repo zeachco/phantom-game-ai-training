@@ -7,6 +7,7 @@ import {
 } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import {
@@ -182,6 +183,7 @@ export default async (state: typeof defaultState) => {
   about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; each seed keeps its former score as a HUD reference, but every generated track starts a fresh record so mutated brains have a reachable goal, and groups that already finished it continue with mutation runs only. Finishing a track pays a large one-time bonus, so brains are selected for completing the map, not for being fast on one known track; the last car of a pool is a fresh random explorer while the group is still finding its feet (under 2 laps on the map) and a regular mutation car once it is proven, and a scout re-runs the group's oldest saved line, so the population can never fully converge on one overfit brain.`;
 
   const frameMeter = createFrameMeter();
+  const drawBudget = createAdaptiveDrawBudget(5);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -597,24 +599,19 @@ export default async (state: typeof defaultState) => {
       }
       // the human car draws last, above every other car, no sensor fan
       const corpseNow = gameNow();
-      // off-screen cars cost a transform and two blits for nothing, and past
-      // index 50 only the focused car and each group's original model (slot 0)
-      // still earn a draw; the human is excluded up front and drawn below
-      const perfBudget = performance.now() + 5;
+      drawBudget.begin(state.cars.length);
       for (let i = 0; i < state.cars.length; i++) {
         const car = state.cars[i];
         if (car === state.human) continue;
-        const keep =
-          car === camTarget ||
-          car.brain.mutationIndex === 0 ||
-          performance.now() < perfBudget;
+        const keep = car === camTarget || car.brain.mutationIndex === 0;
         const box = car.aabb;
         if (
           !keep &&
           (box.maxX < viewMinX ||
             box.minX > viewMaxX ||
             box.maxY < viewMinY ||
-            box.minY > viewMaxY)
+            box.minY > viewMaxY ||
+            !drawBudget.consume())
         )
           continue;
         if (car.damaged) {
@@ -627,6 +624,7 @@ export default async (state: typeof defaultState) => {
         }
         car.draw(carCtx, car === camTarget);
       }
+      drawBudget.end();
       if (state.human) {
         carCtx.globalAlpha = 1;
         state.human.draw(carCtx, false);

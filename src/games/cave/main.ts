@@ -3,6 +3,7 @@ import { MixedNetwork } from '../../ai/Mixed';
 import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import {
@@ -213,6 +214,7 @@ export default async (state: CaveState) => {
   about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one for the rock ahead (the mixed brain). Each ball is a rolling sphere in a streamed 3D cave: a forward sensor cone feeds its brain, and gravity, jumps and hard wall impacts decide who survives. Gates are claimed in order along the tunnel, and a section gauge kills any ball that stops making forward progress. The cave is infinite: each time a brain completes the last gate the seed advances to a fresh random cave, and groups that already finished a cave return as a mutation-only swarm of their champion, so brains are selected for completing unknown caves, not for shaving frames off one. A random explorer and a scout that re-runs the group's oldest saved line keep the population from converging on a single overfit brain.`;
 
   const frameMeter = createFrameMeter();
+  const drawBudget = createAdaptiveDrawBudget(5);
 
   const info = document.createElement('div');
   info.className = 'side-panel-info';
@@ -477,6 +479,7 @@ export default async (state: CaveState) => {
       jumpSamples.length = 0;
     }
 
+    drawBudget.begin(balls.length);
     const seen = new Set<string>();
     for (const ball of balls) {
       seen.add(ball.label);
@@ -486,13 +489,20 @@ export default async (state: CaveState) => {
         ballMeshes.set(ball.label, mesh);
       }
       updateBallFocusStyle(mesh, ball === followed);
+      const keep =
+        ball === followed ||
+        ball === state.human ||
+        ball.brain.mutationIndex === 0;
       const visible =
-        !ball.damaged && Math.abs(ball.s - followed.s) < config.VISUAL_RANGE;
+        !ball.damaged &&
+        Math.abs(ball.s - followed.s) < config.VISUAL_RANGE &&
+        (keep || drawBudget.consume());
       mesh.visible = visible;
       if (!visible) continue;
       mesh.position.set(ball.x, ball.y, ball.z);
       mesh.quaternion.copy(ball.quat);
     }
+    drawBudget.end();
     for (const [label, mesh] of ballMeshes) {
       if (seen.has(label)) continue;
       scene.remove(mesh);

@@ -10,6 +10,7 @@ import { brainIoMatches } from '../../ai/distill';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import { createCockpit } from '../../utilities/cockpit';
@@ -195,6 +196,7 @@ export default async (state: typeof defaultState) => {
   ]);
 
   const frameMeter = createFrameMeter();
+  const drawBudget = createAdaptiveDrawBudget(5);
 
   // the trainer aside: follow buttons, group actions and the brain preview
   const panel = createSidePanel({
@@ -478,26 +480,24 @@ export default async (state: typeof defaultState) => {
         continue;
       traffic.draw(carCtx);
     }
-    const timeBudget = performance.now() + 5;
+    drawBudget.begin(state.cars.length);
     for (let i = 0; i < state.cars.length; i++) {
       const car = state.cars[i];
-      // off-screen cars cost a transform and a blit for nothing, and past
-      // index 50 only the focused car, the human and each group's original
-      // model (slot 0) still earn a draw
       const keep =
         car === camTarget ||
         car === state.player ||
         car.brain.mutationIndex === 0;
       if (
         !keep &&
-        (performance.now() > timeBudget ||
-          car.aabb.maxY < carViewMinY ||
-          car.aabb.minY > carViewMaxY)
+        (car.aabb.maxY < carViewMinY ||
+          car.aabb.minY > carViewMaxY ||
+          !drawBudget.consume())
       )
         continue;
       carCtx.globalAlpha = i === 0 || !car.useAI ? 1 : 0.3;
       car.draw(carCtx, i === 0);
     }
+    drawBudget.end();
 
     carCtx.restore();
 

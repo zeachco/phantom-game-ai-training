@@ -3,6 +3,7 @@ import type { NeuralNetwork } from '../../ai/Network';
 import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
+import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
 import { layerColor } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import { createCockpit } from '../../utilities/cockpit';
@@ -115,6 +116,7 @@ export default async (state: typeof defaultState) => {
     '0 the best climber, R jumps to a random seed, < and > step the seed.';
 
   const frameMeter = createFrameMeter();
+  const drawBudget = createAdaptiveDrawBudget(5);
 
   // the trainer aside: follow buttons, group actions and the brain preview
   const panel = createSidePanel({
@@ -360,18 +362,23 @@ export default async (state: typeof defaultState) => {
       state.tower?.draw(gameCtx, viewMinY, viewMaxY);
 
       // climbers, the followed one and the human last
+      drawBudget.begin(state.players.length);
       const margin = 30;
       for (const p of state.players) {
         if (p === state.human || p === followed) continue;
+        const keep = p.brain?.mutationIndex === 0;
         if (
-          p.y < viewMinY ||
-          p.y > viewMaxY ||
-          p.x < -margin ||
-          p.x > config.TOWER_WIDTH + margin
+          !keep &&
+          (p.y < viewMinY ||
+            p.y > viewMaxY ||
+            p.x < -margin ||
+            p.x > config.TOWER_WIDTH + margin ||
+            !drawBudget.consume())
         )
           continue;
         p.draw(gameCtx, now, false);
       }
+      drawBudget.end();
       if (followed) followed.draw(gameCtx, now, true);
       if (state.human && state.human !== followed)
         state.human.draw(gameCtx, now, false);
