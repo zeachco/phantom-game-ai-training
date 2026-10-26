@@ -340,13 +340,16 @@ export abstract class RaceBase<
     this.state.living += group.pool.length;
   }
 
-  /** A fully crashed group can restart as a student if it has the lowest
-   *  global dashboard score. The strongest other group supplies the guide. */
+  /** A fully crashed group can restart as a student only while it is in the
+   *  lower tier (bottom half) of both rankings: its live score on the
+   *  current track and its global dashboard total, so a group that is
+   *  strong on this track is never retrained just because its all-time
+   *  total lags. The strongest other group supplies the guide. */
   protected autoTrainAfterGroupDeath(student: TGroup): void {
     const globalScore = (group: TGroup) =>
       globalRecordFromScores(group.scores).globalScore;
-    const lowestScore = Math.min(...this.groups.map(globalScore));
-    if (globalScore(student) > lowestScore) return;
+    if (!this.inLowerTier(student, (group) => group.scores.seed)) return;
+    if (!this.inLowerTier(student, globalScore)) return;
     const guide = this.groups
       .filter(
         (group) =>
@@ -360,6 +363,17 @@ export abstract class RaceBase<
       guide.isMixed ? 'mixed' : guide.layer,
       false,
     );
+  }
+
+  /** True while the group sits in the bottom half of the ranking the score
+   *  function gives the groups, ties included. */
+  protected inLowerTier(
+    group: TGroup,
+    score: (group: TGroup) => number,
+  ): boolean {
+    const value = score(group);
+    const ahead = this.groups.filter((other) => score(other) > value).length;
+    return ahead >= Math.ceil(this.groups.length / 2);
   }
 
   /**

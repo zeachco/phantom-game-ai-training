@@ -605,3 +605,103 @@ test('a deep teacher is distilled through the clamped signal without diverging',
   // of the gap and never diverges
   expect(gap()).toBeLessThan(before / 2);
 });
+
+test('a strong current-track group is not retrained despite the lowest global total', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+    // freeze the population in place: no climber moves or scores
+    for (const player of state.players)
+      if (player.useAI) player.brain!.process = () => [0, 0, 0];
+
+    const student = race.groups.find((g) => g.layer === 1)!;
+    const guide = race.groups.find((g) => g.layer === 2)!;
+    // group 1 leads the current track but trails the global dashboard
+    student.scores.seed = 5000;
+    for (const group of race.groups)
+      if (group !== student) group.scores.history = { '999': 80000 };
+    const teacher = new NeuralNetwork(
+      guide.pool[0].brain!.inputCount,
+      guide.pool[0].brain!.outputCount,
+      1,
+    );
+    teacher.process = () => [0.9, 0.1, 0];
+    teacher.score = 42;
+    guide.best = { brain: teacher, score: 42 };
+
+    // crash the whole group: every member but one is already dead and the
+    // survivor dies mid-frame so the group death hook fires
+    const last = student.pool[student.pool.length - 1];
+    for (const player of student.pool)
+      if (player !== last) {
+        player.damaged = true;
+        player.deathTime = 0;
+      }
+    const now = 10000;
+    last.update = () => {
+      last.damaged = true;
+      last.deathTime = now;
+    };
+    race.update(now);
+
+    // leading the current track keeps the group out of the lower tier: it
+    // simply respawns and no training run starts
+    expect(student.trainFrom).toBeNull();
+    expect(student.distillRun).toBe(false);
+  } finally {
+    env.restore();
+  }
+});
+
+test('a group in the lower tier of both rankings restarts as a student', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+    for (const player of state.players)
+      if (player.useAI) player.brain!.process = () => [0, 0, 0];
+
+    const student = race.groups.find((g) => g.layer === 1)!;
+    const guide = race.groups.find((g) => g.layer === 2)!;
+    // group 1 trails the current track and the global dashboard
+    for (const group of race.groups)
+      if (group !== student) {
+        group.scores.seed = 1000;
+        group.scores.history = { '999': 80000 };
+      }
+    const teacher = new NeuralNetwork(
+      guide.pool[0].brain!.inputCount,
+      guide.pool[0].brain!.outputCount,
+      1,
+    );
+    teacher.process = () => [0.9, 0.1, 0];
+    teacher.score = 42;
+    guide.best = { brain: teacher, score: 42 };
+
+    const last = student.pool[student.pool.length - 1];
+    for (const player of student.pool)
+      if (player !== last) {
+        player.damaged = true;
+        player.deathTime = 0;
+      }
+    const now = 10000;
+    last.update = () => {
+      last.damaged = true;
+      last.deathTime = now;
+    };
+    race.update(now);
+
+    // last on the track and on the dashboard: a single student restarts,
+    // driven by the strongest group
+    expect(student.trainFrom).toBe(2);
+    expect(student.distillRun).toBe(true);
+    expect(student.pool).toHaveLength(1);
+  } finally {
+    env.restore();
+  }
+});
