@@ -76,6 +76,9 @@ export class Car {
   /** the car belongs to a teacher-driven training run, even when the teacher
    *  is missing (no champion to copy yet): its score stays frozen too */
   public distillRun = false;
+  /** sticky: a guide once piloted this car, so reaching LAPS_PER_SEED is not
+   *  its own finish and the track completion is invalidated */
+  public guideDriven = false;
   /** the distillation state: teacher-swap reset, decayed step, probes, and
    *  the live error; null for a car without a brain */
   #driver: DistillDriver | null = null;
@@ -425,7 +428,9 @@ export class Car {
           this.totalRaceFrames += this.completedLapFrames;
           this.framesSinceLapStart = 0;
           this.lapStartedAt = this.completedLapAt;
-          if (this.laps >= config.LAPS_PER_SEED) {
+          // a guide once piloted this car: its track completion is
+          // invalidated, so the finish is never banked
+          if (this.laps >= config.LAPS_PER_SEED && !this.guideDriven) {
             this.finished = true;
             // completing the map is the biggest reward in the game: it puts
             // a finisher far ahead of any partial run, whatever its pace

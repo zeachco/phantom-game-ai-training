@@ -354,11 +354,19 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
       const group = this.groupOf(car);
       car.teacher = group?.teacher ?? null;
       car.distillRun = group?.distillRun ?? false;
+      // once the guide has actually piloted this car, its track completion is
+      // tainted: another model drove it, so LAPS_PER_SEED is not its finish
+      if (car.distillRun && car.teacher) car.guideDriven = true;
       car.update(this.state.obstacles, this.circuit);
-      // Let the guide complete two laps, then switch this same car to its own
-      // brain on the next frame. Keeping the pool intact preserves its exact
+      // Let the guide drive a lap and a half, then switch this same car to
+      // its own brain on the next frame. Half a lap is half the gates, all
+      // claimed in order. Keeping the pool intact preserves the car's exact
       // position, velocity, checkpoint progress, and lap timing.
-      if (car.completedLap && car.laps >= 2 && group?.distillRun) {
+      if (
+        car.laps >= 1 &&
+        car.nextCheckpoint >= config.CHECKPOINTS / 2 &&
+        group?.distillRun
+      ) {
         this.keepTrainedBrain(group);
         group.trainFrom = null;
         group.distillRun = false;
@@ -413,7 +421,9 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
         group.lapTimes[key] = group.lapTimes[key] || [];
         group.lapTimes[key].push(car.completedLapFrames);
       }
-      if (car.laps >= config.LAPS_PER_SEED) {
+      // a guide-driven car passed the finish mark but its track completion
+      // is invalidated: the run never counts as finished
+      if (car.laps >= config.LAPS_PER_SEED && !car.guideDriven) {
         const brainIndex =
           car === this.state.human
             ? 'human'

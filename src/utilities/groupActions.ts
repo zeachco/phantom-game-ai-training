@@ -410,6 +410,8 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   }
 
   trainSelect.addEventListener('change', () => {
+    // the pick is made: drop focus so the dropdown stops eating key input
+    trainSelect.blur();
     if (value === 0) return;
     const raw = trainSelect.value;
     setTrainFrom(

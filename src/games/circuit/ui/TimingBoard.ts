@@ -8,6 +8,7 @@ type TimingEntry = {
   color: string;
   laps: number;
   totalFrames: number;
+  finished: boolean;
 };
 
 /** Renders the small progress board without coupling race simulation to DOM. */
@@ -89,6 +90,7 @@ export class TimingBoard {
             color: group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)',
             laps: config.LAPS_PER_SEED,
             totalFrames: finish.totalFrames,
+            finished: true,
           };
         if (!car) return null;
         return {
@@ -96,6 +98,9 @@ export class TimingBoard {
           color: group.pool[0]?.color || 'rgba(255, 255, 255, 0.82)',
           laps: car.laps,
           totalFrames: car.totalRaceFrames,
+          // a guide-driven car can pass the final lap without finishing: it
+          // stays a leader, never a finisher
+          finished: car.finished,
         };
       })
       .filter((entry): entry is TimingEntry => entry !== null);
@@ -108,6 +113,7 @@ export class TimingBoard {
         color: human.color,
         laps: humanFinish ? config.LAPS_PER_SEED : human.laps,
         totalFrames: humanFinish?.totalFrames ?? human.totalRaceFrames,
+        finished: !!humanFinish,
       });
     }
 
@@ -116,11 +122,9 @@ export class TimingBoard {
       a.totalFrames - b.totalFrames ||
       (a.group?.isMixed ? 1 : 0) - (b.group?.isMixed ? 1 : 0) ||
       (a.group?.layer ?? -1) - (b.group?.layer ?? -1);
-    const finishers = ranked.filter(
-      (entry) => entry.laps >= config.LAPS_PER_SEED,
-    );
+    const finishers = ranked.filter((entry) => entry.finished);
     const leaders = ranked
-      .filter((entry) => entry.laps < config.LAPS_PER_SEED)
+      .filter((entry) => !entry.finished)
       .sort(compare)
       .slice(0, 3);
     const visible = [...finishers, ...leaders].sort(compare);
@@ -145,7 +149,7 @@ export class TimingBoard {
           : '';
       row.textContent = entry
         ? `${index + 1}. ${name}  ${entry.laps}/${config.LAPS_PER_SEED}${
-            entry.laps >= config.LAPS_PER_SEED ? ' finished' : ''
+            entry.finished ? ' finished' : ''
           }  ${this.#formatFrames(entry.totalFrames)}`
         : `${index + 1}. —`;
     });
