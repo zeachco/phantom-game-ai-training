@@ -344,28 +344,71 @@ export abstract class RaceBase<
    *  lower tier (bottom half) of both rankings: its live score on the
    *  current track and its global dashboard total, so a group that is
    *  strong on this track is never retrained just because its all-time
-   *  total lags. The strongest other group supplies the guide; the mixed
-   *  group never pilots one of these auto-trained runs, so the best regular
-   *  group takes the slot instead. */
+   *  total lags. The guide comes from three tiers: a regular group that has
+   *  already finished this track (the best finisher by track score), then
+   *  the strongest mix of both rankings (a regular group further ahead on
+   *  this track and higher on the dashboard, ranked by the sum of the two
+   *  scores), and only when no regular group qualifies, the mixed group. */
   protected autoTrainAfterGroupDeath(student: TGroup): void {
     const globalScore = (group: TGroup) =>
       globalRecordFromScores(group.scores).globalScore;
-    if (!this.inLowerTier(student, (group) => group.scores.seed)) return;
+    const trackScore = (group: TGroup) => group.scores.seed;
+    if (!this.inLowerTier(student, trackScore)) return;
     if (!this.inLowerTier(student, globalScore)) return;
-    const guide = this.groups
+    const candidates = this.groups.filter(
+      (group) =>
+        group !== student &&
+        this.teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
+    );
+    // A group that already finished this track demonstrably drives it: the
+    // best finisher by current-track score takes the slot, whatever its
+    // global total says.
+    const finishers = candidates.filter(
+      (group) =>
+        !group.isMixed &&
+        (this.poolFinished(group) ||
+          group.scores.finished[String(this.seed)] === true),
+    );
+    if (finishers.length > 0) {
+      const guide = finishers.sort((a, b) => trackScore(b) - trackScore(a))[0];
+      this.setTrainFrom(
+        student.isMixed ? 'mixed' : student.layer,
+        guide.isMixed ? 'mixed' : guide.layer,
+        false,
+      );
+      return;
+    }
+    // Otherwise the guide mixes both rankings: a regular group far enough
+    // ahead on this track and with a better global total, ranked by the sum
+    // of the two so track progress can outweigh a global lead.
+    const guide = candidates
       .filter(
         (group) =>
-          group !== student &&
           !group.isMixed &&
-          this.teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
+          trackScore(group) > trackScore(student) &&
+          globalScore(group) - globalScore(student) >= 1,
       )
-      .sort((a, b) => globalScore(b) - globalScore(a))[0];
-    if (!guide || globalScore(guide) - globalScore(student) < 1) return;
-    this.setTrainFrom(
-      student.isMixed ? 'mixed' : student.layer,
-      guide.isMixed ? 'mixed' : guide.layer,
-      false,
-    );
+      .sort(
+        (a, b) =>
+          globalScore(b) + trackScore(b) - (globalScore(a) + trackScore(a)),
+      )[0];
+    if (guide) {
+      this.setTrainFrom(
+        student.isMixed ? 'mixed' : student.layer,
+        guide.isMixed ? 'mixed' : guide.layer,
+        false,
+      );
+      return;
+    }
+    // Last resort: no regular group is far enough ahead on this track with
+    // a better global total, so the mixed group pilots the run.
+    const mixed = candidates.find((group) => group.isMixed);
+    if (mixed && globalScore(mixed) - globalScore(student) >= 1)
+      this.setTrainFrom(
+        student.isMixed ? 'mixed' : student.layer,
+        'mixed',
+        false,
+      );
   }
 
   /** True while the group sits in the bottom half of the ranking the score

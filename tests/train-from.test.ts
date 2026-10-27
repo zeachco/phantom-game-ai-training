@@ -706,7 +706,7 @@ test('a group in the lower tier of both rankings restarts as a student', () => {
   }
 });
 
-test('auto-training never picks the mixed group as the guide', () => {
+test('a qualifying regular group takes the guide slot over the mixed group', () => {
   const store = new Map<string, string>();
   const env = stubRaceEnv(store);
   try {
@@ -776,9 +776,217 @@ test('auto-training never picks the mixed group as the guide', () => {
     };
     race.update(now);
 
-    // the mixed group tops the dashboard but never pilots an auto-trained
-    // run: the strongest regular group takes the guide slot instead
+    // the mixed group tops the dashboard but a regular group that is
+    // further ahead on this track with a better global total qualifies
+    // first: the mixed group is only the last resort
     expect(student.trainFrom).toBe(2);
+    expect(student.distillRun).toBe(true);
+    expect(student.pool).toHaveLength(1);
+  } finally {
+    env.restore();
+  }
+});
+
+test('a group that already finished this track takes the guide slot', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+    for (const player of state.players)
+      if (player.useAI) player.brain!.process = () => [0, 0, 0];
+
+    const student = race.groups.find((g) => g.layer === 1)!;
+    const globalLeader = race.groups.find((g) => g.layer === 2)!;
+    const finisher = race.groups.find((g) => g.layer === 3)!;
+    // every other group leads the student on the track and the dashboard
+    for (const group of race.groups)
+      if (group !== student) {
+        group.scores.seed = 1000;
+        group.scores.history = { '999': 80000 };
+      }
+    // the finisher is far ahead on this track but its global total barely
+    // exists yet: finishing the track outweighs the dashboard
+    finisher.scores.seed = 5000;
+    finisher.scores.history = {};
+    finisher.scores.finished[String(race.seed)] = true;
+    const champion = (group: Group, score: number) => {
+      const probe = group.pool[0].brain!;
+      const brain = new NeuralNetwork(
+        probe.inputCount,
+        probe.outputCount,
+        1,
+      );
+      brain.process = () => [0.9, 0.1, 0];
+      brain.score = score;
+      group.best = { brain, score };
+    };
+    champion(globalLeader, 80000);
+    champion(finisher, 5000);
+
+    const last = student.pool[student.pool.length - 1];
+    for (const player of student.pool)
+      if (player !== last) {
+        player.damaged = true;
+        player.deathTime = 0;
+      }
+    const now = 10000;
+    last.update = () => {
+      last.damaged = true;
+      last.deathTime = now;
+    };
+    race.update(now);
+
+    // the student learns from the proven finisher, not the dashboard leader
+    expect(student.trainFrom).toBe(3);
+    expect(student.distillRun).toBe(true);
+    expect(student.pool).toHaveLength(1);
+  } finally {
+    env.restore();
+  }
+});
+
+test('the guide mixes the global total and current-track progress', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+    for (const player of state.players)
+      if (player.useAI) player.brain!.process = () => [0, 0, 0];
+
+    const student = race.groups.find((g) => g.layer === 1)!;
+    const globalLeader = race.groups.find((g) => g.layer === 2)!;
+    const trackLeader = race.groups.find((g) => g.layer === 3)!;
+    for (const group of race.groups)
+      if (group !== student) {
+        group.scores.seed = 1000;
+        group.scores.history = { '999': 80000 };
+      }
+    // group 2 leads the dashboard, group 3 trails it but is far further
+    // ahead on this track: the mix of the two picks group 3 (90000 + 5000
+    // beats 91000 + 1000)
+    globalLeader.scores.history = { '999': 90000 };
+    trackLeader.scores.seed = 5000;
+    trackLeader.scores.history = { '999': 85000 };
+    const champion = (group: Group, score: number) => {
+      const probe = group.pool[0].brain!;
+      const brain = new NeuralNetwork(
+        probe.inputCount,
+        probe.outputCount,
+        1,
+      );
+      brain.process = () => [0.9, 0.1, 0];
+      brain.score = score;
+      group.best = { brain, score };
+    };
+    champion(globalLeader, 90000);
+    champion(trackLeader, 85000);
+
+    const last = student.pool[student.pool.length - 1];
+    for (const player of student.pool)
+      if (player !== last) {
+        player.damaged = true;
+        player.deathTime = 0;
+      }
+    const now = 10000;
+    last.update = () => {
+      last.damaged = true;
+      last.deathTime = now;
+    };
+    race.update(now);
+
+    // the global lead no longer decides alone: track progress tips the mix
+    expect(student.trainFrom).toBe(3);
+    expect(student.distillRun).toBe(true);
+    expect(student.pool).toHaveLength(1);
+  } finally {
+    env.restore();
+  }
+});
+
+test('the mixed group pilots the run when no regular group qualifies', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+    for (const player of state.players)
+      if (player.useAI) player.brain!.process = () => [0, 0, 0];
+
+    const student = race.groups.find((g) => g.layer === 1)!;
+    const regular = race.groups.find((g) => g.layer === 9)!;
+    const probe = regular.pool[0].brain!;
+
+    // every regular group leads the student on one ranking or the other...
+    for (const group of race.groups)
+      if (group !== student) {
+        group.scores.seed = 1000;
+        group.scores.history = { '999': 80000 };
+      }
+    // ...but only one holds a champion, and it is not ahead on the track:
+    // it fails the mix gate, so no regular group qualifies
+    regular.scores.seed = 0;
+    const teacher = new NeuralNetwork(
+      probe.inputCount,
+      probe.outputCount,
+      1,
+    );
+    teacher.process = () => [0.9, 0.1, 0];
+    teacher.score = 80000;
+    regular.best = { brain: teacher, score: 80000 };
+
+    // a mixed champion with a live teacher tops the dashboard
+    const mixedTeacher = new NeuralNetwork(
+      probe.inputCount,
+      probe.outputCount,
+      1,
+    );
+    mixedTeacher.process = () => [0.9, 0.1, 0];
+    mixedTeacher.score = 90000;
+    const mixed: Group = {
+      key: 'mixed',
+      layer: 0,
+      isMixed: true,
+      pool: [],
+      mutationOnly: false,
+      best: { brain: mixedTeacher, score: 90000 },
+      ghostScore: 0,
+      trainFrom: null,
+      distillRun: false,
+      teacher: null,
+      hydratedTeacher: null,
+      scores: {
+        current: 0,
+        total: 0,
+        seed: 1000,
+        phantom: 0,
+        history: { '999': 90000 },
+        finished: {},
+      },
+      seedBest: null,
+    };
+    race.groups.push(mixed);
+
+    const last = student.pool[student.pool.length - 1];
+    for (const player of student.pool)
+      if (player !== last) {
+        player.damaged = true;
+        player.deathTime = 0;
+      }
+    const now = 10000;
+    last.update = () => {
+      last.damaged = true;
+      last.deathTime = now;
+    };
+    race.update(now);
+
+    // no regular group is far enough ahead on this track with a better
+    // global total: the last resort, the mixed group, pilots the run
+    expect(student.trainFrom).toBe('mixed');
     expect(student.distillRun).toBe(true);
     expect(student.pool).toHaveLength(1);
   } finally {
