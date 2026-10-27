@@ -1,11 +1,10 @@
 import { rand } from '../utilities/math';
 import {
-  clampToRange,
+  appliedRangeErrors,
   Level,
   NeuralNetwork,
   type OutputRanges,
   TEACHING_RATE,
-  UNIT_RANGE,
 } from './Network';
 import type { ModelsByLayerCount } from './utils';
 
@@ -166,14 +165,7 @@ export class MixedNetwork extends NeuralNetwork {
 
     // the same applied-range error plain brains use: only the value the game
     // would actually apply counts
-    let loss = 0;
-    const errors = new Array<number>(outCount);
-    for (let k = 0; k < outCount; k++) {
-      const range = ranges[k] ?? UNIT_RANGE;
-      errors[k] =
-        clampToRange(blended[k], range) - clampToRange(targets[k] ?? 0, range);
-      loss += errors[k] * errors[k];
-    }
+    const { errors, loss } = appliedRangeErrors(blended, targets, ranges);
 
     // softmax blend: the raw selector output j owns the share (E_j - y) of the
     // output-space error, exactly as for a weighted mixture of experts

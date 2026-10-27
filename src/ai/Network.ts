@@ -29,6 +29,30 @@ export type OutputRanges = OutputRange[];
 /** the default applied range, what most controls clamp to */
 export const UNIT_RANGE: OutputRange = [-1, 1];
 
+/**
+ * The error each output sees once the game's applied range is in place:
+ * the clamped output minus the clamped target. Two brains that differ only
+ * past the applied bound drive identically, so only this error trains, and
+ * it also keeps deep brains from chasing absurd targets like a raw output
+ * of 150. Returns the per-output errors and their summed square, the loss.
+ */
+export function appliedRangeErrors(
+  values: number[],
+  targets: number[],
+  ranges: OutputRanges = [],
+): { errors: number[]; loss: number } {
+  const errors = new Array<number>(values.length);
+  let loss = 0;
+  for (let i = 0; i < values.length; i++) {
+    const range = ranges[i] ?? UNIT_RANGE;
+    const error =
+      clampToRange(values[i], range) - clampToRange(targets[i] ?? 0, range);
+    errors[i] = error;
+    loss += error * error;
+  }
+  return { errors, loss };
+}
+
 /** clamps to one control's applied range, the canonical box being [-1, 1] */
 export function clampToRange(
   value: number,
@@ -178,19 +202,10 @@ export class NeuralNetwork {
       activations.push(current);
     }
     const output = current;
-    let loss = 0;
+    const { errors, loss } = appliedRangeErrors(output, targets, ranges);
     const deltas = new Array<number>(output.length);
-    const errors = new Array<number>(output.length);
     for (let i = 0; i < output.length; i++) {
-      // Two brains that differ only past the applied bound drive identically,
-      // so the error is measured on the applied value, which also keeps deep
-      // brains from chasing absurd targets like a raw output of 150.
-      const range = ranges[i] ?? UNIT_RANGE;
-      const error =
-        clampToRange(output[i], range) - clampToRange(targets[i] ?? 0, range);
-      loss += error * error;
-      errors[i] = error;
-      deltas[i] = (2 * error) / output.length;
+      deltas[i] = (2 * errors[i]) / output.length;
     }
     const mutations = NeuralNetwork.#mutationAccumulator(this.levels);
     NeuralNetwork.applyGradients(

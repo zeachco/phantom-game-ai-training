@@ -9,6 +9,7 @@
  * best, and circuit submits need at least MIN_TRACKS distinct tracks backing
  * the globalScore.
  */
+import { readJson } from '../utilities/storage';
 import { showToast } from '../utilities/toast';
 import type { ModelsByLayerCount } from './utils';
 
@@ -169,14 +170,8 @@ function stampSync(game: string): void {
 }
 
 export function baseScores(game: string): Record<string, number> {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(baseKey(game)) || '{}');
-    return parsed && typeof parsed === 'object'
-      ? (parsed as Record<string, number>)
-      : {};
-  } catch {
-    return {};
-  }
+  const parsed = readJson<Record<string, number> | null>(baseKey(game), null);
+  return parsed && typeof parsed === 'object' ? parsed : {};
 }
 
 /**
@@ -452,12 +447,8 @@ interface Pending {
 const pairKey = (game: string, group: string): string => `${game}:${group}`;
 
 function readSubmittedSigs(game: string): string[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(submittedKey(game)) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = readJson<unknown>(submittedKey(game), null);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 function recordSubmittedSig(game: string, sig: string): void {

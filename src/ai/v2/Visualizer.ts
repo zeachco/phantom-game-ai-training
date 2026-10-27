@@ -692,7 +692,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     // the live training error on the controls; the clamped answer gap is the
     // fallback for a view drawn outside a training step
     if (errors) {
-      this.#drawErrorArcs(
+      this.#drawSweepArcs(
         ctx,
         layout.outputs,
         layout.outputY,
@@ -850,27 +850,26 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
   }
 
   /**
-   * The live training error, drawn in red around the shared outputs: one arc
-   * per control, its sweep is how far the student's applied answer is from
-   * the teacher's on the inputs being driven right now, one direction for an
-   * error above, the other for below.
+   * One red arc per node, its sweep the (clamped to [-1, 1]) value: positive
+   * above, negative below. The live training error and the clamped answer
+   * gap are both drawn this way, just outside the socket ring so the arc
+   * stays readable next to the node.
    */
-  #drawErrorArcs(
+  #drawSweepArcs(
     ctx: CanvasRenderingContext2D,
     positions: number[],
     y: number,
     radius: number,
-    errors: number[],
+    values: number[],
   ) {
-    // just outside the socket ring, so the arc is readable next to the node
     const arcRadius = Math.max(5, radius * 1.25);
     ctx.setLineDash(NO_DASH);
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = 'red';
     for (let i = 0; i < positions.length; i++) {
-      const error = errors[i] ?? 0;
-      if (!Number.isFinite(error) || Math.abs(error) < 0.01) continue;
-      const sweep = TAU * Math.max(-1, Math.min(1, error));
+      const value = values[i] ?? 0;
+      if (!Number.isFinite(value) || Math.abs(value) < 0.01) continue;
+      const sweep = TAU * Math.max(-1, Math.min(1, value));
       ctx.beginPath();
       ctx.arc(positions[i], y, arcRadius, -Math.PI / 2, -Math.PI / 2 + sweep);
       ctx.stroke();
@@ -905,8 +904,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
 
   /**
    * The gap between the two answers, drawn in red around the shared outputs:
-   * an arc whose sweep is how far the guide's answer is, one direction for a
-   * target above the current value, the other one for below.
+   * each delta is what the games apply, so the gap reads like the difference
+   * it is.
    */
   #drawOutputDeltas2(
     ctx: CanvasRenderingContext2D,
@@ -916,19 +915,9 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     outputs: number[],
     target: number[],
   ) {
-    // just outside the socket ring, so the arc is readable next to the node
-    const arcRadius = Math.max(5, radius * 1.25);
-    ctx.setLineDash(NO_DASH);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = 'red';
-    for (let i = 0; i < positions.length; i++) {
-      // what the games apply, so the gap reads like the difference it is
-      const delta = clampOutput(target[i] ?? 0) - clampOutput(outputs[i] ?? 0);
-      if (!Number.isFinite(delta) || Math.abs(delta) < 0.01) continue;
-      const sweep = TAU * Math.max(-1, Math.min(1, delta));
-      ctx.beginPath();
-      ctx.arc(positions[i], y, arcRadius, -Math.PI / 2, -Math.PI / 2 + sweep);
-      ctx.stroke();
-    }
+    const deltas = outputs.map(
+      (output, i) => clampOutput(target[i] ?? 0) - clampOutput(output ?? 0),
+    );
+    this.#drawSweepArcs(ctx, positions, y, radius, deltas);
   }
 }

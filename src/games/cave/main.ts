@@ -20,6 +20,7 @@ import type { GroupActionsOptions } from '../../utilities/groupActions';
 import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
 import {
+  bestOnSeed,
   globalRecordFromScores,
   scoreRecordForGroup,
 } from '../../utilities/scoreRecords';
@@ -630,18 +631,12 @@ export default async (state: CaveState) => {
         followed.sectionFramesRemaining,
       );
 
-      let bestScore: number | string = '—';
-      try {
-        const saved = localStorage.getItem(
-          `cave_score_${followed.brainLayers}`,
-        );
-        const history = saved ? JSON.parse(saved).history : undefined;
-        const previousBest = history?.[String(race.seed)];
-        if (typeof previousBest === 'number' && previousBest > 0)
-          bestScore = Math.round(previousBest);
-      } catch {
-        // HUD history is optional; malformed or unavailable storage is ignored.
-      }
+      // the group's live score store, so a mixed ball reads the mixed record
+      const followedGroup = race.groups.find(
+        (group) => group.key === brainKey(followed.brain, followed.brainLayers),
+      );
+      const previousBest = bestOnSeed(followedGroup?.scores ?? null, race.seed);
+      const bestScore = previousBest === null ? '—' : Math.round(previousBest);
       const mutation =
         followed.brain.mutationIndex === 0
           ? 'Original model'

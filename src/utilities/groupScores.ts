@@ -1,5 +1,6 @@
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../ai/Mixed';
 import type { NeuralNetwork } from '../ai/Network';
+import { readJson } from './storage';
 
 /**
  * The shared group-score store, parameterized by the game prefix
@@ -103,12 +104,7 @@ export function loadScores(
   group: ScoreGroup,
   seed: number,
 ): GroupScores {
-  let scores: GroupScores | null = null;
-  try {
-    scores = JSON.parse(localStorage.getItem(scoreKey(game, group)) || 'null');
-  } catch {
-    scores = null;
-  }
+  const scores = readJson<GroupScores | null>(scoreKey(game, group), null);
   if (!scores || typeof scores.total !== 'number') {
     return defaultGroupScores(seed);
   }

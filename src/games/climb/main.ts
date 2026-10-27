@@ -21,6 +21,7 @@ import {
 } from '../../utilities/dom';
 import { createSidePanel } from '../../utilities/sidePanel';
 import {
+  bestOnSeed,
   globalRecordFromScores,
   scoreRecordForGroup,
 } from '../../utilities/scoreRecords';
@@ -461,11 +462,8 @@ export default async (state: typeof defaultState) => {
   function updateBrainStats(network: NeuralNetwork, player: Player) {
     const groupKey = brainKey(network, player.brainLayers);
     const group = race.groups.find((candidate) => candidate.key === groupKey);
-    const previousBest = group?.scores.history[String(race.seed)];
-    const best =
-      typeof previousBest === 'number' && previousBest > 0
-        ? Math.round(previousBest)
-        : '—';
+    const best = bestOnSeed(group?.scores ?? null, race.seed);
+    const bestText = best === null ? '—' : String(Math.round(best));
     const mutation =
       network.mutationIndex === 0
         ? 'Original model'
@@ -474,7 +472,7 @@ export default async (state: typeof defaultState) => {
       `Net ${network.id}`,
       mutation,
       `Score ${Math.round(network.score)}`,
-      `Best ${best}`,
+      `Best ${bestText}`,
     ];
     cockpit.setStats(lines);
   }
