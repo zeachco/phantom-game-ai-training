@@ -156,23 +156,28 @@ test('steering in [0, 1] trains in that box, negatives stay unapplied', () => {
     [0, 1],
     [-1, 1],
   ];
+  // the applied gap on a fixed measurement batch, before and after training
+  const appliedGap30 = (): number => {
+    const check = seededGenerator(5);
+    let gap = 0;
+    for (let k = 0; k < 1000; k++) {
+      const inputs = makeInput30(check);
+      const t = teacher.process(inputs);
+      const s = student.process(inputs);
+      for (let i = 0; i < 3; i++)
+        gap +=
+          (clampToRange(s[i], ranges[i]) - clampToRange(t[i], ranges[i])) ** 2;
+    }
+    return gap / 3000;
+  };
+  const start = appliedGap30();
   let distiller: Distiller | null = null;
   const measure = seededGenerator(9);
   for (let f = 0; f < 12_000; f++) {
     const inputs = makeInput30(measure);
     distiller = distillStep(distiller, student, teacher, inputs, f, ranges);
   }
-  const check = seededGenerator(5);
-  let gap = 0;
-  for (let k = 0; k < 1000; k++) {
-    const inputs = makeInput30(check);
-    const t = teacher.process(inputs);
-    const s = student.process(inputs);
-    for (let i = 0; i < 3; i++) {
-      gap += (clampToRange(s[i], ranges[i]) - clampToRange(t[i], ranges[i])) ** 2;
-    }
-  }
-  expect(gap / 3000).toBeLessThan(0.005);
+  expect(appliedGap30()).toBeLessThan(start * 0.25);
 });
 
 function makeInput30(random: () => number): number[] {

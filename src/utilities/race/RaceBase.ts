@@ -160,11 +160,14 @@ export abstract class RaceBase<
     );
     if (!group || (target !== null && value === target)) return false;
     group.trainFrom = target;
-    if (target !== null) group.distillRun = true;
+    // the flag mirrors the selection: freeing the group back to its own
+    // line ends the run immediately, not at the next run boundary
+    group.distillRun = target !== null;
     if (persist) saveTrainFrom(this.profile.game, value, target);
-    // a training run needs exactly one student, so restart the group with a
-    // single fresh one instead of leaving its whole swarm on the teacher
-    if (target !== null) this.#restartAsStudent(group);
+    // a training run needs exactly one student, so the run restarts the group
+    // with a single fresh one; freeing it restarts with the full swarm, since
+    // the spawn slots follow the distill flag
+    this.#restartAsStudent(group);
     return true;
   }
 
