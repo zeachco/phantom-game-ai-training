@@ -26,6 +26,7 @@ import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
 import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
+import { brainKey } from '../../utilities/groupScores';
 import { bestSavedModelScore } from '../../utilities/scoreRecords';
 import {
   loadTrainFroms,
@@ -649,9 +650,7 @@ export default async (state: typeof defaultState) => {
     const running = new Set<string>();
     for (const car of state.cars) {
       if (car.damaged) continue;
-      running.add(
-        car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers),
-      );
+      running.add(brainKey(car.brain, car.brainLayers));
     }
     panel.setRunning(running, state.living > 0);
   }

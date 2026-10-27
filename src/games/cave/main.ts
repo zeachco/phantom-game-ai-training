@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MixedNetwork } from '../../ai/Mixed';
+import { brainKey } from '../../utilities/groupScores';
 import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
@@ -436,9 +437,7 @@ export default async (state: CaveState) => {
     const running = new Set<string>();
     for (const ball of state.balls) {
       if (ball.damaged || !ball.useAI) continue;
-      running.add(
-        ball.brain instanceof MixedNetwork ? 'mixed' : String(ball.brainLayers),
-      );
+      running.add(brainKey(ball.brain, ball.brainLayers));
     }
     panel.setRunning(running, state.living > 0);
   }

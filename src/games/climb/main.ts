@@ -1,4 +1,5 @@
 import { MixedNetwork } from '../../ai/Mixed';
+import { brainKey } from '../../utilities/groupScores';
 import type { NeuralNetwork } from '../../ai/Network';
 import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { fileUtilities } from '../../ai/utils';
@@ -458,8 +459,7 @@ export default async (state: typeof defaultState) => {
   /** Rebuild the inline stats block of the followed brain; the DOM is only
    *  touched when the rendered text changes, so a steady frame is cheap. */
   function updateBrainStats(network: NeuralNetwork, player: Player) {
-    const groupKey =
-      network instanceof MixedNetwork ? 'mixed' : String(player.brainLayers);
+    const groupKey = brainKey(network, player.brainLayers);
     const group = race.groups.find((candidate) => candidate.key === groupKey);
     const previousBest = group?.scores.history[String(race.seed)];
     const best =
@@ -484,9 +484,7 @@ export default async (state: typeof defaultState) => {
     const running = new Set<string>();
     for (const p of state.players) {
       if (p.damaged || !p.useAI) continue;
-      running.add(
-        p.brain instanceof MixedNetwork ? 'mixed' : String(p.brainLayers),
-      );
+      running.add(brainKey(p.brain, p.brainLayers));
     }
     panel.setRunning(running, state.living > 0);
   }

@@ -2,7 +2,7 @@ import type { Scene } from 'three';
 import { MixedNetwork } from '../../../ai/Mixed';
 import { type fileUtilities, PLAYER_COLOR } from '../../../ai/utils';
 import { gameNow } from '../../../utilities/gameClock';
-import type { GroupBase } from '../../../utilities/groupScores';
+import { brainKey, type GroupBase } from '../../../utilities/groupScores';
 import { lerp } from '../../../utilities/math';
 import { RaceBase, type RaceProfile } from '../../../utilities/race/RaceBase';
 import {
@@ -412,8 +412,7 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
     // first finish when no AI had already finished.
     for (const ball of this.state.balls) {
       if (!ball.finished || !ball.useAI) continue;
-      const key =
-        ball.brain instanceof MixedNetwork ? 'mixed' : String(ball.brainLayers);
+      const key = brainKey(ball.brain, ball.brainLayers);
       this.#completedBrainIndices.add(key);
       const previous = this.#completedFinishes.get(key);
       if (!previous || ball.lastFinishFrames < previous.totalFrames)

@@ -1,4 +1,4 @@
-import { MIXED_KIND, MIXED_LEVELS } from '../ai/Mixed';
+import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../ai/Mixed';
 import type { NeuralNetwork } from '../ai/Network';
 
 /**
@@ -67,6 +67,17 @@ export interface ScoreGroup {
 export function brainId(layer: number, mutationIndex?: number): string {
   const id = String(layer);
   return typeof mutationIndex !== 'number' ? id : `${id}:${mutationIndex}`;
+}
+
+/** the group key a brain belongs to: 'mixed' for the selector brain, the
+ *  group's layer count otherwise — the one identity the score store, the
+ *  boards and the follow buttons all key on. The human's brainless score
+ *  holder simply falls into its own layer bucket. */
+export function brainKey(
+  brain: NeuralNetwork | { score: number } | null | undefined,
+  layers: number,
+): string {
+  return brain instanceof MixedNetwork ? 'mixed' : String(layers);
 }
 
 /** scores live under their own key per group, still inside the game prefix */

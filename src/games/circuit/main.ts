@@ -1,4 +1,5 @@
 import { MixedNetwork } from '../../ai/Mixed';
+import { brainKey } from '../../utilities/groupScores';
 import type { NeuralNetwork } from '../../ai/Network';
 import {
   loadBaseModels,
@@ -671,9 +672,7 @@ export default async (state: typeof defaultState) => {
     runningCategories.clear();
     for (const car of state.cars) {
       if (car.damaged) continue;
-      runningCategories.add(
-        car.brain instanceof MixedNetwork ? 'mixed' : String(car.brainLayers),
-      );
+      runningCategories.add(brainKey(car.brain, car.brainLayers));
     }
     panel.setRunning(runningCategories, state.living > 0);
   }

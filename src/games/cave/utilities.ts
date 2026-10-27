@@ -1,8 +1,8 @@
-import { MixedNetwork } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   brainId,
+  brainKey,
   type GroupBase,
   type GroupScores,
 } from '../../utilities/groupScores';
@@ -54,8 +54,7 @@ export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
       group.distillRun ? group.pool.slice(0, 1) : [],
     ),
     human: state.human,
-    brainKeyOf: (ball) =>
-      ball.brain instanceof MixedNetwork ? 'mixed' : String(ball.brainLayers),
+    brainKeyOf: (ball) => brainKey(ball.brain, ball.brainLayers),
     maxLayers: config.MAX_NETWORK_LAYERS,
     mixedColor: config.MIXED_COLOR,
   });

@@ -7,6 +7,7 @@ import {
   networkLevelSizes,
 } from '../../ai/utils';
 import {
+  brainKey,
   defaultGroupScores,
   type GroupBase,
   loadScores as loadScoresForGame,
@@ -137,11 +138,9 @@ export abstract class RaceBase<
     // The human has a NeuralNetwork-shaped score holder for shared physics,
     // but must never be mistaken for the layer-1 AI group.
     if (!entity.useAI) return undefined;
-    const key =
-      entity.brain instanceof MixedNetwork
-        ? 'mixed'
-        : String(entity.brainLayers);
-    return this.groups.find((group) => group.key === key);
+    return this.groups.find(
+      (group) => group.key === brainKey(entity.brain, entity.brainLayers),
+    );
   }
 
   /**
