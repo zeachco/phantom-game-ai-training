@@ -121,7 +121,7 @@ function makeTeacher(race: CircuitRace) {
   return teacher;
 }
 
-test('the circuit guide hands control back after a lap and a half', () => {
+test('the circuit guide kills the student after a lap and a half', () => {
   const store = new Map<string, string>();
   const env = stubCircuitEnv(store);
   try {
@@ -143,12 +143,14 @@ test('the circuit guide hands control back after a lap and a half', () => {
     expect(group2.distillRun).toBe(true);
     expect(group2.trainFrom).toBe(1);
 
-    // the halfway gate of the second lap hands control back to the student
+    // the halfway gate of the second lap ends the run: the student dies on
+    // the spot, its position and timing having been shaped by the teacher
     student.nextCheckpoint = config.CHECKPOINTS / 2;
     race.update(3000);
     expect(group2.distillRun).toBe(false);
     expect(group2.trainFrom).toBeNull();
     expect(loadTrainFrom('circuit', 2)).toBeNull();
+    expect(student.damaged).toBe(true);
     // the run is kept: the trained student becomes the group champion
     expect(group2.best).not.toBeNull();
     expect(group2.best?.brain).not.toBe(teacher);
@@ -161,7 +163,7 @@ test('the circuit guide hands control back after a lap and a half', () => {
   }
 });
 
-test('a lap-three finish by a guide-driven car is not banked', () => {
+test('a guide-driven student dies at the halfway point of the second lap', () => {
   const store = new Map<string, string>();
   const env = stubCircuitEnv(store);
   try {
@@ -174,36 +176,37 @@ test('a lap-three finish by a guide-driven car is not banked', () => {
     race.update(1000); // the guide drives, tainting this car's completion
     expect(student.guideDriven).toBe(true);
 
-    // hand control back at the halfway point of the second lap
+    // at the halfway point of the second lap the student dies on the spot:
+    // the teacher shaped its position and timing, so the run ends there
     student.laps = 1;
     student.nextCheckpoint = config.CHECKPOINTS / 2;
     race.update(2000);
+    expect(student.damaged).toBe(true);
+    expect(student.finished).toBe(false);
     expect(group2.distillRun).toBe(false);
+    expect(group2.trainFrom).toBeNull();
+    // the tainted run never banks a finish
+    expect(race.completedFinishes.has('2')).toBe(false);
+    expect(group2.scores.finished[String(race.seed)]).toBeUndefined();
 
-    // the student crosses the finish line on its third lap
+    // after the corpse fades the group respawns as a full normal pool
+    student.deathTime = 0;
+    race.update(config.DEAD_LIFETIME + 1);
+    expect(group2.pool).not.toContain(student);
+    expect(group2.pool.length).toBe(config.CARS_PER_GROUP);
+    const free = group2.pool[0];
+    expect(free.guideDriven).toBe(false);
+
+    // a finish by a car no guide ever piloted is a real finish
     const circuit = state.circuit;
     if (!circuit) throw new Error('missing circuit');
     const lapGate = circuit.checkpoints[config.CHECKPOINTS - 1];
-    student.laps = 2;
-    student.nextCheckpoint = config.CHECKPOINTS - 1;
-    student.x = lapGate.x;
-    student.y = lapGate.y;
-    race.update(3000); // sitting on the lap gate: lap three is claimed
-    expect(student.laps).toBe(config.LAPS_PER_SEED);
-    // guide control invalidated the track completion: no finish
-    expect(student.finished).toBe(false);
-    expect(race.completedFinishes.has('2')).toBe(false);
-    expect(group2.scores.finished[String(race.seed)]).toBeUndefined();
-    expect(group2.mutationOnly).toBe(false);
-
-    // the same crossing, by a car no guide ever piloted, is a real finish
-    student.guideDriven = false;
-    student.laps = 2;
-    student.nextCheckpoint = config.CHECKPOINTS - 1;
-    student.x = lapGate.x;
-    student.y = lapGate.y;
-    race.update(4000);
-    expect(student.finished).toBe(true);
+    free.laps = 2;
+    free.nextCheckpoint = config.CHECKPOINTS - 1;
+    free.x = lapGate.x;
+    free.y = lapGate.y;
+    race.update(2 * config.DEAD_LIFETIME); // sitting on the lap gate: lap three
+    expect(free.finished).toBe(true);
     expect(race.completedFinishes.has('2')).toBe(true);
     expect(group2.scores.finished[String(race.seed)]).toBe(true);
     expect(group2.mutationOnly).toBe(true);

@@ -358,19 +358,18 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
       // tainted: another model drove it, so LAPS_PER_SEED is not its finish
       if (car.distillRun && car.teacher) car.guideDriven = true;
       car.update(this.state.obstacles, this.circuit);
-      // Let the guide drive a lap and a half, then switch this same car to
-      // its own brain on the next frame. Half a lap is half the gates, all
-      // claimed in order. Keeping the pool intact preserves the car's exact
-      // position, velocity, checkpoint progress, and lap timing.
+      // Let the guide drive a lap and a half, then kill the student: its
+      // position, velocity, and lap timing were all shaped by the teacher,
+      // so the car dies on the spot and the group respawns as a full normal
+      // pool on the trained brain. Half a lap is half the gates, all claimed
+      // in order. The death below ends the run like a crash: keep the
+      // trained brain, drop the disqualification.
       if (
         car.laps >= 1 &&
         car.nextCheckpoint >= config.CHECKPOINTS / 2 &&
         group?.distillRun
       ) {
-        this.keepTrainedBrain(group);
-        group.trainFrom = null;
-        group.distillRun = false;
-        saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
+        car.damaged = true;
       }
       this.#recordCheckpointTiming(car);
       if (car.completedLap) this.#recordLapTiming(car);
