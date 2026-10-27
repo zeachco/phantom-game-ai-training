@@ -2,6 +2,7 @@ import { MixedNetwork } from '../../ai/Mixed';
 import { brainKey } from '../../utilities/groupScores';
 import type { NeuralNetwork } from '../../ai/Network';
 import {
+  beginUnload,
   loadBaseModels,
   loadBaseModelsThen,
   makeSubmitChecker,
@@ -181,7 +182,7 @@ export default async (state: typeof defaultState) => {
 
   const about = document.createElement('div');
   about.className = 'side-panel-about';
-  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; each seed keeps its former score as a HUD reference, but every generated track starts a fresh record so mutated brains have a reachable goal, and groups that already finished it continue with mutation runs only. Finishing a track pays a large one-time bonus, so brains are selected for completing the map, not for being fast on one known track; the last car of a pool is a fresh random explorer while the group is still finding its feet (under 2 laps on the map) and a regular mutation car once it is proven, and a scout re-runs the group's oldest saved line, so the population can never fully converge on one overfit brain.`;
+  about.textContent = `It's a competition between ${config.MAX_NETWORK_LAYERS} different brain designs, plus a brain trained to hot-swap the proper one given the road situation of each frame (the mixed brain). They can all be visualized, and you can play against them to compete, or follow / tweak a specific architecture. Each time an instance of a neural network completes ${config.LAPS_PER_SEED} laps, the map is regenerated to a random configuration; each seed keeps its former score as a HUD reference, but every generated track starts a fresh record so mutated brains have a reachable goal, and groups that have finished a track are never retrained on it. Finishing a track pays a large one-time bonus, so brains are selected for completing the map, not for being fast on one known track; the last car of a pool is a fresh random explorer while the group is still finding its feet (under 2 laps on the map) and a regular mutation car once it is proven, and a scout re-runs the group's oldest saved line, so the population can never fully converge on one overfit brain.`;
 
   const frameMeter = createFrameMeter();
   const drawBudget = createAdaptiveDrawBudget(5);
@@ -788,6 +789,11 @@ export default async (state: typeof defaultState) => {
     cockpit.setStats(lines);
   }
 
-  // A reload never loses more than the most recent promotions.
-  window.addEventListener('beforeunload', () => race.saveAll());
+  // A reload never loses more than the most recent promotions, and the
+  // models those last saves promote go straight to the server on a
+  // sendBeacon instead of dying in the in-flight fetch chain.
+  window.addEventListener('beforeunload', () => {
+    beginUnload();
+    race.saveAll();
+  });
 };

@@ -47,6 +47,7 @@ export function resetSubmitStateForTests(): void {
   latestPending.clear();
   for (const t of retryTimers.values()) clearTimeout(t);
   retryTimers.clear();
+  unloading = false;
 }
 
 /** Stable browser identity for this visitor, per the server's client protocol. */
@@ -57,6 +58,20 @@ export function clientId(): string {
     localStorage.setItem(CLIENT_ID_KEY, id);
   }
   return id;
+}
+
+/** the page is going away: qualifying submits go out on sendBeacon, because
+ *  a fetch queued on the submit chain would be aborted by the unload */
+let unloading = false;
+
+/**
+ * Called by the entry point at page unload, right before its final save
+ * pass, so the models those saves produce go straight to the server on a
+ * sendBeacon — the only request kind the browser guarantees before the page
+ * dies.
+ */
+export function beginUnload(): void {
+  unloading = true;
 }
 
 function timedFetch(
@@ -578,6 +593,33 @@ function consider(game: string, group: string, item: Pending): void {
   // serverBest === undefined here means either "never queried" or "queried
   // and the server has nothing for this group yet": both are legitimate
   // first-submit states, so the model goes up.
+  // The page is unloading: the fetch chain dies with it, so the model goes
+  // out on a sendBeacon — the only request the browser guarantees before the
+  // unload completes. A queued beacon is recorded up front (it is guaranteed
+  // to arrive); a refused one stays unrecorded so the next visit re-sends
+  // the model.
+  if (unloading && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    const payload: Record<string, unknown> = {
+      game: item.game,
+      group: item.group,
+      model: item.model,
+      score: item.score,
+    };
+    if (item.globalScore !== undefined) payload.globalScore = item.globalScore;
+    if (item.trackCount !== undefined) payload.trackCount = item.trackCount;
+    // a beacon cannot set headers, so the client id rides in the body
+    payload.clientId = clientId();
+    const sent = navigator.sendBeacon(
+      `${SERVER_URL}/api/models`,
+      new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+    );
+    if (sent) {
+      recordSubmittedSig(item.game, item.sig);
+    } else {
+      console.warn(`⚠️ unload beacon for ${item.group} was not queued`);
+    }
+    return;
+  }
   if (inFlightSigs.has(item.sig)) return;
   const k = pairKey(game, group);
   latestPending.set(k, item);
