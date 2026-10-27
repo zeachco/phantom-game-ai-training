@@ -344,7 +344,9 @@ export abstract class RaceBase<
    *  lower tier (bottom half) of both rankings: its live score on the
    *  current track and its global dashboard total, so a group that is
    *  strong on this track is never retrained just because its all-time
-   *  total lags. The strongest other group supplies the guide. */
+   *  total lags. The strongest other group supplies the guide; the mixed
+   *  group never pilots one of these auto-trained runs, so the best regular
+   *  group takes the slot instead. */
   protected autoTrainAfterGroupDeath(student: TGroup): void {
     const globalScore = (group: TGroup) =>
       globalRecordFromScores(group.scores).globalScore;
@@ -354,6 +356,7 @@ export abstract class RaceBase<
       .filter(
         (group) =>
           group !== student &&
+          !group.isMixed &&
           this.teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
       )
       .sort((a, b) => globalScore(b) - globalScore(a))[0];

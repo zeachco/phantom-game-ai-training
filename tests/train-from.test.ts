@@ -9,7 +9,7 @@ import {
 } from '../src/ai/Network';
 import type { ModelsByLayerCount } from '../src/ai/utils';
 import { ClimbRace } from '../src/games/climb/classes/ClimbRace';
-import type { defaultState } from '../src/games/climb/utilities';
+import type { defaultState, Group } from '../src/games/climb/utilities';
 import {
   loadTrainFrom,
   loadTrainFroms,
@@ -698,6 +698,86 @@ test('a group in the lower tier of both rankings restarts as a student', () => {
 
     // last on the track and on the dashboard: a single student restarts,
     // driven by the strongest group
+    expect(student.trainFrom).toBe(2);
+    expect(student.distillRun).toBe(true);
+    expect(student.pool).toHaveLength(1);
+  } finally {
+    env.restore();
+  }
+});
+
+test('auto-training never picks the mixed group as the guide', () => {
+  const store = new Map<string, string>();
+  const env = stubRaceEnv(store);
+  try {
+    const state = {} as typeof defaultState;
+    const race = new ClimbRace(state, stubIo(), 0);
+    race.initialize();
+    for (const player of state.players)
+      if (player.useAI) player.brain!.process = () => [0, 0, 0];
+
+    const student = race.groups.find((g) => g.layer === 1)!;
+    const guide = race.groups.find((g) => g.layer === 2)!;
+    const probe = guide.pool[0].brain!;
+
+    // a mixed champion that tops the global dashboard, with a live teacher
+    const mixedTeacher = new NeuralNetwork(
+      probe.inputCount,
+      probe.outputCount,
+      1,
+    );
+    mixedTeacher.process = () => [0.9, 0.1, 0];
+    mixedTeacher.score = 90000;
+    const mixed: Group = {
+      key: 'mixed',
+      layer: 0,
+      isMixed: true,
+      pool: [],
+      mutationOnly: false,
+      best: { brain: mixedTeacher, score: 90000 },
+      ghostScore: 0,
+      trainFrom: null,
+      distillRun: false,
+      teacher: null,
+      hydratedTeacher: null,
+      scores: { current: 0, total: 0, seed: 1000, phantom: 0, history: {}, finished: {} },
+      seedBest: null,
+    };
+    race.groups.push(mixed);
+
+    // layer 2 trails the mixed group but is the strongest regular group with
+    // a champion to hand over; every other regular group lags behind
+    const teacher = new NeuralNetwork(
+      probe.inputCount,
+      probe.outputCount,
+      1,
+    );
+    teacher.process = () => [0.9, 0.1, 0];
+    teacher.score = 80000;
+    guide.best = { brain: teacher, score: 80000 };
+    for (const group of race.groups)
+      if (group !== student && !group.isMixed) {
+        group.scores.seed = 1000;
+        group.scores.history = { '999': 80000 };
+      }
+    // the mixed champion sits above every regular group on the dashboard
+    mixed.scores.history = { '999': 90000 };
+
+    const last = student.pool[student.pool.length - 1];
+    for (const player of student.pool)
+      if (player !== last) {
+        player.damaged = true;
+        player.deathTime = 0;
+      }
+    const now = 10000;
+    last.update = () => {
+      last.damaged = true;
+      last.deathTime = now;
+    };
+    race.update(now);
+
+    // the mixed group tops the dashboard but never pilots an auto-trained
+    // run: the strongest regular group takes the guide slot instead
     expect(student.trainFrom).toBe(2);
     expect(student.distillRun).toBe(true);
     expect(student.pool).toHaveLength(1);
