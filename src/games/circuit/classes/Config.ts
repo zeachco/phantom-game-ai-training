@@ -11,14 +11,6 @@ class Config {
   public MIN_MUTATION_LVL = 0.1;
   /** every brain category runs a pool of exactly thist and push many cars, slots 0..9 */
   public CARS_PER_GROUP = likelyLagsOnHeavyJs() ? 25 : 50;
-  /** a group that has seen one of its cars cross the finish line respawns as a
-   *  mutation-only swarm of this many cars, on slots 1..FINISHED_CARS_PER_GROUP,
-   *  so the untouched champion never re-enters that pool */
-  public FINISHED_CARS_PER_GROUP = 10;
-  /** a finished group's cars mutate at max / this divisor: the brain already
-   *  won this track, but the swarm keeps hunting genuinely different lines
-   *  for the next one instead of freezing the champion */
-  public FINISHED_SWARM_DIVISOR = 5;
   /** laps over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** the slot ladder divides the max mutation by the slot number, capped here:

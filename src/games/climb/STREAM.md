@@ -45,11 +45,8 @@ highest living player, so the whole screen is the race to the top.
   second-to-last slot is a scout: it re-explores the oldest line of the
   group's hall of fame — the last three champion lines are kept per
   category, not just one. Once a group's players have reached the seed
-  target (50 floors), that group is demoted: it respawns 5 players on
-  slots 1..5, every one of them a mutation, and the untouched original is
-  out of the pool for good. Returning to a previously completed seed
-  restores that group's mutation-only pool; a new seed starts its own
-  ladder.
+  target (50 floors), that group keeps its full pool; a new seed starts its
+  own ladder.
 - The moment a player sets a new high on the current tower, its brain is
   saved at the front of the group's hall of fame, the new best (live, not
   at death). The seed advances when three groups hold the 50-floor target:
@@ -57,7 +54,7 @@ highest living player, so the whole screen is the race to the top.
   harder. Each finished seed's high is recorded separately for HUD
   reference, but every generated seed starts with a fresh comparison bar,
   including when a seed is revisited, so mutated brains have a reachable
-  goal. Groups that finished that seed return with mutation runs only. The
+  goal. Groups that finished that seed are never retrained on it. The
   scoreboard and promotion never compare against a blended cross-seed
   total, and training history lives in the weights the pools respawn from.
 

@@ -23,7 +23,7 @@ export interface GroupScores {
   phantom: number;
   /** one frozen high score per finished seed, keyed by the seed number */
   history: Record<string, number>;
-  /** groups that have completed this seed use mutations when they return */
+  /** the seeds the group has fully completed, keyed by the seed number */
   finished: Record<string, boolean>;
 }
 
@@ -34,9 +34,6 @@ export interface GroupBase<TEntity> {
   layer: number;
   isMixed: boolean;
   pool: TEntity[];
-  /** a finisher demotes the group to a small mutation-only swarm on slots 1..N;
-   *  the state is remembered per seed so returning to that track stays reduced */
-  mutationOnly: boolean;
   /** snapshot of the champion brain + the score that promoted it */
   best: { brain: NeuralNetwork; score: number } | null;
   /** score frozen when the record holder died, shown for this group's ghost */

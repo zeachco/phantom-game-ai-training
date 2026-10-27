@@ -31,14 +31,6 @@ class Config {
   public MIN_MUTATION_LVL = 0.1;
   /** seeds over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_SEED_DECAY = 50;
-  /** a group that has seen one of its players reach the seed height target
-   *  respawns as a mutation-only swarm of this many players, on slots 1..N,
-   *  so the untouched champion never re-enters that pool */
-  public FINISHED_CARS_PER_GROUP = 5;
-  /** a finished group's players mutate at max / this divisor: the brain
-   *  already won this seed, but the swarm keeps hunting genuinely different
-   *  lines for the next one instead of freezing the champion */
-  public FINISHED_SWARM_DIVISOR = 5;
   /** the slot ladder divides the max mutation by the slot number, capped here:
    *  without the cap the late slots mutate by ~0 and most of the pool becomes
    *  a clone of the champion */

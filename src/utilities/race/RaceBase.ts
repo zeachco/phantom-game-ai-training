@@ -54,7 +54,6 @@ export interface RaceProfile {
   /** the localStorage/train-from prefix: 'circuit' | 'climb' | 'cave' */
   game: string;
   carsPerGroup: number;
-  finishedCarsPerGroup: number;
   hallOfFameSize: number;
   deadLifetime: number;
   maxNetworkLayers: number;
@@ -279,7 +278,6 @@ export abstract class RaceBase<
 
   protected markFinished(group: TGroup): void {
     if (group.distillRun) return;
-    group.mutationOnly = true;
     group.scores.finished[String(this.seed)] = true;
     this.pendingSaves.add(group);
   }
@@ -287,11 +285,6 @@ export abstract class RaceBase<
   #spawnSlots(group: TGroup): number[] {
     // a teacher-driven run needs a single student, nothing more
     if (group.distillRun) return [0];
-    if (group.mutationOnly)
-      return Array.from(
-        { length: this.profile.finishedCarsPerGroup },
-        (_value, slot) => slot + 1,
-      );
     return Array.from(
       { length: this.profile.carsPerGroup },
       (_value, slot) => slot,
@@ -331,8 +324,6 @@ export abstract class RaceBase<
     )
       return;
 
-    if (!group.distillRun && this.poolFinished(group))
-      group.mutationOnly = true;
     const corpses = new Set(group.pool);
     this.entities = this.entities.filter((entity) => !corpses.has(entity));
     group.pool = this.#spawnSlots(group).map((slot) =>
@@ -497,7 +488,6 @@ export abstract class RaceBase<
           layer: 0,
           isMixed: true,
           pool: [],
-          mutationOnly: false,
           trainFrom: trainFroms.get('mixed') ?? null,
           distillRun: false,
           teacher: null,
@@ -521,7 +511,6 @@ export abstract class RaceBase<
           layer,
           isMixed: false,
           pool: [],
-          mutationOnly: false,
           trainFrom: trainFroms.get(String(layer)) ?? null,
           distillRun: false,
           teacher: null,
@@ -546,7 +535,6 @@ export abstract class RaceBase<
       // Every generated world starts with a fresh active comparison. Earlier
       // records remain in history for the HUD, not as a ghost or race goal.
       group.ghostScore = group.scores.seed;
-      group.mutationOnly = group.scores.finished[String(this.seed)] === true;
       group.pool = this.#spawnSlots(group).map((slot) =>
         this.spawnEntity(group, slot),
       );
@@ -568,7 +556,6 @@ export abstract class RaceBase<
     const group = this.createGroup({
       ...oldGroup,
       pool: [],
-      mutationOnly: false,
       best: null,
     });
     this.groups[groupIndex] = group;

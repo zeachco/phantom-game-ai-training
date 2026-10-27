@@ -30,11 +30,9 @@ export type ClimbModelIo = ReturnType<typeof fileUtilities>;
  *  floors a group has banked on the current seed */
 const slotPolicy: SlotPolicy<Group> = {
   poolSize: config.CARS_PER_GROUP,
-  finishedPoolSize: config.FINISHED_CARS_PER_GROUP,
   explorerSlots: config.EXPLORER_CARS,
   explorerLimit: config.EXPLORER_FLOOR_LIMIT,
   mutationLadderCap: config.MUTATION_LADDER_CAP,
-  finishedSwarmDivisor: config.FINISHED_SWARM_DIVISOR,
   progress: (group) => group.scores.seed,
 };
 
@@ -42,7 +40,6 @@ const slotPolicy: SlotPolicy<Group> = {
 const raceProfile: RaceProfile = {
   game: 'climb',
   carsPerGroup: config.CARS_PER_GROUP,
-  finishedCarsPerGroup: config.FINISHED_CARS_PER_GROUP,
   hallOfFameSize: config.HALL_OF_FAME_SIZE,
   deadLifetime: config.DEAD_LIFETIME,
   maxNetworkLayers: config.MAX_NETWORK_LAYERS,

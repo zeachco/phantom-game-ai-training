@@ -40,9 +40,9 @@ its brain.
   cost a point and shave the section gauge.
 - Gates are rings across the tube, claimed in order along the tunnel. The
   cave is infinite: every time a brain completes the last gate the seed
-  advances to a fresh random cave, and groups that already finished a cave
-  return as a mutation-only swarm of their champion, so brains are selected
-  for completing unknown caves, not for shaving frames off one known cave.
+  advances to a fresh random cave, and every new cave starts a fresh record,
+  so brains are selected for completing unknown caves, not for shaving
+  frames off one known cave.
   A random explorer and a scout that re-runs the group's oldest saved line
   keep the population from converging on a single overfit brain.
 - A section gauge kills any ball that stops making forward progress: it

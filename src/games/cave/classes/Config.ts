@@ -19,14 +19,6 @@ class Config {
    *  0..N-1. Much smaller than the car game: the cave sphere physics and the
    *  ray sensors cost far more per ball, so the 3D training pool stays small */
   public CARS_PER_GROUP = isDemo ? 3 : likelyLagsOnHeavyJs() ? 4 : 6;
-  /** a group that has seen one of its cars finish respawns as a
-   *  mutation-only swarm of this many cars, on slots 1..N, so the untouched
-   *  champion never re-enters that pool */
-  public FINISHED_CARS_PER_GROUP = isDemo ? 3 : 5;
-  /** a finished group's cars mutate at max / this divisor: the brain already
-   *  won this cave, but the swarm keeps hunting genuinely different lines
-   *  for the next one instead of freezing the champion */
-  public FINISHED_SWARM_DIVISOR = 5;
   /** gates over which the max mutation shrinks from MAX down to MIN */
   public MUTATION_LAP_DECAY = 50;
   /** the slot ladder divides the max mutation by the slot number, capped here:

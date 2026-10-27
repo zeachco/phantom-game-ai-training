@@ -13,16 +13,12 @@ export interface SlotPolicy<
 > {
   /** slots in a full pool */
   poolSize: number;
-  /** slots in a finished (mutation-only) swarm */
-  finishedPoolSize: number;
   /** the last slots of a struggling pool are explorers */
   explorerSlots: number;
   /** stop exploring once the group banks this much seed progress */
   explorerLimit: number;
   /** the ladder of mutation factors, slot 1 is the strongest rung */
   mutationLadderCap: number;
-  /** the flat divisor a finished swarm mutates with */
-  finishedSwarmDivisor: number;
   /** the progress the group has banked on the current seed */
   progress: (group: TGroup) => number;
   /** a demo profile is mutations only: no random explorer and no scout
@@ -50,8 +46,7 @@ export function isExplorerSlot<TGroup extends GroupBase<unknown>>(
   if (policy.demo) return false;
   if (slot === 0) return false;
   if (policy.progress(group) >= policy.explorerLimit) return false;
-  const size = group.mutationOnly ? policy.finishedPoolSize : policy.poolSize;
-  return slot >= size - policy.explorerSlots;
+  return slot >= policy.poolSize - policy.explorerSlots;
 }
 
 /** the second-to-last slot of a full pool re-explores the oldest kept
@@ -63,7 +58,7 @@ export function isScoutSlot<TGroup extends GroupBase<unknown>>(
   policy: SlotPolicy<TGroup>,
 ): boolean {
   if (policy.demo) return false;
-  if (group.mutationOnly || group.isMixed) return false;
+  if (group.isMixed) return false;
   return slot === policy.poolSize - 1 - policy.explorerSlots;
 }
 
@@ -105,8 +100,6 @@ export function slotMutation<TGroup extends GroupBase<unknown>>(
   if (isScoutSlot(group, slot, policy))
     // scouts stay close to the old line they re-explore: bottom rung
     return Math.max(Number.MIN_VALUE, maxMutation / policy.mutationLadderCap);
-  const divisor = group.mutationOnly
-    ? policy.finishedSwarmDivisor
-    : Math.min(slot, policy.mutationLadderCap);
+  const divisor = Math.min(slot, policy.mutationLadderCap);
   return Math.max(Number.MIN_VALUE, maxMutation / divisor);
 }
