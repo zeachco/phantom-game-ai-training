@@ -47,7 +47,6 @@ interface LevelLayout {
 }
 
 const controls = new Map();
-controls.set('KeyL', 'ToggleLines');
 controls.set('KeyS', 'ToggleStats');
 
 const pad = new GamePad(controls);
@@ -250,7 +249,6 @@ class LinkLayer {
 }
 
 export class Visualizer<T extends BaseConfig = BaseConfig> {
-  public renderLines = true;
   public renderStats = true;
 
   /** the selector half and the expert half go stale on their own */
@@ -275,7 +273,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     guide: NeuralNetwork | null = null,
     errors: number[] | null = null,
   ) {
-    if (pad.once('ToggleLines')) this.renderLines = !this.renderLines;
     if (pad.once('ToggleStats')) this.renderStats = !this.renderStats;
 
     // experts are shared between the mixed cars, replaying the last pass
@@ -374,27 +371,25 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
         input.bottom = ctx.canvas.height - MARGIN;
       }
     }
-    if (this.renderLines) {
-      // both brains share the full-width sensor row, so their links must be
-      // rasterized across the whole canvas: a half-width strip clips every
-      // link leaving that half toward a sensor on the other side
-      this.#mainLinks.draw(
-        ctx,
-        selector,
-        selectorLayouts,
-        0,
-        ctx.canvas.width,
-        'mixed-selector',
-      );
-      this.#expertLinks.draw(
-        ctx,
-        expert,
-        expertLayouts,
-        0,
-        ctx.canvas.width,
-        'mixed-expert',
-      );
-    }
+    // both brains share the full-width sensor row, so their links must be
+    // rasterized across the whole canvas: a half-width strip clips every
+    // link leaving that half toward a sensor on the other side
+    this.#mainLinks.draw(
+      ctx,
+      selector,
+      selectorLayouts,
+      0,
+      ctx.canvas.width,
+      'mixed-selector',
+    );
+    this.#expertLinks.draw(
+      ctx,
+      expert,
+      expertLayouts,
+      0,
+      ctx.canvas.width,
+      'mixed-expert',
+    );
     this.#drawNodes(ctx, selectorLayouts, true);
     this.#drawNodes(ctx, expertLayouts, true);
     const first = selectorLayouts[selectorLayouts.length - 1];
@@ -421,8 +416,7 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     variant = '',
   ) {
     const layouts = this.#layout(ctx, network, left, width, outputLabels);
-    if (this.renderLines)
-      links.draw(ctx, network, layouts, left, width, variant);
+    links.draw(ctx, network, layouts, left, width, variant);
     this.#drawNodes(ctx, layouts);
     return layouts;
   }
@@ -598,24 +592,22 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    if (this.renderLines) {
-      this.#mainLinks.draw(
-        ctx,
-        trainee,
-        layout.traineeLevels,
-        MARGIN,
-        ctx.canvas.width - MARGIN * 2,
-        'split',
-      );
-      this.#guideLinks.draw(
-        ctx,
-        guide,
-        layout.guideLevels,
-        MARGIN,
-        ctx.canvas.width - MARGIN * 2,
-        'split',
-      );
-    }
+    this.#mainLinks.draw(
+      ctx,
+      trainee,
+      layout.traineeLevels,
+      MARGIN,
+      ctx.canvas.width - MARGIN * 2,
+      'split',
+    );
+    this.#guideLinks.draw(
+      ctx,
+      guide,
+      layout.guideLevels,
+      MARGIN,
+      ctx.canvas.width - MARGIN * 2,
+      'split',
+    );
 
     // the shared sensor row, read by both brains
     this.#drawRow(

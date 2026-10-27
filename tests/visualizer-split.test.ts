@@ -87,7 +87,6 @@ function stubDom() {
 async function visualizer() {
   const { Visualizer } = await import('../src/ai/v2/Visualizer');
   const instance = new Visualizer({ MAX_NETWORK_LAYERS: 9 });
-  instance.renderLines = false;
   return instance;
 }
 
@@ -261,7 +260,6 @@ test('mixed links cover the whole canvas so shared sensors are not clipped', asy
   try {
     const { MixedNetwork } = await import('../src/ai/Mixed');
     const viz = await visualizer();
-    viz.renderLines = true;
     const experts = [1, 2, 3].map(() => new NeuralNetwork(4, 2, 2));
     const mixed = new MixedNetwork(4, 2, experts, { hiddenNodes: 3 });
     mixed.process([0.5, 0.25, 1, 0]);

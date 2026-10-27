@@ -48,14 +48,14 @@ export function bindPauseToggle(stage: HTMLElement) {
 }
 
 /**
- * Opens or closes the side panel on F12 or L, like its tab button does. F12
- * is swallowed so the browser devtools don't steal the key; repeats and
- * typing into form fields are ignored.
+ * Opens or closes the side panel on F12, like its tab button does. F12 is
+ * swallowed so the browser devtools don't steal the key; repeats and typing
+ * into form fields are ignored.
  */
 export function bindSidePanelToggle(onToggle: () => void) {
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat) return;
-    if (e.code !== 'F12' && e.code !== 'KeyL') return;
+    if (e.code !== 'F12') return;
     const target = e.target as HTMLElement | null;
     if (
       target &&
