@@ -168,6 +168,37 @@ export function segmentIntersectionOffset(
   return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
 }
 
+/**
+ * The offset of the first touch of segment AB with the circle (cx, cy) of
+ * the given radius: the parameter t on AB, or -1 when the segment misses the
+ * circle entirely.
+ */
+export function circleIntersectionOffset(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  radius: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const fx = ax - cx;
+  const fy = ay - cy;
+  const a = dx * dx + dy * dy;
+  if (a === 0) return -1;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - radius * radius;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return -1;
+  const root = Math.sqrt(discriminant);
+  const first = (-b - root) / (2 * a);
+  const second = (-b + root) / (2 * a);
+  if (first >= 0 && first <= 1) return first;
+  return second >= 0 && second <= 1 ? second : -1;
+}
+
 /** true when two axis-aligned boxes overlap, touching edges included */
 export function aabbOverlap(a: AABB, b: AABB): boolean {
   return !(

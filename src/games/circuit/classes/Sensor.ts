@@ -1,75 +1,81 @@
 import {
+  circleIntersectionOffset,
   lerp,
   segmentHitsAABB,
   segmentIntersectionOffset,
-  type Vector,
 } from '../../../utilities/math';
+import { RayFan2D } from '../../../utilities/sensors/RayFan2D';
 import type { Car } from './Car';
 import type { Segment } from './Circuit';
 import { config } from './Config';
 import type { Obstacle } from './Obstacle';
 
-interface Reading {
-  x: number;
-  y: number;
-  offset: number;
-}
-
-export class Sensor {
+/** a power-warped fan whose reach swells in a cosine bell toward the middle */
+export class Sensor extends RayFan2D {
   car: Car;
-  rayCount: number;
-  /** one [start, end] pair per ray, the points are updated in place */
-  rays: Vector[][];
-  readings: (Reading | null)[];
-  /** each ray's fixed offset from the car angle, with its sin/cos precomputed */
-  #cosOff: number[] = [];
-  #sinOff: number[] = [];
-  /** each ray's reach, a smooth profile over the fan angle */
-  #lengths: number[] = [];
-  /** one reusable hit point per ray, so update never allocates a Reading */
-  #readingPool: Reading[] = [];
 
   constructor(car: Car) {
-    this.car = car;
-    this.rayCount = config.SENSORS;
-
-    this.rays = [];
-    this.readings = new Array(this.rayCount);
-    this.#readingPool = new Array(this.rayCount);
     const halfAngle = config.SENSOR_ANGLE / 2;
-    for (let i = 0; i < this.rayCount; i++) {
-      // u runs -1 (left edge) .. 1 (right edge); the power warp keeps the
-      // edges in place and packs the rays in between toward the heading
-      const u = this.rayCount === 1 ? 0 : (2 * i) / (this.rayCount - 1) - 1;
+    // u runs -1 (left edge) .. 1 (right edge); the power warp keeps the
+    // edges in place and packs the rays in between toward the heading
+    const offset = (i: number): number => {
+      const u = config.SENSORS === 1 ? 0 : (2 * i) / (config.SENSORS - 1) - 1;
       const warped = Math.sign(u) * Math.abs(u) ** config.SENSOR_FORWARD_BIAS;
-      const offset = -warped * halfAngle;
-      this.#cosOff.push(Math.cos(offset));
-      this.#sinOff.push(Math.sin(offset));
-      this.#readingPool[i] = { x: 0, y: 0, offset: 0 };
+      return -warped * halfAngle;
+    };
+    super(
+      config.SENSORS,
+      offset,
       // cosine bell over the real angle: 1 straight ahead, 0 at the edges
-      this.#lengths.push(
-        lerp(
+      (i) => {
+        const length = lerp(
           config.SENSORS_EDGE_LENGTH,
           config.SENSORS_MAX_LENGTH,
-          Math.cos((offset / halfAngle) * (Math.PI / 2)),
-        ),
-      );
-      this.rays.push([
-        { x: 0, y: 0 },
-        { x: 0, y: 0 },
-      ]);
-    }
+          Math.cos((offset(i) / halfAngle) * (Math.PI / 2)),
+        );
+        return { x: length, y: length };
+      },
+    );
+    this.car = car;
   }
 
   update(obstacles: Obstacle[], segments: Segment[]) {
-    this.#castRays();
+    this.cast(this.car.x, this.car.y, this.car.angle);
     for (let i = 0; i < this.rays.length; i++) {
-      this.readings[i] = this.#getReading(
-        this.rays[i],
-        this.#readingPool[i],
-        obstacles,
-        segments,
-      );
+      const ray = this.rays[i];
+      const ax = ray[0].x;
+      const ay = ray[0].y;
+      const bx = ray[1].x;
+      const by = ray[1].y;
+      this.startReading(i);
+      for (let j = 0; j < obstacles.length; j++) {
+        const obstacle = obstacles[j];
+        if (obstacle.type === 'moving') {
+          const distance = Math.hypot(obstacle.x - ax, obstacle.y - ay);
+          const sensorOffset = obstacle.getSensorCollisionOffset(distance);
+          const projectedX =
+            obstacle.x + obstacle.movementDirectionX * sensorOffset;
+          const projectedY =
+            obstacle.y + obstacle.movementDirectionY * sensorOffset;
+          this.testCircle(obstacle.x, obstacle.y, obstacle.width / 2);
+          this.testCircle(projectedX, projectedY, obstacle.width / 2);
+          this.testSegment(obstacle.x, obstacle.y, projectedX, projectedY);
+          continue;
+        }
+        // most rays miss most blocks, the box rejects them before any edge test
+        if (!segmentHitsAABB(ax, ay, bx, by, obstacle.aabb)) continue;
+        const poly = obstacle.polygon;
+        for (let k = 0; k < poly.length; k++) {
+          const next = poly[(k + 1) % poly.length];
+          this.testSegment(poly[k].x, poly[k].y, next.x, next.y);
+        }
+      }
+      for (let j = 0; j < segments.length; j++) {
+        const segment = segments[j];
+        if (!segmentHitsAABB(ax, ay, bx, by, segment)) continue;
+        this.testSegment(segment.a.x, segment.a.y, segment.b.x, segment.b.y);
+      }
+      this.readings[i] = this.endReading();
     }
   }
 
@@ -118,132 +124,11 @@ export class Sensor {
     return false;
   }
 
-  #getReading(
-    ray: Vector[],
-    out: Reading,
-    obstacles: Obstacle[],
-    segments: Segment[],
-  ): Reading | null {
-    const ax = ray[0].x;
-    const ay = ray[0].y;
-    const bx = ray[1].x;
-    const by = ray[1].y;
-    let bestOffset = Infinity;
-
-    for (let i = 0; i < obstacles.length; i++) {
-      const obstacle = obstacles[i];
-      if (obstacle.type === 'moving') {
-        const distance = Math.hypot(obstacle.x - ax, obstacle.y - ay);
-        const sensorOffset = obstacle.getSensorCollisionOffset(distance);
-        const projectedX =
-          obstacle.x + obstacle.movementDirectionX * sensorOffset;
-        const projectedY =
-          obstacle.y + obstacle.movementDirectionY * sensorOffset;
-        const actualOffset = circleIntersectionOffset(
-          ax,
-          ay,
-          bx,
-          by,
-          obstacle.x,
-          obstacle.y,
-          obstacle.width / 2,
-        );
-        const projectedOffset = circleIntersectionOffset(
-          ax,
-          ay,
-          bx,
-          by,
-          projectedX,
-          projectedY,
-          obstacle.width / 2,
-        );
-        const linkOffset = segmentIntersectionOffset(
-          ax,
-          ay,
-          bx,
-          by,
-          obstacle.x,
-          obstacle.y,
-          projectedX,
-          projectedY,
-        );
-        if (actualOffset >= 0 && actualOffset < bestOffset)
-          bestOffset = actualOffset;
-        if (projectedOffset >= 0 && projectedOffset < bestOffset)
-          bestOffset = projectedOffset;
-        if (linkOffset >= 0 && linkOffset < bestOffset) bestOffset = linkOffset;
-        continue;
-      }
-      // most rays miss most blocks, the box rejects them before any edge test
-      if (!segmentHitsAABB(ax, ay, bx, by, obstacle.aabb)) continue;
-      const poly = obstacle.polygon;
-      for (let j = 0; j < poly.length; j++) {
-        const next = poly[(j + 1) % poly.length];
-        const offset = segmentIntersectionOffset(
-          ax,
-          ay,
-          bx,
-          by,
-          poly[j].x,
-          poly[j].y,
-          next.x,
-          next.y,
-        );
-        if (offset >= 0 && offset < bestOffset) bestOffset = offset;
-      }
-    }
-
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-      if (!segmentHitsAABB(ax, ay, bx, by, segment)) continue;
-      const offset = segmentIntersectionOffset(
-        ax,
-        ay,
-        bx,
-        by,
-        segment.a.x,
-        segment.a.y,
-        segment.b.x,
-        segment.b.y,
-      );
-      if (offset >= 0 && offset < bestOffset) bestOffset = offset;
-    }
-
-    if (bestOffset === Infinity) return null;
-    out.x = ax + (bx - ax) * bestOffset;
-    out.y = ay + (by - ay) * bestOffset;
-    out.offset = bestOffset;
-    return out;
-  }
-
-  #castRays() {
-    // two trig calls for the car angle, then a sum formula per ray
-    const sinA = Math.sin(this.car.angle);
-    const cosA = Math.cos(this.car.angle);
-    for (let i = 0; i < this.rayCount; i++) {
-      const start = this.rays[i][0];
-      const end = this.rays[i][1];
-      start.x = this.car.x;
-      start.y = this.car.y;
-      const sinR = sinA * this.#cosOff[i] - cosA * this.#sinOff[i];
-      const cosR = cosA * this.#cosOff[i] + sinA * this.#sinOff[i];
-      end.x = this.car.x - sinR * this.#lengths[i];
-      end.y = this.car.y - cosR * this.#lengths[i];
-    }
-  }
-
-  /** the sensor coverage area, using the current eff fective ray endpoints */
+  /** the sensor coverage area, using the current effective ray endpoints */
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    ctx.beginPath();
     ctx.setLineDash([]);
-    const origin = this.rays[0][0];
-    ctx.moveTo(origin.x, origin.y);
-    for (let i = 0; i < this.rays.length; i++) {
-      const end = this.readings[i] || this.rays[i][1];
-      ctx.lineTo(end.x, end.y);
-    }
-    ctx.closePath();
+    this.tracePath(ctx);
     ctx.fillStyle = this.car.color;
     ctx.globalAlpha = 0.22;
     ctx.fill();
@@ -253,30 +138,4 @@ export class Sensor {
     ctx.stroke();
     ctx.restore();
   }
-}
-
-function circleIntersectionOffset(
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  cx: number,
-  cy: number,
-  radius: number,
-) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const fx = ax - cx;
-  const fy = ay - cy;
-  const a = dx * dx + dy * dy;
-  if (a === 0) return -1;
-  const b = 2 * (fx * dx + fy * dy);
-  const c = fx * fx + fy * fy - radius * radius;
-  const discriminant = b * b - 4 * a * c;
-  if (discriminant < 0) return -1;
-  const root = Math.sqrt(discriminant);
-  const first = (-b - root) / (2 * a);
-  const second = (-b + root) / (2 * a);
-  if (first >= 0 && first <= 1) return first;
-  return second >= 0 && second <= 1 ? second : -1;
 }
