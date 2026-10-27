@@ -41,28 +41,31 @@ the followed car and shifts the camera ahead to show more of the track.
   once the group is proven, since a blank brain can no longer beat the
   established line. The second-to-last slot is a scout: it re-explores the
   oldest line of the group's hall of fame — the last three champion lines are
-  kept per category, not just one. Once one of a group's cars crosses the finish line, that group is demoted: it
-  respawns 5 cars on slots 1..5, every one of them a mutation (plus its own
-  explorer), and the untouched
-  original is out of the pool for good. Returning to a previously completed
-  seed restores that group's mutation-only pool; a new seed starts its own
-  ladder. Groups are independent, so one category never waits for
+  kept per category, not just one. Once one of a group's cars crosses the
+  finish line that group keeps its full pool and is never sent to guide
+  training again on that seed; a new seed starts its own ladder. Groups are
+  independent, so one category never waits for
   another, and the map never holds more than CAR_NB (200) AI cars at once. The
   bottom HUD shows the three fastest brain groups by completed-lap timing,
-  measured in simulation frames.
+  measured in simulation frames. The top-right global board sorts its groups
+  by completed races first — each row shows the group's share of all races
+  finished as `done/total` — then by cumulative score, then by the live score
+  on the current track.
 - The moment a car sets a new high on the current track, its brain is saved
   at the front of the group's hall of fame, the new best (live, not at death). The map is a pure function of
   a seed kept in the URL hash (`#circuit=<seed>`): same seed, same track; the
   seed input field changes it on demand, and six regular brain groups must
   each complete LAPS_PER_SEED (3) full laps before it advances by 1; mixed and
-  player finishes do not count. Each new group finisher also sends the lowest
-  scoring group into guide training from the group with the fastest lap on the
-  track. Finishing is a save point, the finishing brain is saved first, like a
+  player finishes do not count. When a group's pool is fully wiped out, the
+  group with the lowest current track record goes into guide training from
+  the group with the best current track record — but only if one of its cars
+  has already completed two laps on this run, and groups that have finished
+  the track are never retrained on it. Finishing is a save point, the finishing brain is saved first, like a
   crash. Each finished map's high
   is recorded separately per seed for HUD reference, but every generated map
   starts with a fresh comparison bar, including when a seed is revisited, so
-  mutated brains have a reachable goal. Groups that finished that seed return
-  with mutation runs only. The scoreboard and promotion never compare against
+  mutated brains have a reachable goal. Groups that finished that seed are
+  never retrained on it. The scoreboard and promotion never compare against
   a blended cross-map total, and training history lives in the weights the
   pools respawn from.
 

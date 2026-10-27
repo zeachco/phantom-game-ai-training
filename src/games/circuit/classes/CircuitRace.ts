@@ -23,11 +23,9 @@ export type CircuitModelIo = ReturnType<typeof fileUtilities>;
  *  laps a group has banked on the current seed */
 const slotPolicy: SlotPolicy<Group> = {
   poolSize: config.CARS_PER_GROUP,
-  finishedPoolSize: config.FINISHED_CARS_PER_GROUP,
   explorerSlots: config.EXPLORER_CARS,
   explorerLimit: config.EXPLORER_LAP_LIMIT,
   mutationLadderCap: config.MUTATION_LADDER_CAP,
-  finishedSwarmDivisor: config.FINISHED_SWARM_DIVISOR,
   progress: (group) => {
     let laps = 0;
     for (const key of Object.keys(group.lapTimes))
@@ -40,7 +38,6 @@ const slotPolicy: SlotPolicy<Group> = {
 const raceProfile: RaceProfile = {
   game: 'circuit',
   carsPerGroup: config.CARS_PER_GROUP,
-  finishedCarsPerGroup: config.FINISHED_CARS_PER_GROUP,
   hallOfFameSize: config.HALL_OF_FAME_SIZE,
   deadLifetime: config.DEAD_LIFETIME,
   maxNetworkLayers: config.MAX_NETWORK_LAYERS,
@@ -246,6 +243,45 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
     group.scores.seed = car.brain.score;
     group.ghostScore = car.brain.score;
     this.promote(group, car);
+  }
+
+  /** Circuit's auto-training, when a group's whole pool is wiped out.
+   *  The student is the group with the lowest current track record — the
+   *  ghost the track board shows — and it only enters guide training once
+   *  one of its cars has completed two laps on this run: a line that never
+   *  drove the track has no track record to distill from. A group that
+   *  finished the required laps on this run is never retrained on it, and
+   *  a group already mid-run is left alone. The guide is the group with
+   *  the best current track record above the student's, so the student
+   *  learns from a brain that demonstrably drives this track, not from a
+   *  global leader that struggles with it. */
+  protected override autoTrainAfterGroupDeath(deadGroup: Group): void {
+    const twoLaps = (group: Group) =>
+      Object.values(group.lapTimes).some((laps) => laps.length >= 2);
+    const candidates = this.groups.filter(
+      (group) =>
+        !group.distillRun &&
+        group.scores.finished[String(this.seed)] !== true &&
+        twoLaps(group),
+    );
+    if (!candidates.length) return;
+    const lowest = Math.min(...candidates.map((group) => group.ghostScore));
+    const tied = candidates.filter((group) => group.ghostScore === lowest);
+    const student = tied.includes(deadGroup) ? deadGroup : tied[0];
+    const guide = this.groups
+      .filter(
+        (group) =>
+          group !== student &&
+          group.ghostScore > student.ghostScore &&
+          this.teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
+      )
+      .sort((a, b) => b.ghostScore - a.ghostScore)[0];
+    if (!guide) return;
+    this.setTrainFrom(
+      student.isMixed ? 'mixed' : student.layer,
+      guide.isMixed ? 'mixed' : guide.layer,
+      false,
+    );
   }
 
   #onDeath(car: Car): Group | null {
