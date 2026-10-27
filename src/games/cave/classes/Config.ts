@@ -85,7 +85,6 @@ class Config {
   public PLANE_COLOR = '#05070a';
   public CAVE_COLOR = '#ffffff';
   public GATE_COLORS = ['#ffffff', '#aa88bb'];
-  public GATE_NEXT_COLOR = '#ffd23f';
   /** arc distance around the followed car inside which car meshes sync */
   public VISUAL_RANGE = 700;
   /** Fixed world-space offset behind the ball; independent of its motion. */

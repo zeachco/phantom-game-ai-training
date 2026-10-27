@@ -132,13 +132,6 @@ export function saveScores(
   }
 }
 
-/** Remove race records without touching any saved neural networks. */
-export function clearScoreRecords(game: string): void {
-  for (const key of Object.keys(localStorage)) {
-    if (key.startsWith(`${game}_score_`)) localStorage.removeItem(key);
-  }
-}
-
 /** A new seed records the old map high and starts a fresh comparison.
  * History lives per track for HUD reference, never as a goal for the new run. */
 export function foldScores(scores: GroupScores, newSeed: number): void {
