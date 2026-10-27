@@ -1,4 +1,3 @@
-import { CTRL_COLORS } from '../../../ai/utils';
 import { isDemo, likelyLagsOnHeavyJs } from '../../../utilities/env';
 
 export { isDemo, likelyLagsOnHeavyJs };
@@ -67,8 +66,6 @@ class Config {
   /** odds of rerolling every weight leading to one expert, scaled by the factor */
   public MIXED_RESET_CHANCE = 0.15;
   public MIXED_MAX_MUTATION_LVL = 0.3;
-  /** the mixed identity color, CTRL_COLORS[0]: mixed groups live on layer 0 */
-  public MIXED_COLOR = CTRL_COLORS[0];
 
   // visual
   public SCORES_NB = this.MAX_NETWORK_LAYERS * 2;

@@ -2,6 +2,10 @@ import type { MixedNetwork } from '../../ai/Mixed';
 import { CTRL_COLORS, type ModelsByLayerCount } from '../../ai/utils';
 import { getColorScale } from '../colors';
 
+/** the mixed identity color, shared by every game: mixed groups live on
+ *  layer 0 and wear its CTRL color */
+export const MIXED_COLOR = CTRL_COLORS[0];
+
 /** Shared brain accents used by both cloned driving games. */
 export function layerColor(layer: number, maxLayers: number) {
   // layer 0 is the mixed brain, 1-9 the numbered brains: they wear their

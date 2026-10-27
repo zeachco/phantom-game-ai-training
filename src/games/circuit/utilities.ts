@@ -11,6 +11,7 @@ import {
   globalRecordFromScores,
   scoreRecordForGroup,
 } from '../../utilities/scoreRecords';
+import { MIXED_COLOR } from '../../utilities/ai/colors';
 import type { Car } from './classes/Car';
 import type { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
@@ -75,6 +76,6 @@ export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
     human: state.human,
     brainKeyOf: (car) => brainKey(car.brain, car.brainLayers),
     maxLayers: config.MAX_NETWORK_LAYERS,
-    mixedColor: config.MIXED_COLOR,
+    mixedColor: MIXED_COLOR,
   });
 }

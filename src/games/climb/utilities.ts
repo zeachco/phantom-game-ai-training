@@ -11,6 +11,7 @@ import {
 } from '../../utilities/groupScores';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { scoreBoardRows as sharedScoreBoardRows } from '../../utilities/scoreBoard';
+import { MIXED_COLOR } from '../../utilities/ai/colors';
 import { config } from './classes/Config';
 import type { Player } from './classes/Player';
 import type { Tower } from './classes/Tower';
@@ -74,6 +75,6 @@ export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
         ? 'mixed'
         : String(player.brainLayers),
     maxLayers: config.MAX_NETWORK_LAYERS,
-    mixedColor: config.MIXED_COLOR,
+    mixedColor: MIXED_COLOR,
   });
 }

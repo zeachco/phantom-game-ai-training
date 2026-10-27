@@ -11,7 +11,7 @@ import { fileUtilities, networkLevelSizes } from '../../ai/utils';
 import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
-import { layerColor } from '../../utilities/ai/colors';
+import { layerColor, MIXED_COLOR } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import { createCockpit } from '../../utilities/cockpit';
 import { drawGamepadControls } from '../../utilities/driveIndicators';
@@ -41,7 +41,7 @@ import { Car } from './classes/Car';
 import { config } from './classes/Config';
 import { DeathRay } from './classes/DeathRay';
 import { Road } from './classes/Road';
-import { ControlType } from './types';
+import { ControlType } from '../../utilities/types';
 import { defaultState, mixedColor, scoreEntries } from './utilities';
 import { gameNow } from '../../utilities/gameClock';
 
@@ -154,7 +154,7 @@ export default async (state: typeof defaultState) => {
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
     groupColor: (v) =>
       v === 'mixed'
-        ? config.MIXED_COLOR
+        ? MIXED_COLOR
         : layerColor(v, config.MAX_NETWORK_LAYERS),
     seedBest: (key) => bestSavedModelScore(key),
     globalBest: (key) => bestSavedModelScore(key),
@@ -205,7 +205,7 @@ export default async (state: typeof defaultState) => {
     content: legend,
     buttonColor: (v) =>
       v === 'mixed'
-        ? config.MIXED_COLOR
+        ? MIXED_COLOR
         : v === 0
         ? undefined
         : layerColor(v, config.MAX_NETWORK_LAYERS),
@@ -354,7 +354,7 @@ export default async (state: typeof defaultState) => {
         ControlType.AI,
         3,
         studentLabel('0 👶', distilling),
-        config.MIXED_COLOR,
+        MIXED_COLOR,
         MIXED_LEVELS,
         (inputCount, outputCount) =>
           new MixedNetwork(inputCount, outputCount, experts, {

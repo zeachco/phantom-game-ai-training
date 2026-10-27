@@ -15,7 +15,7 @@ import {
   updateAABB,
 } from '../../../utilities/math';
 import carImg from '../../../assets/car.png';
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import type { Circuit } from './Circuit';
 import { config } from './Config';
 import { Controls } from './Controls';

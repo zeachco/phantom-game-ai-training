@@ -10,7 +10,7 @@ import {
   updateAABB,
 } from '../../../utilities/math';
 import carImg from '../../../assets/car.png';
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import { config } from './Config';
 import { Controls } from './Controls';
 import type { DeathRay } from './DeathRay';

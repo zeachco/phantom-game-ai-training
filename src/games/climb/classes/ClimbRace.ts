@@ -1,7 +1,7 @@
 import { MixedNetwork } from '../../../ai/Mixed';
 import type { NeuralNetwork } from '../../../ai/Network';
 import { type fileUtilities, PLAYER_COLOR } from '../../../ai/utils';
-import { layerColor } from '../../../utilities/ai/colors';
+import { layerColor, MIXED_COLOR } from '../../../utilities/ai/colors';
 import type { GroupBase } from '../../../utilities/groupScores';
 import { lerp } from '../../../utilities/math';
 import { RaceBase, type RaceProfile } from '../../../utilities/race/RaceBase';
@@ -12,7 +12,7 @@ import {
   slotSource,
 } from '../../../utilities/race/slotPolicy';
 import { saveTrainFrom, studentLabel } from '../../../utilities/trainFrom';
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import { brainId, defaultState, type Group } from '../utilities';
 import { config } from './Config';
 import { getClimbBrainDimensions, Player } from './Player';
@@ -125,7 +125,7 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
         : undefined,
     );
     player.color = group.isMixed
-      ? config.MIXED_COLOR
+      ? MIXED_COLOR
       : layerColor(group.layer, config.MAX_NETWORK_LAYERS);
     const source = slotSource(group, slot, this.state.sortedModels, slotPolicy);
     if (source && player.brain) {

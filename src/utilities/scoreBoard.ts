@@ -90,7 +90,7 @@ export function scoreBoardRows(options: {
   brainKeyOf: (entity: ScoreBoardEntity) => string;
   /** the layer count for brain colors, e.g. config.MAX_NETWORK_LAYERS */
   maxLayers: number;
-  /** the mixed-brain color, e.g. config.MIXED_COLOR */
+  /** the mixed-brain color, the shared MIXED_COLOR */
   mixedColor: string;
 }): ScoreBoardRow[] {
   const { sorted, groups, topCount, human, brainKeyOf, maxLayers, mixedColor } =

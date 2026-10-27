@@ -3,7 +3,7 @@ import { config } from '../src/games/climb/classes/Config';
 import { PLAYER_HALF_W, Player } from '../src/games/climb/classes/Player';
 import { Sensor } from '../src/games/climb/classes/Sensor';
 import type { Platform, Tower } from '../src/games/climb/classes/Tower';
-import { ControlType } from '../src/games/climb/types';
+import { ControlType } from '../src/utilities/types';
 
 function towerWith(platforms: Platform[] = []): Tower {
   return {

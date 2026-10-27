@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Controls } from '../src/games/cave/classes/Controls';
-import { ControlType } from '../src/games/cave/types';
+import { ControlType } from '../src/utilities/types';
 
 function inputs(
   run: (

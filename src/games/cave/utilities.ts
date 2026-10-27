@@ -8,6 +8,7 @@ import {
 } from '../../utilities/groupScores';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { scoreBoardRows as sharedScoreBoardRows } from '../../utilities/scoreBoard';
+import { MIXED_COLOR } from '../../utilities/ai/colors';
 import type { Ball } from './classes/Ball';
 import type { Cave } from './classes/Cave';
 import { config } from './classes/Config';
@@ -56,6 +57,6 @@ export function scoreBoardRows(state: typeof defaultState): ScoreBoardRow[] {
     human: state.human,
     brainKeyOf: (ball) => brainKey(ball.brain, ball.brainLayers),
     maxLayers: config.MAX_NETWORK_LAYERS,
-    mixedColor: config.MIXED_COLOR,
+    mixedColor: MIXED_COLOR,
   });
 }

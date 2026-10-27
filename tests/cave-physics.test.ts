@@ -4,7 +4,7 @@ import { Ball, getCaveBrainDimensions } from '../src/games/cave/classes/Ball';
 import type { Cave, RadialHit } from '../src/games/cave/classes/Cave';
 import { config } from '../src/games/cave/classes/Config';
 import { WallSolid } from '../src/games/cave/classes/WallSolid';
-import { ControlType } from '../src/games/cave/types';
+import { ControlType } from '../src/utilities/types';
 
 // An infinite plane isolates ball dynamics from procedural cave geometry.
 function floor(height = (_x: number, _z: number) => 0, grade = 0) {

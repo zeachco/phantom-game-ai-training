@@ -4,7 +4,7 @@ import { DistillDriver, type Distiller } from '../../../ai/distill';
 import { CTRL_COLORS } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import { clamp, lerp } from '../../../utilities/math';
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import type { Cave, RadialHit } from './Cave';
 import { config } from './Config';
 import { Controls } from './Controls';

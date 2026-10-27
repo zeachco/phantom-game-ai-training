@@ -1,4 +1,4 @@
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import { isEditableTarget } from '../../../utilities/dom';
 
 export class Controls {

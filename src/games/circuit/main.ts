@@ -9,7 +9,7 @@ import {
 import { fileUtilities } from '../../ai/utils';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
-import { layerColor } from '../../utilities/ai/colors';
+import { layerColor, MIXED_COLOR } from '../../utilities/ai/colors';
 import { getColorScale } from '../../utilities/colors';
 import {
   createCockpit,
@@ -143,7 +143,7 @@ export default async (state: typeof defaultState) => {
     label: (v) => (v === 'mixed' ? 'the mixed brain' : `brain ${v}`),
     groupColor: (v) =>
       v === 'mixed'
-        ? config.MIXED_COLOR
+        ? MIXED_COLOR
         : layerColor(v, config.MAX_NETWORK_LAYERS),
     seedBest: (key) => scoreRecordForGroup('circuit', key)?.seed ?? null,
     globalBest: (key) => {

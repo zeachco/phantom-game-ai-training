@@ -3,7 +3,7 @@ import { DistillDriver, type Distiller } from '../../../ai/distill';
 import { CTRL_COLORS } from '../../../ai/utils';
 import { getRandomColor } from '../../../utilities/colors';
 import { clamp } from '../../../utilities/math';
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import { CLIMB_INPUT_COUNT, config } from './Config';
 import { Controls } from './Controls';
 import { Sensor } from './Sensor';

@@ -2,6 +2,7 @@ import { MIXED_KIND, type MixedNetwork } from '../../ai/Mixed';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   layerColor,
+  MIXED_COLOR,
   mixedNetworkColor,
   savedMixedNetworkColor,
 } from '../../utilities/ai/colors';
@@ -37,14 +38,14 @@ function previousSave(
 }
 
 export const mixedColor = (brain: MixedNetwork) =>
-  mixedNetworkColor(brain, config.MAX_NETWORK_LAYERS, config.MIXED_COLOR);
+  mixedNetworkColor(brain, config.MAX_NETWORK_LAYERS, MIXED_COLOR);
 
 const modelColor = (model: ModelsByLayerCount[number]) =>
   isMixed(model)
     ? savedMixedNetworkColor(
         model,
         config.MAX_NETWORK_LAYERS,
-        config.MIXED_COLOR,
+        MIXED_COLOR,
       )
     : layerColor(model.levels.length, config.MAX_NETWORK_LAYERS);
 

@@ -6,7 +6,7 @@ import {
   Player,
 } from '../src/games/climb/classes/Player';
 import type { Platform, Tower } from '../src/games/climb/classes/Tower';
-import { ControlType } from '../src/games/climb/types';
+import { ControlType } from '../src/utilities/types';
 
 /**
  * A fake tower with the same landing/support semantics as Tower, with

@@ -1,4 +1,4 @@
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import { applyDeadzone, clamp } from '../../../utilities/math';
 import { findStandardGamepad } from '../../../utilities/inputs/gamepadApi';
 import { isEditableTarget } from '../../../utilities/dom';

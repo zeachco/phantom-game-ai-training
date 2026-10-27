@@ -11,7 +11,7 @@ import {
   slotSource,
 } from '../../../utilities/race/slotPolicy';
 import { saveTrainFrom, studentLabel } from '../../../utilities/trainFrom';
-import { ControlType } from '../types';
+import { ControlType } from '../../../utilities/types';
 import { brainId, defaultState, type Group } from '../utilities';
 import { Car, getCircuitBrainDimensions } from './Car';
 import { Circuit } from './Circuit';
