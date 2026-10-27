@@ -1,6 +1,56 @@
 import type { Group } from '../utilities';
 
-/** Shows per-group saved, cumulative, and current-track scores. */
+/** One row of the global board. */
+export interface GlobalRow {
+  group: Group;
+  saved: number;
+  current: number;
+  total: number;
+  /** tracks this group fully completed, one per finished seed */
+  done: number;
+}
+
+/** The tracks a group has fully completed: `scores.finished` keeps one
+ *  flag per seed the group crossed the line on. */
+export function groupCompletions(group: Group): number {
+  return Object.values(group.scores.finished).filter(Boolean).length;
+}
+
+/**
+ * The global board's rows, sorted by completed races first (the board is a
+ * leaderboard of groups that finish tracks), then by cumulative score, then
+ * by the live score on the current track.
+ */
+export function globalRows(
+  groups: readonly Group[],
+  currentSeed: number,
+): GlobalRow[] {
+  return groups
+    .map((group) => {
+      const saved = Object.values(group.scores.history).reduce(
+        (total, score) => total + score,
+        0,
+      );
+      const current =
+        group.scores.current === currentSeed ? group.scores.seed : 0;
+      return {
+        group,
+        saved,
+        current,
+        total: saved + current,
+        done: groupCompletions(group),
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.done - a.done || b.total - a.total || b.current - a.current,
+    );
+}
+
+/**
+ * Shows per-group saved, cumulative, and current-track scores, plus each
+ * group's share of the completed races (`done/total` on the board).
+ */
 export class TrackScoreBoard {
   readonly element: HTMLElement;
   #groups: readonly Group[];
@@ -20,7 +70,7 @@ export class TrackScoreBoard {
 
     const headings = document.createElement('div');
     headings.className = 'track-score-row track-score-headings';
-    for (const heading of ['brain', 'saved', 'total', 'now']) {
+    for (const heading of ['brain', 'saved', 'total', 'now', 'done']) {
       const cell = document.createElement('span');
       cell.textContent = heading;
       headings.append(cell);
@@ -43,32 +93,21 @@ export class TrackScoreBoard {
     return String(rounded);
   }
 
-  #savedScore(group: Group) {
-    return Object.values(group.scores.history).reduce(
-      (total, score) => total + score,
-      0,
-    );
-  }
-
   update(currentSeed: number) {
-    const scores = this.#groups
-      .map((group) => {
-        const saved = this.#savedScore(group);
-        const current =
-          group.scores.current === currentSeed ? group.scores.seed : 0;
-        return { group, saved, current, total: saved + current };
-      })
-      .sort((a, b) => b.total - a.total || b.current - a.current);
-    const renderKey = scores
-      .map(({ group, saved, current, total }) =>
-        [group.key, saved, current, total, group.pool[0]?.color].join('|'),
+    const rows = globalRows(this.#groups, currentSeed);
+    const totalDone = rows.reduce((sum, row) => sum + row.done, 0);
+    const renderKey = rows
+      .map(({ group, saved, current, total, done }) =>
+        [group.key, saved, current, total, done, group.pool[0]?.color].join(
+          '|',
+        ),
       )
       .join('||');
     if (renderKey === this.#lastRender) return;
     this.#lastRender = renderKey;
 
     this.#rows.replaceChildren(
-      ...scores.map(({ group, saved, current, total }) => {
+      ...rows.map(({ group, saved, current, total, done }) => {
         const row = document.createElement('div');
         row.className = 'track-score-row';
         row.style.color = group.pool[0]?.color || '#c4c4c4';
@@ -81,7 +120,9 @@ export class TrackScoreBoard {
         totalCell.textContent = this.#formatScore(total);
         const currentCell = document.createElement('span');
         currentCell.textContent = this.#formatScore(current);
-        row.append(name, savedCell, totalCell, currentCell);
+        const doneCell = document.createElement('span');
+        doneCell.textContent = `${done}/${totalDone}`;
+        row.append(name, savedCell, totalCell, currentCell, doneCell);
         return row;
       }),
     );

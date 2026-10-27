@@ -3,6 +3,37 @@ import {
   globalRecordForGroup,
   globalRecordFromScores,
 } from '../src/games/circuit/utilities';
+import type { Group } from '../src/games/circuit/utilities';
+import {
+  globalRows,
+  groupCompletions,
+} from '../src/games/circuit/ui/TrackScoreBoard';
+
+/** just the fields the global board reads */
+function fakeGroup(
+  layer: number,
+  opts: {
+    history?: Record<string, number>;
+    seed?: number;
+    current?: number;
+    finished?: Record<string, boolean>;
+  } = {},
+): Group {
+  return {
+    key: `circuit_${layer}`,
+    layer,
+    isMixed: false,
+    pool: [],
+    scores: {
+      current: opts.current ?? 0,
+      seed: opts.seed ?? 0,
+      total: 0,
+      phantom: 0,
+      history: opts.history ?? {},
+      finished: opts.finished ?? {},
+    },
+  } as unknown as Group;
+}
 
 /** Same localStorage mock as server-sync.test.ts */
 function makeStorage() {
@@ -120,4 +151,46 @@ test('globalRecordForGroup reads from localStorage and handles keys, missing, co
     // non-circuit key (e.g. 'cave_5') -> null
     expect(globalRecordForGroup('cave_5')).toBeNull();
   });
+});
+
+test('groupCompletions counts the seeds a group has finished', () => {
+  const group = fakeGroup(1, {
+    finished: { '1': true, '2': false, '3': true },
+  });
+  expect(groupCompletions(group)).toBe(2);
+});
+
+test('globalRows sorts by completed races first, then cumulative score', () => {
+  const groups = [
+    // the biggest total, but it has never finished a track
+    fakeGroup(1, { history: { '1': 10_000 } }),
+    // one completion, a mid total
+    fakeGroup(2, { history: { '1': 2_000 }, finished: { '1': true } }),
+    // two completions, the lowest total: still ranked first
+    fakeGroup(3, {
+      history: { '1': 500, '2': 500 },
+      finished: { '1': true, '2': true },
+    }),
+  ];
+  const rows = globalRows(groups, 0);
+  expect(rows.map((row) => row.group.layer)).toEqual([3, 2, 1]);
+  expect(rows.map((row) => row.done)).toEqual([2, 1, 0]);
+});
+
+test('globalRows tie-breaks equal completions by cumulative score, then live score', () => {
+  const groups = [
+    fakeGroup(1, { history: { '1': 150 }, finished: { '1': true } }),
+    // the same total as group 1, but 50 of it is live on the current seed
+    fakeGroup(2, {
+      history: { '1': 100 },
+      finished: { '1': true },
+      current: 9,
+      seed: 50,
+    }),
+    fakeGroup(3, { history: { '1': 200 }, finished: { '1': true } }),
+  ];
+  const rows = globalRows(groups, 9);
+  expect(rows.map((row) => row.group.layer)).toEqual([3, 2, 1]);
+  // a group scoring on another seed contributes nothing to the live column
+  expect(rows.find((row) => row.group.layer === 1)?.current).toBe(0);
 });
