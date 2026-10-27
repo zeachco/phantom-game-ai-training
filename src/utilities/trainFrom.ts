@@ -93,7 +93,7 @@ export function loadTrainFroms(
   const gamePrefix = prefix(game);
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (!key || !key.startsWith(gamePrefix)) continue;
+    if (!key?.startsWith(gamePrefix)) continue;
     const student = key.slice(gamePrefix.length);
     const target = parse(localStorage.getItem(key));
     if (target === null) continue;

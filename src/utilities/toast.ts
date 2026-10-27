@@ -17,7 +17,7 @@ const EXIT_MS = 220;
 let stack: HTMLDivElement | undefined;
 
 function ensureStack(): HTMLDivElement {
-  if (stack && stack.isConnected) return stack;
+  if (stack?.isConnected) return stack;
   stack = document.createElement('div');
   stack.className = 'toast-stack';
   document.body.appendChild(stack);

@@ -1,4 +1,3 @@
-import { layerColor, mixedNetworkColor } from '../../utilities/ai/colors';
 import { GamePad } from '../../utilities/inputs/Gamepad';
 import { lerp } from '../../utilities/math';
 import { MixedNetwork } from '../Mixed';
@@ -8,7 +7,6 @@ const RADIUS = 14;
 const MARGIN = Math.max(RADIUS, 10);
 /** the clear band between the selector and expert halves of the mixed view */
 const MIXED_GAP = RADIUS * 3;
-const FH = 18;
 const CONTROL_LABELS = ['F', 'L', 'R', 'B'];
 
 const TAU = Math.PI * 2;
@@ -289,19 +287,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     }
 
     this.#drawBrain(ctx, network, guide, errors);
-  }
-
-  #layerColor(layer: number) {
-    return layerColor(layer, this.config.MAX_NETWORK_LAYERS);
-  }
-
-  /** the accent a mixed car wears: its brains weighted by usage */
-  #blendedColor(network: MixedNetwork) {
-    return mixedNetworkColor(
-      network,
-      this.config.MAX_NETWORK_LAYERS,
-      '#808080',
-    );
   }
 
   /**

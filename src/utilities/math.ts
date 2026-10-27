@@ -138,18 +138,10 @@ export function closestPointOnPolygon(
   return out;
 }
 
-export function sum(...nbs: number[]) {
-  return nbs.reduce((acc, nb) => acc + nb, 0);
-}
-
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
-}
-
-export function ratio(value: number, min = 0, max = 1): number {
-  return clamp(value, min, max);
 }
 
 /**

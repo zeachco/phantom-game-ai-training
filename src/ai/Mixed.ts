@@ -3,7 +3,7 @@ import {
   clampToRange,
   Level,
   NeuralNetwork,
-  OutputRanges,
+  type OutputRanges,
   TEACHING_RATE,
   UNIT_RANGE,
 } from './Network';

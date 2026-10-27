@@ -3,8 +3,6 @@ import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   brainId,
-  clearScoreRecords as clearScoreRecordsForGame,
-  foldScores,
   type GroupBase,
   type GroupScores,
   loadScores as loadScoresForGame,
@@ -17,17 +15,15 @@ import { config } from './classes/Config';
 import type { Player } from './classes/Player';
 import type { Tower } from './classes/Tower';
 
+export { brainId };
 /** The shared group-score store, parameterized by the game prefix. Each game
  *  keeps these thin wrappers so call sites and storage keys stay unchanged. */
-export type { GroupScores };
-export { brainId, foldScores };
 export const scoreKey = (group: Group): string =>
   scoreKeyForGame('climb', group);
 export const loadScores = (group: Group, seed: number): GroupScores =>
   loadScoresForGame('climb', group, seed);
 export const saveScores = (group: Group, scores?: GroupScores): void =>
   saveScoresForGame('climb', group, scores ?? group.scores);
-export const clearScoreRecords = (): void => clearScoreRecordsForGame('climb');
 
 /** a training group: the shared group shape plus the climb's own fields */
 export interface Group extends GroupBase<Player> {

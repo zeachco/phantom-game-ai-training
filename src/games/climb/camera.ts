@@ -1,8 +1,5 @@
 import { PLAYER_HEIGHT } from './classes/Player';
 
-/** Kept as a compatibility export; camera targeting no longer predicts from
- * vertical velocity. */
-export const CAMERA_VELOCITY_LOOKAHEAD = 0;
 /** Camera smoothing applied to the target position once per rendered frame. */
 export const CAMERA_LERP = 0.25;
 

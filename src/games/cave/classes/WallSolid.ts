@@ -70,9 +70,12 @@ export class WallSolid {
   }
 
   constructor(rows: Float32Array[], tangent: THREE.Vector3) {
-    const columns = (this.columns = rows[0].length / 6);
+    this.columns = rows[0].length / 6;
+    const columns = this.columns;
     this.positions = new Float32Array(rows.length * rows[0].length);
-    rows.forEach((row, i) => this.positions.set(row, i * row.length));
+    rows.forEach((row, i) => {
+      this.positions.set(row, i * row.length);
+    });
     const vertex = (r: number, a: number, top: number) =>
       (r * columns + a) * 2 + top;
     const get = (i: number) =>

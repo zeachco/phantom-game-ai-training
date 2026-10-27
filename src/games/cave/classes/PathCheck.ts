@@ -139,6 +139,6 @@ export class PathCheck {
 }
 
 function angleDist(a: number, b: number) {
-  let d = Math.abs(a - b) % (Math.PI * 2);
+  const d = Math.abs(a - b) % (Math.PI * 2);
   return d > Math.PI ? Math.PI * 2 - d : d;
 }

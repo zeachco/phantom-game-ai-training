@@ -388,17 +388,17 @@ export class Cave {
     const a = this.#controlAt(i);
     const b = this.#controlAt(i + 1);
     const t2 = t * t;
-    let dx =
+    const dx =
       (6 * t2 - 6 * t) * a.p.x +
       (3 * t2 - 4 * t + 1) * a.d.x * LEN +
       (-6 * t2 + 6 * t) * b.p.x +
       (3 * t2 - 2 * t) * b.d.x * LEN;
-    let dy =
+    const dy =
       (6 * t2 - 6 * t) * a.p.y +
       (3 * t2 - 4 * t + 1) * a.d.y * LEN +
       (-6 * t2 + 6 * t) * b.p.y +
       (3 * t2 - 2 * t) * b.d.y * LEN;
-    let dz =
+    const dz =
       (6 * t2 - 6 * t) * a.p.z +
       (3 * t2 - 4 * t + 1) * a.d.z * LEN +
       (-6 * t2 + 6 * t) * b.p.z +
@@ -450,7 +450,7 @@ export class Cave {
   }
 
   #angleDistance(a: number, b: number) {
-    let d = Math.abs(a - b) % TWO_PI;
+    const d = Math.abs(a - b) % TWO_PI;
     return d > Math.PI ? TWO_PI - d : d;
   }
 
@@ -1465,7 +1465,6 @@ export class Cave {
   ) {
     const dotDT = dx * thx + dy * thy + dz * thz;
     const step = config.RAY_STEP;
-    const q = this;
     for (let t = 0; t < maxLen; t += step) {
       const px = ox + dx * t;
       // Collision space is the unscaled generator space. Convert world Y
@@ -1474,19 +1473,19 @@ export class Cave {
         oy / config.CAVE_VERTICAL_SCALE + (dy / config.CAVE_VERTICAL_SCALE) * t;
       const pz = oz + dz * t;
       const s = Math.max(0, sHint + t * dotDT);
-      q.center(s, q.#qc);
-      q.frame(s, q.#qt, q.#qn, q.#qb);
-      const wx = px - q.#qc.x;
-      const wy = py - q.#qc.y;
-      const wz = pz - q.#qc.z;
+      this.center(s, this.#qc);
+      this.frame(s, this.#qt, this.#qn, this.#qb);
+      const wx = px - this.#qc.x;
+      const wy = py - this.#qc.y;
+      const wz = pz - this.#qc.z;
       const a = Math.atan2(
-        wx * q.#qb.x + wy * q.#qb.y + wz * q.#qb.z,
-        wx * q.#qn.x + wy * q.#qn.y + wz * q.#qn.z,
+        wx * this.#qb.x + wy * this.#qb.y + wz * this.#qb.z,
+        wx * this.#qn.x + wy * this.#qn.y + wz * this.#qn.z,
       );
       const d = Math.sqrt(wx * wx + wy * wy + wz * wz);
-      if (d - q.radius(s, a) > 0) {
+      if (d - this.radius(s, a) > 0) {
         const hitT = Math.max(0.01, t - step / 2);
-        if (out) q.#fillRadialAt(hitT, s, a, out);
+        if (out) this.#fillRadialAt(hitT, s, a, out);
         return hitT;
       }
     }
