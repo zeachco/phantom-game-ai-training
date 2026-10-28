@@ -31,7 +31,7 @@ body {
 /* The stage overlays the rendered game canvas: the canvas and every HTML HUD
    element live inside it, so they track the canvas edges instead of the
    viewport. While the side panel is open the stage shrinks by exactly the
-   panel width (min(75vw, 800px), matching each game's JS layout). */
+   panel width (min(75vw, 640px), matching each game's JS layout). */
 .game-stage {
   position: fixed;
   top: 0;
@@ -41,7 +41,7 @@ body {
 }
 
 body:has(.side-panel.open) .game-stage {
-  width: calc(100% - min(75vw, 800px));
+  width: calc(100% - min(75vw, 640px));
 }
 
 .game-stage > canvas {

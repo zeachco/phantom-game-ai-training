@@ -26,7 +26,7 @@ export type FollowValue = number | 'mixed';
 
 /** the open panel takes that share of the screen, capped in width */
 const PANEL_RATIO = 0.75;
-const PANEL_MAX_WIDTH = 800;
+const PANEL_MAX_WIDTH = 640;
 /** the neutral tone 'all' and the canvas frame wear when no brain color fits */
 const NEUTRAL_COLOR = '#c4c4c4';
 
