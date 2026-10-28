@@ -246,7 +246,7 @@ function wipePool(race: CircuitRace, layer: number) {
   return group;
 }
 
-test('auto-train sends the weakest track record into guide training from the best one', () => {
+test('a wiped group that is last on the track trains from the best record', () => {
   const store = new Map<string, string>();
   const env = stubCircuitEnv(store);
   try {
@@ -255,14 +255,13 @@ test('auto-train sends the weakest track record into guide training from the bes
     const student = trackGroup(race, 5);
     student.scores.seed = 500;
     student.ghostScore = 500;
-    student.lapTimes['5:0'] = [1000, 1100];
     // a global leader that is only mid-pack on this track: its global total
     // must not make it the guide
     const globalist = trackGroup(race, 6);
     globalist.scores.history['999'] = 1_000_000;
     globalist.ghostScore = 4000;
 
-    const dead = wipePool(race, 4);
+    wipePool(race, 5);
     race.update(1000);
 
     expect(student.distillRun).toBe(true);
@@ -272,9 +271,6 @@ test('auto-train sends the weakest track record into guide training from the bes
     // it the teacher
     race.update(2000);
     expect(student.pool[0].teacher).toBe(teacher);
-    // the wiped group is not the weakest, so it just respawns normally
-    expect(dead.distillRun).toBe(false);
-    expect(dead.trainFrom).toBeNull();
     // the auto choice is a transient of this run, never persisted
     expect(loadTrainFrom('circuit', 5)).toBeNull();
   } finally {
@@ -282,32 +278,105 @@ test('auto-train sends the weakest track record into guide training from the bes
   }
 });
 
-test('auto-train skips the weakest group while it has not completed two laps', () => {
+test('a wiped group that is not last never becomes the trainee, nor does the last one on its behalf', () => {
   const store = new Map<string, string>();
   const env = stubCircuitEnv(store);
   try {
     const { race } = makeRace();
     makeContestedRace(race);
-    const student = trackGroup(race, 5);
-    student.scores.seed = 500;
-    student.ghostScore = 500;
-    student.lapTimes['5:0'] = [1000]; // only a single lap so far
+    const last = trackGroup(race, 5);
+    last.scores.seed = 500;
+    last.ghostScore = 500;
 
     const dead = wipePool(race, 4);
     race.update(1000);
 
-    expect(student.distillRun).toBe(false);
-    expect(student.trainFrom).toBeNull();
-    // the wiped group is the weakest record with proof of two laps, so it
-    // takes the student seat
-    expect(dead.distillRun).toBe(true);
-    expect(dead.trainFrom).toBe(1);
+    // the trainee is picked at the dead group's own respawn, so the last
+    // group keeps its free run even though it is the weakest
+    expect(last.distillRun).toBe(false);
+    expect(last.trainFrom).toBeNull();
+    expect(last.pool.length).toBe(config.CARS_PER_GROUP);
+    expect(dead.distillRun).toBe(false);
+    expect(dead.trainFrom).toBeNull();
   } finally {
     env.restore();
   }
 });
 
-test('auto-train never retrains a group that finished the track', () => {
+test('a wiped last group is not trained while another group is training', () => {
+  const store = new Map<string, string>();
+  const env = stubCircuitEnv(store);
+  try {
+    const { race } = makeRace();
+    makeContestedRace(race);
+    const last = trackGroup(race, 5);
+    last.scores.seed = 500;
+    last.ghostScore = 500;
+    expect(race.setTrainFrom(4, 1)).toBe(true);
+
+    wipePool(race, 5);
+    race.update(1000);
+
+    expect(last.distillRun).toBe(false);
+    expect(last.trainFrom).toBeNull();
+    expect(trackGroup(race, 4).distillRun).toBe(true);
+  } finally {
+    env.restore();
+  }
+});
+
+test('the round after a training session is a free run, then training can resume', () => {
+  const store = new Map<string, string>();
+  const env = stubCircuitEnv(store);
+  try {
+    const { race } = makeRace();
+    makeContestedRace(race);
+    const last = trackGroup(race, 5);
+    last.scores.seed = 500;
+    last.ghostScore = 500;
+
+    // first wipe: the last group becomes the trainee
+    wipePool(race, 5);
+    race.update(1000);
+    expect(last.distillRun).toBe(true);
+    const student = last.pool[0];
+
+    // the training run ends at a lap and a half
+    race.update(2000);
+    student.laps = 1;
+    student.nextCheckpoint = config.CHECKPOINTS / 2;
+    race.update(3000);
+    expect(last.distillRun).toBe(false);
+    expect(last.lastRoundWasTraining).toBe(true);
+
+    // the group respawns as a free pool measuring the trained brain
+    student.deathTime = 0;
+    race.update(config.DEAD_LIFETIME + 1);
+    expect(last.pool.length).toBe(config.CARS_PER_GROUP);
+
+    // that free pool wiping out does not start a new training session,
+    // even though the group is still last
+    wipePool(race, 5);
+    race.update(config.DEAD_LIFETIME + 2);
+    expect(last.distillRun).toBe(false);
+    expect(last.trainFrom).toBeNull();
+    expect(last.lastRoundWasTraining).toBe(false);
+
+    // the second free pool is the one the next pick judges
+    for (const car of last.pool) car.deathTime = 0;
+    race.update(2 * config.DEAD_LIFETIME + 3);
+    expect(last.pool.length).toBe(config.CARS_PER_GROUP);
+    expect(last.pool.every((car) => !car.damaged)).toBe(true);
+    wipePool(race, 5);
+    race.update(2 * config.DEAD_LIFETIME + 4);
+    expect(last.distillRun).toBe(true);
+    expect(last.trainFrom).toBe(1);
+  } finally {
+    env.restore();
+  }
+});
+
+test('a last group that finished the track is never retrained on it', () => {
   const store = new Map<string, string>();
   const env = stubCircuitEnv(store);
   try {
@@ -316,16 +385,13 @@ test('auto-train never retrains a group that finished the track', () => {
     const finished = trackGroup(race, 5);
     finished.scores.seed = 500;
     finished.ghostScore = 500;
-    finished.lapTimes['5:0'] = [1000, 1100];
     finished.scores.finished[String(race.seed)] = true;
 
-    const dead = wipePool(race, 4);
+    wipePool(race, 5);
     race.update(1000);
 
     expect(finished.distillRun).toBe(false);
     expect(finished.trainFrom).toBeNull();
-    expect(dead.distillRun).toBe(true);
-    expect(dead.trainFrom).toBe(1);
   } finally {
     env.restore();
   }

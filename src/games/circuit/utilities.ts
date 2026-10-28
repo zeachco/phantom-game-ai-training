@@ -24,6 +24,9 @@ export { brainId };
 export interface Group extends GroupBase<Car> {
   /** per-car lap completion times in simulation frames, one entry per lap */
   lapTimes: Record<string, number[]>;
+  /** true while the round that last ended was a training session, so the
+   *  following free run is never cut short by a new one */
+  lastRoundWasTraining?: boolean;
 }
 
 export const defaultState = {

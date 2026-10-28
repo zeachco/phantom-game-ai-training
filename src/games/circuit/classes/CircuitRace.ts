@@ -245,40 +245,37 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
     this.promote(group, car);
   }
 
-  /** Circuit's auto-training, when a group's whole pool is wiped out.
-   *  The student is the group with the lowest current track record — the
-   *  ghost the track board shows — and it only enters guide training once
-   *  one of its cars has completed two laps on this run: a line that never
-   *  drove the track has no track record to distill from. A group that
-   *  finished the required laps on this run is never retrained on it, and
-   *  a group already mid-run is left alone. The guide is the group with
-   *  the best current track record above the student's, so the student
-   *  learns from a brain that demonstrably drives this track, not from a
-   *  global leader that struggles with it. */
+  /** Circuit's "pick a trainee" moment, when a group's whole pool is wiped
+   *  out and is about to respawn. The dead group itself is the only possible
+   *  student: it trains only if it is the last group on the current track
+   *  board (no other group has a lower track record), no other group is
+   *  already in a training run, and the round that just ended was a free
+   *  run and not a training session. A group that finished the required
+   *  laps on this track is never retrained on it. The guide is the group
+   *  with the best current track record. */
   protected override autoTrainAfterGroupDeath(deadGroup: Group): void {
-    const twoLaps = (group: Group) =>
-      Object.values(group.lapTimes).some((laps) => laps.length >= 2);
-    const candidates = this.groups.filter(
-      (group) =>
-        !group.distillRun &&
-        group.scores.finished[String(this.seed)] !== true &&
-        twoLaps(group),
+    // the round that just ended is consumed either way: the next wipe is
+    // judged on the free run that follows
+    const trainedLastRound = deadGroup.lastRoundWasTraining;
+    deadGroup.lastRoundWasTraining = false;
+    if (deadGroup.distillRun || trainedLastRound) return;
+    if (deadGroup.scores.finished[String(this.seed)] === true) return;
+    if (this.groups.some((group) => group.distillRun)) return;
+    const isLast = this.groups.every(
+      (group) => group.ghostScore >= deadGroup.ghostScore,
     );
-    if (!candidates.length) return;
-    const lowest = Math.min(...candidates.map((group) => group.ghostScore));
-    const tied = candidates.filter((group) => group.ghostScore === lowest);
-    const student = tied.includes(deadGroup) ? deadGroup : tied[0];
+    if (!isLast) return;
     const guide = this.groups
       .filter(
         (group) =>
-          group !== student &&
-          group.ghostScore > student.ghostScore &&
+          group !== deadGroup &&
+          group.ghostScore > deadGroup.ghostScore &&
           this.teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
       )
       .sort((a, b) => b.ghostScore - a.ghostScore)[0];
     if (!guide) return;
     this.setTrainFrom(
-      student.isMixed ? 'mixed' : student.layer,
+      deadGroup.isMixed ? 'mixed' : deadGroup.layer,
       guide.isMixed ? 'mixed' : guide.layer,
       false,
     );
@@ -294,6 +291,9 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
       if (group) {
         const wasDistillRun = group.distillRun;
         if (wasDistillRun) {
+          // the round that just ended was a training session: the next
+          // respawn is a free run that measures the trained brain
+          group.lastRoundWasTraining = true;
           this.keepTrainedBrain(group);
           group.trainFrom = null;
           group.distillRun = false;
@@ -330,6 +330,8 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
   #regenerateMap() {
     // a new map ends the training run: the selection goes back to free
     // training so the next run measures the student itself
+    for (const group of this.groups)
+      if (group.distillRun) group.lastRoundWasTraining = true;
     this.endDistillRuns();
     history.replaceState(
       null,
