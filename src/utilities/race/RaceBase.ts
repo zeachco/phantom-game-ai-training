@@ -6,6 +6,7 @@ import {
   type ModelsByLayerCount,
   networkLevelSizes,
 } from '../../ai/utils';
+import { gameNow } from '../gameClock';
 import {
   brainKey,
   defaultGroupScores,
@@ -68,6 +69,9 @@ export interface RaceBaseOptions {
   onReset?: () => void;
 }
 
+/** A seed game that produces no winner restarts from seed 0 after this long. */
+export const SEED_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * The part of a racing game that is shared by every game: the brain group
  * bookkeeping, champion persistence, train-from runs, and the rebuild
@@ -82,6 +86,8 @@ export abstract class RaceBase<
   public seed: number;
   public readonly groups: TGroup[] = [];
   public seedChangeAt = 0;
+  /** the game clock the current seed started on (pause-aware) */
+  public seedStartedAt = 0;
 
   protected readonly state: TState;
   protected readonly io: ModelIo;
@@ -614,9 +620,18 @@ export abstract class RaceBase<
     );
   }
 
+  /**
+   * A seed that produced no winner within SEED_TIMEOUT_MS is stale: each
+   * game checks this in update() and regenerates from seed 0.
+   */
+  protected seedTimedOut(now: number): boolean {
+    return !this.seedChangeAt && now - this.seedStartedAt >= SEED_TIMEOUT_MS;
+  }
+
   /** Build the pools, field the world, and hand control back to the entry
    *  point's post-rebuild hook. Called from the game's initialize(). */
   protected initializeCore(): void {
+    this.seedStartedAt = gameNow();
     this.#buildPools();
     this.entities = this.groups.flatMap((group) => group.pool);
     this.spawnHuman();
@@ -631,6 +646,7 @@ export abstract class RaceBase<
    *  fresh seed scores, swap in the pools, and respawn the human. The game
    *  owns the world object itself and calls this from its regenerate step. */
   protected finishRegenerate(): void {
+    this.seedStartedAt = gameNow();
     this.#buildPools();
     for (const group of this.groups)
       saveScoresForGame(this.profile.game, group, group.scores);

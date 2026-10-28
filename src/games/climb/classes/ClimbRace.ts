@@ -347,6 +347,11 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
       this.seedChangeAt = now + config.SEED_CHANGE_MS;
     }
     if (this.seedChangeAt && now >= this.seedChangeAt) this.#advanceSeed();
+    else if (this.seedTimedOut(now)) {
+      // no winner within the seed's 10-minute limit: restart from seed 0
+      this.flushPendingSaves();
+      this.applyUserSeed(0);
+    }
     this.flushPendingSaves();
   }
 }
