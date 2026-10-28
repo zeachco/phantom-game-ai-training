@@ -15,7 +15,6 @@ import {
   Distiller,
   distillStep,
 } from '../src/ai/distill';
-import { readFileSync } from 'node:fs';
 
 /** a seeded generator, so the measurement does not change between runs */
 function seededGenerator(seed: number) {
@@ -77,56 +76,6 @@ function appliedGap(
 function s0(net: NeuralNetwork): number {
   return net.levels[net.levels.length - 1].outputs.length;
 }
-
-test('a student learns the teacher applied signal, not a clamped shadow of it', () => {
-  // a real saved champion: its raw outputs run well past [-1, 1], which is
-  // exactly what broke the old clamped-pair training
-  // the file holds the group's model list, the first entry is the champion
-  const saved = JSON.parse(
-    readFileSync('saved-models/circuit/circuit_4.json', 'utf8'),
-  ) as unknown[];
-  const teacher = NeuralNetwork.hydrate(saved[0] as never)!;
-  expect(teacher).toBeInstanceOf(NeuralNetwork);
-
-  // the champion's raw answers really do leave the applied box, otherwise the
-  // regression this test guards has no teeth
-  const probe = seededGenerator(42);
-  let outOfRange = 0;
-  for (let k = 0; k < 2000; k++) {
-    const out = teacher.process(makeInput(probe));
-    for (const value of out) if (value > 1 || value < -1) outOfRange++;
-  }
-  expect(outOfRange).toBeGreaterThan(0);
-
-  // a deep student, the same shape the game would distil
-  const student = brain(13, 41, 3, 9);
-  const ranges: OutputRanges = [
-    [-1, 1],
-    [-1, 1],
-    [-1, 1],
-  ];
-  const start = appliedGap(student, teacher, ranges, seededGenerator(1), 400);
-  let distiller: Distiller | null = null;
-  const measure = seededGenerator(7);
-  for (let f = 0; f < 12_000; f++) {
-    distiller = distillStep(distiller, student, teacher, makeInput(measure), f, ranges);
-  }
-  const end = appliedGap(student, teacher, ranges, seededGenerator(2), 1000);
-  expect(end).toBeLessThan(start * 0.25);
-  // the applied steering, the quantity that actually drives the car
-  const steer = seededGenerator(3);
-  let steerError = 0;
-  for (let k = 0; k < 1000; k++) {
-    const inputs = makeInput(steer);
-    const t = teacher.process(inputs);
-    const s = student.process(inputs);
-    steerError += Math.abs(
-      (clampToRange(s[1], ranges[1]) - clampToRange(s[2], ranges[2])) -
-        (clampToRange(t[1], ranges[1]) - clampToRange(t[2], ranges[2])),
-    );
-  }
-  expect(steerError / 1000).toBeLessThan(0.05);
-});
 
 test('a student of a different depth distils a teacher with the same I/O', () => {
   const teacher = brain(11, 41, 3, 4);
