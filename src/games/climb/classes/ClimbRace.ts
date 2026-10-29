@@ -147,6 +147,7 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
     return player;
   }
 
+  /** replace the human entity after a crash or a world rebuild */
   protected override respawnHuman(): void {
     if (this.state.human) {
       this.state.human.controls.dispose();
@@ -241,9 +242,7 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
       }
     }
     if (player === this.state.human) {
-      player.controls.dispose();
-      this.state.human = undefined;
-      this.spawnHuman();
+      this.respawnHuman();
       this.#onHumanCrash?.();
     }
     this.flushPendingSaves();

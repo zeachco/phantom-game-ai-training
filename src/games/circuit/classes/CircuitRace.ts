@@ -169,6 +169,7 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
     this.state.living++;
   }
 
+  /** replace the human entity after a crash or a world rebuild */
   protected override respawnHuman(): void {
     if (this.state.human) {
       this.state.human.controls.dispose();
@@ -314,10 +315,8 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
     }
     this.flushPendingSaves();
 
-    if (this.state.human && car === this.state.human) {
-      car.controls.dispose();
-      this.state.human = undefined;
-      this.spawnHuman();
+    if (car === this.state.human) {
+      this.respawnHuman();
       this.#onHumanCrash?.();
     }
     return deadGroup;
