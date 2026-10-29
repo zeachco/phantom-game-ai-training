@@ -56,7 +56,6 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
   public circuit: Circuit;
   public laps = 0;
 
-  #completedBrainIndices = new Set<string>();
   /** regular architecture groups that have finished this track once */
   #completedTrackGroups = new Set<string>();
   #completedFinishes = new Map<
@@ -340,7 +339,6 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
     );
     this.#onSeedChanged?.(this.seed);
     this.circuit = new Circuit(this.seed);
-    this.#completedBrainIndices.clear();
     this.#completedTrackGroups.clear();
     this.#completedFinishes.clear();
     this.#humanFinishCelebrated = false;
@@ -467,7 +465,6 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
             : car.brain instanceof MixedNetwork
               ? 'mixed'
               : String(car.brainLayers);
-        this.#completedBrainIndices.add(brainIndex);
         if (
           group &&
           !group.isMixed &&
