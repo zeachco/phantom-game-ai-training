@@ -411,7 +411,6 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
       }
       if (racing && car.finished && !car.damaged) {
         this.#recordFinishTiming(car);
-        const group = this.groupOf(car);
         if (group) {
           this.#settle(group, car);
           this.markFinished(group);
@@ -420,7 +419,6 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
       if (car.passedCheckpoint) {
         car.passedCheckpoint = false;
         savePoint = true;
-        const group = this.groupOf(car);
         if (group) {
           this.#settle(group, car);
           this.pendingSaves.add(group);
