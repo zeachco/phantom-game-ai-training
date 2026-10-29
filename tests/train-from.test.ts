@@ -740,7 +740,6 @@ test('a qualifying regular group takes the guide slot over the mixed group', () 
       teacher: null,
       hydratedTeacher: null,
       scores: { current: 0, total: 0, seed: 1000, phantom: 0, history: {}, finished: {} },
-      seedBest: null,
     };
     race.groups.push(mixed);
 
@@ -965,7 +964,6 @@ test('the mixed group pilots the run when no regular group qualifies', () => {
         history: { '999': 90000 },
         finished: {},
       },
-      seedBest: null,
     };
     race.groups.push(mixed);
 

@@ -129,7 +129,6 @@ test('a new seed best promotes the brain and marks the group finished', () => {
     fx.race.update(1000);
 
     expect(group.scores.seed).toBe(config.SEED_TARGET_FLOORS + 10);
-    expect(group.seedBest?.score).toBe(config.SEED_TARGET_FLOORS + 10);
     expect(group.best?.score).toBe(config.SEED_TARGET_FLOORS + 10);
     expect(group.scores.finished['0']).toBe(true);
     expect(fx.store.get(scoreKey(group))).toBeTruthy();

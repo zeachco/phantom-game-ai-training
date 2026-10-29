@@ -1,5 +1,4 @@
 import { MixedNetwork } from '../../ai/Mixed';
-import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   brainId,
@@ -26,11 +25,8 @@ export const loadScores = (group: Group, seed: number): GroupScores =>
 export const saveScores = (group: Group, scores?: GroupScores): void =>
   saveScoresForGame('climb', group, scores ?? group.scores);
 
-/** a training group: the shared group shape plus the climb's own fields */
-export interface Group extends GroupBase<Player> {
-  /** the brain that set the current tower's high score, kept for progress */
-  seedBest: { brain: NeuralNetwork; score: number } | null;
-}
+/** a training group: the shared group shape (climb adds no fields of its own) */
+export interface Group extends GroupBase<Player> {}
 
 /** the human driven player, exists while the game runs */
 export const defaultState = {

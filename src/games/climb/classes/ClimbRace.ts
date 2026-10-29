@@ -1,5 +1,4 @@
 import { MixedNetwork } from '../../../ai/Mixed';
-import type { NeuralNetwork } from '../../../ai/Network';
 import { type fileUtilities, PLAYER_COLOR } from '../../../ai/utils';
 import { layerColor, MIXED_COLOR } from '../../../utilities/ai/colors';
 import type { GroupBase } from '../../../utilities/groupScores';
@@ -165,7 +164,7 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
   }
 
   protected override createGroup(core: GroupBase<Player>): Group {
-    return { ...core, seedBest: null };
+    return { ...core };
   }
 
   // Climb pools never finish a world: promotion is live, and a held seed is
@@ -191,10 +190,6 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
     const score = player.brain?.score ?? 0;
     if (!player.useAI || score <= group.scores.seed) return;
     group.scores.seed = score;
-    group.seedBest = {
-      brain: JSON.parse(JSON.stringify(player.brain)) as NeuralNetwork,
-      score: player.brain.score,
-    };
     this.promote(group, player);
     if (group.scores.seed >= config.SEED_TARGET_FLOORS)
       this.markFinished(group);
@@ -241,12 +236,6 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
             );
           if (nextBest?.brain) {
             group.scores.seed = nextBest.brain.score;
-            group.seedBest = {
-              brain: JSON.parse(
-                JSON.stringify(nextBest.brain),
-              ) as NeuralNetwork,
-              score: nextBest.brain.score,
-            };
             group.ghostScore = player.brain?.score ?? 0;
             this.promote(group, nextBest);
           } else {
