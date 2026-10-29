@@ -3,7 +3,6 @@ import {
   brainId,
   brainKey,
   type GroupBase,
-  type GroupScores,
 } from '../../utilities/groupScores';
 import type { ScoreBoardRow } from '../../utilities/scoreBoard';
 import { scoreBoardRows as sharedScoreBoardRows } from '../../utilities/scoreBoard';
@@ -17,7 +16,6 @@ import type { Circuit } from './classes/Circuit';
 import { config } from './classes/Config';
 import type { Obstacle } from './classes/Obstacle';
 
-export type { GroupScores };
 export { brainId };
 
 /** a training group: the shared group shape plus the circuit's own fields */
