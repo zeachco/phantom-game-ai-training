@@ -22,8 +22,7 @@ import {
 import { createSidePanel } from '../../utilities/sidePanel';
 import {
   bestOnSeed,
-  globalRecordFromScores,
-  scoreRecordForGroup,
+  trainerPanelScores,
 } from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { readSeedFromHash, writeSeedToHash } from '../../utilities/urlSeed';
@@ -89,11 +88,7 @@ export default async (state: typeof defaultState) => {
       v === 'mixed'
         ? MIXED_COLOR
         : layerColor(v, config.MAX_NETWORK_LAYERS),
-    seedBest: (key) => scoreRecordForGroup('climb', key)?.seed ?? null,
-    globalBest: (key) => {
-      const record = scoreRecordForGroup('climb', key);
-      return record ? globalRecordFromScores(record).globalScore : null;
-    },
+    ...trainerPanelScores('climb'),
     resetLocal: resetBrainSaves,
     reinitialize: () => race.initialize(),
     groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],

@@ -80,6 +80,21 @@ export function scoreRecordForGroup(
   return record as ScoreRecord;
 }
 
+/** The trainer panel's score callbacks for one seed-scoring game, over its
+ *  persisted score records: the live seed best and the cross-seed global. */
+export function trainerPanelScores(game: string): {
+  seedBest: (groupKey: string) => number | null;
+  globalBest: (groupKey: string) => number | null;
+} {
+  return {
+    seedBest: (key) => scoreRecordForGroup(game, key)?.seed ?? null,
+    globalBest: (key) => {
+      const record = scoreRecordForGroup(game, key);
+      return record ? globalRecordFromScores(record).globalScore : null;
+    },
+  };
+}
+
 /**
  * The best plain `.score` among the saved models stored directly under a
  * group key (games without a seed record, i.e. highway, keep the brain saves

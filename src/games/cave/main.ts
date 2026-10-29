@@ -21,8 +21,7 @@ import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
 import {
   bestOnSeed,
-  globalRecordFromScores,
-  scoreRecordForGroup,
+  trainerPanelScores,
 } from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import type { Ball } from './classes/Ball';
@@ -166,11 +165,7 @@ export default async (state: CaveState) => {
       v === 'mixed'
         ? MIXED_COLOR
         : layerColor(v, config.MAX_NETWORK_LAYERS),
-    seedBest: (key) => scoreRecordForGroup('cave', key)?.seed ?? null,
-    globalBest: (key) => {
-      const record = scoreRecordForGroup('cave', key);
-      return record ? globalRecordFromScores(record).globalScore : null;
-    },
+    ...trainerPanelScores('cave'),
     resetLocal: resetBrainSaves,
     reinitialize: () => {
       race.initialize();

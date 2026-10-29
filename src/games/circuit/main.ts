@@ -28,10 +28,7 @@ import { createScoreBoard } from '../../utilities/scoreBoard';
 import type { GroupActionsOptions } from '../../utilities/groupActions';
 import { makeResetBrainSaves } from '../../utilities/resetBrainSaves';
 import { createSidePanel } from '../../utilities/sidePanel';
-import {
-  globalRecordFromScores,
-  scoreRecordForGroup,
-} from '../../utilities/scoreRecords';
+import { trainerPanelScores } from '../../utilities/scoreRecords';
 import { GameLoop } from '../../utilities/three/GameLoop';
 import { readSeedFromHash, writeSeedToHash } from '../../utilities/urlSeed';
 import type { Car } from './classes/Car';
@@ -146,11 +143,7 @@ export default async (state: typeof defaultState) => {
       v === 'mixed'
         ? MIXED_COLOR
         : layerColor(v, config.MAX_NETWORK_LAYERS),
-    seedBest: (key) => scoreRecordForGroup('circuit', key)?.seed ?? null,
-    globalBest: (key) => {
-      const record = scoreRecordForGroup('circuit', key);
-      return record ? globalRecordFromScores(record).globalScore : null;
-    },
+    ...trainerPanelScores('circuit'),
     resetLocal: resetBrainSaves,
     reinitialize: () => race?.initialize(),
     groups: [1, 2, 3, 4, 5, 6, 7, 8, 9, 'mixed'],
