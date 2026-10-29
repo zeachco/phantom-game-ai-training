@@ -406,12 +406,12 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
       }
       this.#recordCheckpointTiming(car);
       if (car.completedLap) this.#recordLapTiming(car);
-      if (racing && car.finished && !car.damaged) this.#recordFinishTiming(car);
       if (alive && car.damaged) {
         const deadGroup = this.#onDeath(car);
         if (deadGroup) deadGroups.add(deadGroup);
       }
       if (racing && car.finished && !car.damaged) {
+        this.#recordFinishTiming(car);
         const group = this.groupOf(car);
         if (group) {
           this.#settle(group, car);
