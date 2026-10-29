@@ -1,7 +1,7 @@
 # Circuit race timing
 
-Each car receives a 420-frame checkpoint budget, equivalent to seven seconds
-at the reference 60 FPS. The budget decrements once per simulation frame and
+Each car receives a 220-frame checkpoint budget (about 3.7 s at the
+reference 60 FPS). The budget decrements once per simulation frame and
 resets when the car claims its next in-order checkpoint; reaching zero damages
 the car through the normal crash path.
 

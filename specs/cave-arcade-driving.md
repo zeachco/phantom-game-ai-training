@@ -1,200 +1,134 @@
 # Cave arcade driving (Monkey Ball style)
 
-Status: ball physics implemented. 28/28 tests green (`bun test`). The ball has
-no button-triggered jump or airtime timer: valleys, gravity and carried velocity
-launch it naturally. Every number below is a `Config.ts` knob, listed with its
-role so tuning is a lookup, not an archaeology dig.
+The cave is a tube and the player is a single rolling sphere, not a car:
+no suspension, engine or tire model. The ball is a point of radius
+`BALL_RADIUS` resolved against the same analytic surface the mesh renders
+(`Cave.nearestRadial`), so what the ball hits is exactly what is drawn.
+Gravity pulls it down the slopes, and rolling drag is low enough that
+valley momentum carries it into climbs and launches. Orientation is purely
+visual — the quaternion spins as rolling; physics never reads it.
 
-## The shape of the game
+Every number below is a knob name; the values live in
+`classes/Config.ts`, which is the only file tuning touches.
 
-The `2026-10-08` pass replaced the four-wheel raycast chassis (and the whole
-car class) with a single rolling sphere, the Monkey Ball model:
+## Controls: two analog axes + jump
 
-- The cave is a tube. The ball is a point of radius `BALL_RADIUS` that is
-  resolved against the same analytic surface the mesh renders
-  (`Cave.nearestRadial`), so what the ball hits is exactly what is drawn.
-- Gravity (`BALL_GRAVITY`) pulls it down the slopes; it settles on the floor
-  band and rolls. There is no suspension, no engine and no tire model.
-- Motion preserves momentum: `BALL_ROLL_DRAG = 0.999` on the ground and
-  `BALL_AIR_DRAG = 0.9999` in flight let the ball carry valley speed into its
-  climb and launch naturally.
-- Orientation is purely visual. `Ball.quat` spins by `omega = (n x v) / r`
-  (`n` the inward contact normal), so the sphere reads as rolling. Physics
-  never reads the quaternion.
+The brain writes exactly three outputs: `moveX` (camera-right), `moveY`
+(forward along the cave) in [-1, 1], and `jump`.
 
-## Controls: two analog axes
-
-`Controls` has exactly two outputs, `moveX` (right) and `moveY` (forward),
-both in `[-1, 1]` - a GameCube stick. There is no jump button or airtime
-state.
-
-- Human: WASD / arrows contribute +/-1 per axis; opposite keys cancel; the
-  left stick (axes 0 and 1) drives with a deadzone. The two sources sum and
-  clamp.
-- AI: the brain writes `moveX`/`moveY` directly, so the network has two output
-  channels (`Object.keys(controls)` derives the count).
+- Human: WASD / arrows and the gamepad left stick (deadzone 0.12) drive the
+  two axes; Space or the primary button jumps.
+- A jump fires from a grounded contact within 55° of vertical, or inside a
+  short coyote window after leaving one; a wasted AI jump hold drains a
+  little of the section gauge.
 - The speed cap is horizontal only, preserving vertical launch velocity.
-- The stick vector is normalized in `Ball.#move`, so diagonals are not faster
-  than the axes.
-- `moveY` is forward along the track, `moveX` is the camera-right direction:
-  `right = forward x worldUp`, where forward is the horizontal part of the cave
-  tangent (falling back to the velocity when the tangent is near vertical).
+- The axes live in the cave frame: forward is the horizontal part of the
+  tangent, right is `forward x worldUp`.
 
 ## Ball physics (`Ball.ts`)
 
-Per frame, `PHYSICS_SUBSTEPS` substeps of:
+Per frame, a few velocity-bounded substeps of: gravity plus stick
+acceleration, the running coin boost along the tangent, speed cap,
+integration, then contact — push-out against the analytic tube mesh, then
+against any wall slab as a solid box (surface overlap, pushed through the
+nearest face). Slow contacts settle, hard ones bounce and scrub
+tangential speed. A near head-on wall hit above `BALL_CRASH_SPEED` is
+fatal, and the death penalty also bills the current speed, so dying fast
+costs more. Rolling drag and the visual roll close the step.
 
-1. `#refreshFrame`: tangent (forward), tube normal (up) and binormal (right)
-   from `Cave.frame`. The sensor fan lives in this plane.
-2. Gravity plus `BALL_ACCEL` along the stick direction.
-3. A running boost pushes along the cave tangent up to the lifted cap.
-4. Speed cap, integration, and `s` advance along the tangent.
-5. `Cave.nearestRadial` contact: push out by `radius + hit.dist`, then split
-   the normal velocity. Slow contacts settle (`BALL_BOUNCE_SPEED`), hard ones
-   bounce (`BALL_RESTITUTION`) and scrub tangential speed
-   (`BALL_WALL_SCRUB`). A near head-on hit above `BALL_CRASH_SPEED` is fatal.
-6. Rolling drag, then the visual roll.
-
-Key knobs: `BALL_MAX_SPEED 6` (a boost item is the only way past it),
-`BALL_RADIUS 1.4`, `BALL_ACCEL 0.17`, `BALL_GRAVITY 0.085`,
-`BALL_ROLL_DRAG 0.999`, `BALL_AIR_DRAG 0.9999`,
-`BALL_RESTITUTION 0.42`, `BALL_WALL_SCRUB 0.85`, `BALL_CRASH_SPEED 8`.
+Key knobs: `BALL_MAX_SPEED`, `BALL_RADIUS`, `BALL_ACCEL`, `BALL_GRAVITY`,
+`BALL_ROLL_DRAG`, `BALL_AIR_DRAG`, `BALL_RESTITUTION`,
+`BALL_BOUNCE_SPEED`, `BALL_WALL_SCRUB`, `BALL_CRASH_SPEED`,
+`BALL_HIT_COOLDOWN_FRAMES`, `BALL_JUMP_SPEED`, `BALL_STALL_SPEED`.
 
 ## Depth: variation compounds as you go deeper
 
 Feature cells are drawn once per seed, then scaled by a depth factor
-(`Cave.depthAt(s)`: 0 at the mouth, 1 over `CAVE_DEPTH_RAMP = 2600`). Depth
-never adds RNG draws, so every seed keeps the same feature layout and only
-its intensity grows:
+(`Cave.depthAt(s)`: 0 at the mouth, 1 over `CAVE_DEPTH_RAMP`). Depth never
+adds RNG draws, so every seed keeps the same feature layout and only its
+intensity grows:
 
-- columns and walls get taller (`CAVE_DEPTH_HEIGHT`), wider, and more likely
-  (`CAVE_DEPTH_CHANCE`); columns pair up more often and more of them land
-  inside the driving band;
-- the easy road lane fades out (`CAVE_ROAD_CHANCE * (1 - 0.35 * depth)`);
-- volatility is multiplied by `1 + 0.4 * depth` (capped 1.6), which in turn
-  raises the jump-ramp odds and the path check's forced ramps;
-- walls do not exist at all below `depth 0.15`, so the mouth stays an easy
-  runway and the obstacles arrive with the rest of the compounding.
+- columns and walls get taller, wider, and more likely; more of them land
+  inside the driving band, and columns pair up more often;
+- the easy road lane fades out with depth;
+- terrain amplitude and volatility grow (volatility capped), raising the
+  jump-ramp odds and the path check's forced ramps;
+- walls do not exist at all near the mouth, so it stays an easy runway and
+  the obstacles arrive with the rest of the compounding.
 
 ## Walls: vertical band obstacles
 
-Each feature cell can carry a vertical wall across the driving band:
+Each feature cell can carry a vertical wall across the driving band, with a
+length of a fraction of the section and a Gaussian falloff across the band.
+The wall is a solid slab, not a floor alteration: a pre-integration swept
+check handles the front face, then after the tube contact the ball is
+resolved against the slab and pushed out through the nearest of its front,
+back, side and top faces. `Cave.wallRayDistance` lets the chase camera pull
+in front of a slab so it can never sit inside one.
 
-- `CAVE_WALL_CHANCE` per cell; the wall's length along the cave is a fraction
-  of `CAVE_SEGMENT_LENGTH` between `CAVE_WALL_MIN_FRACTION` (1/8) and
-  `CAVE_WALL_MAX_FRACTION` (1/3), so it takes 30-80 of the section's 240 units.
-- Height `CAVE_WALL_MIN..CAVE_WALL_MAX` (generator units, world Y = x0.5),
-  with a Gaussian falloff over `CAVE_WALL_ANGLE` so it spans the band. The
-  raised top is an explicit mesh over the same 1/8..1/3-section interval as
-  its collision surface; both end faces are vertical. Walls no longer alter
-  the analytic cave floor, which previously caused stray collisions behind
-  the visible doorway.
-- `Cave.wallAt` returns the front, back, top and lateral bounds from the same
-  numbers the slab mesh uses. A pre-integration swept check handles the front
-  face; after the tube contact the ball is resolved against the slab as a
-  solid box (surface overlap, not center overlap) and pushed out through the
-  nearest face among front, back, side and top. `Cave.wallSurfaceAt` is shared
-  by the top mesh and the landing collision. `Cave.wallRayDistance` lets the
-  chase camera pull in front of a slab so the camera cannot sit inside it.
-  Valley momentum, not a jump button, launches the ball over obstacles.
+## Coins
 
-## Boost items
-
-Boost pads are the trigger and the glowing items are their face:
-
-- `Cave.boostAt(s, a)` still defines the pad influence. Rolling over it starts
-  `BOOST_DURATION = 90` frames of `BOOST_ACCEL = 0.32` along the tangent, which
-  lifts the top speed by `BOOST_SPEED_BONUS = 4` fading linearly over the
-  timer. Overlapping items refresh, never stack. The first AI collection pays
-  `BOOST_SCORE = 2`.
-- `Cave.#buildChunk` floats a spinning `IcosahedronGeometry` orb
-  (`CAVE_BOOST_ITEM_RADIUS`, `CAVE_BOOST_ITEM_COLOR`) above each pad, streamed
-  and disposed with its chunk. `Cave.update` spins the orbs. `boostItemCount()`
-  reports how many are meshed.
+Coins are the cave's collectibles: short runs of small spinning discs
+floated above the road, streamed and disposed with their chunk. Rolling
+over one pays a score plus a boost reward, starts a timed boost along the
+cave tangent (overlapping pickups refresh, never stack), and banks a small
+permanent top-speed bonus up to a cap. Each coin is collected at most once
+per run. Knobs: `COIN_SCORE`, `COIN_BOOST_REWARD`, `COIN_BOOST_ACCEL`,
+`COIN_BOOST_DURATION`, `COIN_SPEED_BONUS`, `COIN_PERMANENT_BONUS`,
+`COIN_PERMANENT_CAP`, `CAVE_COIN_CHANCE`, `CAVE_COIN_MIN/MAX`,
+`CAVE_COIN_SPACING`.
 
 ## Gates, score and liveness
 
-Unchanged from the car version and ported into `Ball`:
-
 - Gates are rings across the tube at `GATE_SPACING`; crossing them in order
-  pays `GATE_SCORE`, a speed bonus, and `FINISH_BONUS` on the last one.
-  Out-of-order entries pay `WRONG_GATE_PENALTY`.
-- Forward section progress pays `SECTION_SCORE / position`: the leader banks
-  the full `SECTION_SCORE`, 2nd half as much, and so on. The same pass
-  refreshes the section gauge to `SECTION_BUDGET_FRAMES`.
-- A hard side impact that bounces the ball back off a rock bank or bronze slab
-  pays `OBSTACLE_HIT_SCORE` (cooldown `BALL_HIT_COOLDOWN_FRAMES`), and floor
-  landings do not count.
-- Every frame, race position pays `POSITION_SCORE_SCALE / position`: 1st earns
-  slightly more each frame than 2nd, and so on.
-- The section gauge drains one frame per simulation step. Running it out
-  retires the ball as a `gauge` death, as does staying under `BALL_STALL_SPEED`
-  for the same budget (`stall`), or a hard hit (`crash`).
+  pays `GATE_SCORE` plus a speed bonus, and the last gate pays
+  `FINISH_BONUS`. Out-of-order entries pay `WRONG_GATE_PENALTY`.
+- Forward section progress pays `SECTION_SCORE / position`: the leader
+  banks the full amount, 2nd half as much, and so on. Every frame, race
+  position pays `POSITION_SCORE_SCALE / position`.
+- A hard hit off a rock bank or wall slab pays `OBSTACLE_HIT_SCORE` (on
+  cooldown) and drains some gauge; floor landings do not count.
+- The section gauge drains every simulation step. Running it out retires
+  the ball as a `gauge` death, as does staying under `BALL_STALL_SPEED`
+  for the same budget (`stall`), or a fatal hit (`crash`).
 
 ## Training
 
-`CaveRace` is the cave twin of the circuit's `CircuitRace` and owns the
-non-visual run:
+`CaveRace` is the cave twin of the shared `RaceBase` pools: one group per
+brain layer plus an optional mixed group, each a pool of `CARS_PER_GROUP`
+balls spawning from the saved champion. Slot 0 clones the group's best;
+the other slots mutate with an annealed ladder, plus an explorer slot
+while the group has banked few gates and a scout slot that re-runs the
+group's oldest hall-of-fame line, so a population never fully converges.
+Every death settles the ball: a new group high promotes to `best` and the
+hall of fame and persists; gauge deaths mark the group dirty, so a run
+that exhausted its budget still saves the brain the next spawn mutates
+from. Three distinct brain categories finishing the seed starts a short
+countdown to the next seed. Saves live under the `cave_` prefix.
 
-- One group per brain layer (1..`MAX_NETWORK_LAYERS`) plus an optional mixed
-  group, each a pool of `CARS_PER_GROUP` balls. Groups spawn from their saved
-  champion, mutated per slot (`MAX_MUTATION_LVL` annealed to `MIN_MUTATION_LVL`
-  over `MUTATION_LAP_DECAY` seeds), with explorer, scout and
-  `FINISHED_SWARM_DIVISOR` slots as in the car game.
-- Every death settles the ball: a new group high promotes its brain to the
-  group's `best` and the hall of fame, and persists it. Gauge deaths always
-  mark the group dirty, so a run that exhausted its budget still saves the
-  brain that the next spawn mutates from.
-- Claiming every gate marks the group finished (`mutationOnly` for the seed);
-  once three categories finish, the cave advances to the next seed after a
-  short countdown.
-- Saves live under the `cave_` prefix (`cave_<layer>`, `cave_<kind>_<layer>`)
-  through `fileUtilities('cave')`; race records use `cave_score_<layer>`.
+## Camera and sensors
 
-## Camera
+The chase camera follows the best-scoring ball of the followed category
+(anti-flicker hysteresis included). Any driving input keeps it on the human
+ball; a human crash falls back to the best-scoring living ball. While an AI
+ball is followed, `SensorViz` draws that ball's sensor fan: one ray line
+each (shortened to the hit) plus a translucent cone surface over the rim.
+Following the human hides it.
 
-The chase camera follows the ball with the best score by default. Once the
-player gives any driving input (keyboard or gamepad), it stays on the human
-ball; if the human crashes it falls back to the best-scoring living ball.
+## Brain inputs and outputs
 
-While an AI ball is followed, `SensorViz` draws that ball's sensors: one ray
-line each (shortened to the actual hit) plus a translucent cone surface over
-the rim endpoints. Following the human hides it.
+The sensor is a 9-ray cone (a center ray plus two concentric rings)
+opening 120° along a blend of the ball's movement direction and the
+direction to the gate a couple ahead, falling back to the cave tangent when
+nearly still, with a cosine-bell reach from axis to rim. Two extra rays
+stay world-up and world-down for the ceiling and the floor. Inputs, in
+order:
 
-## Brain inputs
+1. each ray's normalized reading
+2. each ray's surface class: -1 obstacle, +1 coin, 0 ground or miss
+3. normalized speed, forward velocity, lateral velocity, grounded
+4. feature block: airborne, on-platform, on-coin, platform-ahead,
+   coin-ahead, column-proximity, column-side, gate-delta, gate-heading,
+   gate-pitch
 
-The sensor is a 19-ray cone opening along the ball's movement direction (the
-cave tangent when it is nearly still): a center ray plus two concentric rings,
-with a cosine-bell reach from the axis to the rim. Two extra rays stay
-world-up and world-down in the tube normal for the floor and the ceiling.
-After the rays x2 history:
-
-1. normalized speed
-2. forward velocity component
-3. lateral velocity component
-4. grounded (1/0)
-
-then the feature block: airborne, on-platform, on-boost, platform-ahead,
-boost-ahead, column-proximity, column-side, gate-delta. Outputs: `moveX`,
-`moveY`, `jump`.
-
-## Files
-
-- `classes/Ball.ts` - sphere physics, gates, score, brain wiring.
-- `classes/Controls.ts` - two-axis stick (keyboard + gamepad + AI).
-- `classes/Cave.ts` - tube geometry, gates, boost pads and boost-item orbs.
-- `classes/ChaseCamera.ts` - follows the ball, frames `BALL_RADIUS`.
-- `classes/Sensor.ts` - the analytic forward cone; `SensorViz` draws it for
-  the followed AI.
-- `classes/CaveRace.ts` - training pools, mutation, promotion, seed
-  progression and `cave_` persistence.
-- `main.ts` - rendering, HUD, stick display.
-
-## Playtest checklist
-
-1. Roll from spawn: the ball settles on the band and accelerates smoothly.
-2. Stick right: moves camera-right; stick back: brakes then reverses.
-3. Boost item: a visible punch past `BALL_MAX_SPEED`, fading in ~1.5 s.
-4. Bounce off a bank at speed: springs back, not a dead stop.
-5. Weave section: one clear gap, always passable.
-6. If anything feels off: `Config.ts` is the only file to touch.
+Outputs: `moveX`, `moveY`, `jump`.
