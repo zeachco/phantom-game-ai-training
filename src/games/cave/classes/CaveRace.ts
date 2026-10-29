@@ -185,7 +185,7 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
   }
 
   protected override createGroup(core: GroupBase<Ball>): Group {
-    return { ...core, seedBest: null, gateTimes: {} };
+    return { ...core, gateTimes: {} };
   }
 
   protected override poolFinished(group: Group): boolean {
@@ -228,10 +228,6 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
     if (group.distillRun) return;
     if (!ball.useAI || ball.brain.score <= group.scores.seed) return;
     group.scores.seed = ball.brain.score;
-    group.seedBest = {
-      brain: JSON.parse(JSON.stringify(ball.brain)) as typeof ball.brain,
-      score: ball.brain.score,
-    };
     this.promote(group, ball);
   }
 

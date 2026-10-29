@@ -1,4 +1,3 @@
-import type { NeuralNetwork } from '../../ai/Network';
 import type { ModelsByLayerCount } from '../../ai/utils';
 import {
   brainId,
@@ -18,8 +17,6 @@ export { brainId };
 
 /** a training group: the shared group shape plus the cave's own fields */
 export interface Group extends GroupBase<Ball> {
-  /** the brain that set the current cave's high score, kept for progress */
-  seedBest: { brain: NeuralNetwork; score: number } | null;
   /** per-car gate completion times in simulation frames, one entry per gate */
   gateTimes: Record<string, number[]>;
 }
