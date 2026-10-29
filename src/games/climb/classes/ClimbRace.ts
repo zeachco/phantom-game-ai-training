@@ -196,6 +196,20 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
       this.markFinished(group);
   }
 
+  /** the best surviving climber after the record holder dies, or null */
+  #bestSurvivingChampion(group: Group, dead: Player): Player | null {
+    return group.pool
+      .filter((candidate) => candidate !== dead && !candidate.damaged)
+      .reduce<Player | null>(
+        (best, candidate) =>
+          !best ||
+          (candidate.brain?.score ?? 0) > (best.brain?.score ?? 0)
+            ? candidate
+            : best,
+        null,
+      );
+  }
+
   #onDeath(player: Player): Group | null {
     this.state.living--;
     let deadGroup: Group | null = null;
@@ -220,23 +234,12 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
           // The record holder has left the live race. Promote the best
           // remaining climber as the group's new active champion so the next
           // generation and the local save follow the surviving line.
-          const nextBest = group.pool
-            .filter((candidate) => candidate !== player && !candidate.damaged)
-            .reduce<Player | null>(
-              (best, candidate) =>
-                !best ||
-                (candidate.brain?.score ?? 0) > (best.brain?.score ?? 0)
-                  ? candidate
-                  : best,
-              null,
-            );
+          const nextBest = this.#bestSurvivingChampion(group, player);
           if (nextBest?.brain) {
             group.scores.seed = nextBest.brain.score;
-            group.ghostScore = player.brain?.score ?? 0;
             this.promote(group, nextBest);
-          } else {
-            group.ghostScore = player.brain?.score ?? 0;
           }
+          group.ghostScore = player.brain?.score ?? 0;
           this.pendingSaves.add(group);
         }
       }
