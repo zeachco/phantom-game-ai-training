@@ -364,7 +364,6 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
       }
       if (racing && ball.finished && !ball.damaged) {
         this.#recordFinishTiming(ball);
-        const group = this.groupOf(ball);
         if (group) {
           this.#settle(group, ball);
           this.markFinished(group);
@@ -374,7 +373,6 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
         ball.passedGate = false;
         savePoint = true;
         this.#recordGateTiming(ball);
-        const group = this.groupOf(ball);
         if (group) {
           this.pendingSaves.add(group);
           if (!group.gateTimes[ball.label]) group.gateTimes[ball.label] = [];
