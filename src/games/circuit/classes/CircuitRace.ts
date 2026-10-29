@@ -479,14 +479,14 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
           });
         }
         // The human's first completed map is a win only when no AI had
-        // already finished. Keep this separate from the three-finisher map
-        // advance rule so the celebration is emitted exactly once.
+        // already finished. The human's own entry was just recorded above,
+        // so a single entry is exactly "nobody else finished". Keep this
+        // separate from the three-finisher map advance rule so the
+        // celebration is emitted exactly once.
         if (
           car === this.state.human &&
           !this.#humanFinishCelebrated &&
-          !Array.from(this.#completedFinishes.keys()).some(
-            (key) => key !== 'human',
-          )
+          this.#completedFinishes.size === 1
         ) {
           this.#humanFinishCelebrated = true;
           this.#onHumanFinish?.();
