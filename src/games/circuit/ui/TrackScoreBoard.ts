@@ -96,6 +96,9 @@ export class TrackScoreBoard {
   update(currentSeed: number) {
     const rows = globalRows(this.#groups, currentSeed);
     const totalDone = rows.reduce((sum, row) => sum + row.done, 0);
+    // why: rebuild a renderKey every update and skip the DOM when it is unchanged —
+    // guards per-frame DOM churn on a 10-group board; the recompute on a skipped
+    // pass is 10 groups × small history, not worth a second cache.
     const renderKey = rows
       .map(({ group, saved, current, total, done }) =>
         [group.key, saved, current, total, done, group.pool[0]?.color].join(

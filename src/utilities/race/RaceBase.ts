@@ -289,6 +289,7 @@ export abstract class RaceBase<
   }
 
   #spawnSlots(group: TGroup): number[] {
+    // why: distillRun is the spawn contract shared by every pool-rebuild site (setTrainFrom, respawn, endDistillRuns) — one flag, no per-call re-derivation.
     // a teacher-driven run needs a single student, nothing more
     if (group.distillRun) return [0];
     return Array.from(
@@ -301,6 +302,9 @@ export abstract class RaceBase<
     // a teacher-driven run is disqualified: it would only save the teacher's
     // behavior under the student's name
     if (group.distillRun) return;
+    // why: deep-clone on purpose — the entity keeps mutating its own brain mid-race
+    // (climb's live promotion saves between steps), and the saved champion is the
+    // save + next-generation parent, so it must not follow later mutations.
     const brain = JSON.parse(JSON.stringify(entity.brain)) as NeuralNetwork;
     group.best = { brain, score: entity.brain.score };
     this.pendingSaves.add(group);

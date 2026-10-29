@@ -321,6 +321,8 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
       minS = Math.min(minS, ball.s);
       maxS = Math.max(maxS, ball.s);
     }
+    // why: reachable — pools wait out DEAD_LIFETIME before respawning, so the
+    // live min can be absent here.
     if (!Number.isFinite(minS)) {
       minS = 0;
       maxS = 0;
