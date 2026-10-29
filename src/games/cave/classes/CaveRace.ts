@@ -358,13 +358,12 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
       ball.teacher = group?.teacher ?? null;
       ball.distillRun = group?.distillRun ?? false;
       ball.update(this.cave);
-      if (racing && ball.finished && !ball.damaged)
-        this.#recordFinishTiming(ball);
       if (alive && ball.damaged) {
         const deadGroup = this.#onDeath(ball);
         if (deadGroup) deadGroups.add(deadGroup);
       }
       if (racing && ball.finished && !ball.damaged) {
+        this.#recordFinishTiming(ball);
         const group = this.groupOf(ball);
         if (group) {
           this.#settle(group, ball);
