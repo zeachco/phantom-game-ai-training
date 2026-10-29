@@ -55,7 +55,7 @@ export interface SidePanelOptions {
    * the game's own follow state; the panel applies the target (button class,
    * canvas color, group actions) first, then calls this
    */
-  onFollow?: (value: FollowValue, origin: 'button' | 'key' | 'program') => void;
+  onFollow?: (value: FollowValue, origin: 'button' | 'key') => void;
 }
 
 export interface SidePanel {
@@ -65,9 +65,6 @@ export interface SidePanel {
   isOpen(): boolean;
   /** the width the open panel takes out of the viewport */
   panelWidth(): number;
-  /** point the panel at a follow target; the game does its part in onFollow */
-  setFollow(value: FollowValue): void;
-  follow(): FollowValue;
   /** paint the running/dead button states; 'all' runs whenever anyAlive */
   setRunning(running: Set<string>, anyAlive: boolean): void;
   /** the 4:3 brain preview, resized to fit its wrapper */
@@ -191,7 +188,6 @@ export function createSidePanel(options: SidePanelOptions): SidePanel {
   bindSidePanelToggle(() => setOpen(!open));
 
   // ---- follow
-  let follow: FollowValue = initialFollow;
   const paint = (value: FollowValue) => {
     buttons.forEach((info, btn) => {
       btn.classList.toggle('active', info.key === String(value));
@@ -203,9 +199,8 @@ export function createSidePanel(options: SidePanelOptions): SidePanel {
   };
   const applyFollow = (
     value: FollowValue,
-    origin: 'button' | 'key' | 'program',
+    origin: 'button' | 'key',
   ) => {
-    follow = value;
     paint(value);
     onFollow?.(value, origin);
   };
@@ -224,8 +219,6 @@ export function createSidePanel(options: SidePanelOptions): SidePanel {
     isOpen: () => open,
     panelWidth: () =>
       Math.round(Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH)),
-    setFollow: (value: FollowValue) => applyFollow(value, 'program'),
-    follow: () => follow,
     setRunning(running, anyAlive) {
       buttons.forEach((info, btn) => {
         const isRunning = info.key === '0' ? anyAlive : running.has(info.key);
