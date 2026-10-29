@@ -10,7 +10,7 @@ import {
   slotMutation,
   slotSource,
 } from '../../../utilities/race/slotPolicy';
-import { saveTrainFrom, studentLabel } from '../../../utilities/trainFrom';
+import { studentLabel } from '../../../utilities/trainFrom';
 import { ControlType } from '../../../utilities/types';
 import { brainId, defaultState, type Group } from '../utilities';
 import { config } from './Config';
@@ -203,12 +203,7 @@ export class ClimbRace extends RaceBase<Player, typeof defaultState, Group> {
       const group = this.groupOf(player);
       if (group) {
         const wasDistillRun = group.distillRun;
-        if (wasDistillRun) {
-          this.keepTrainedBrain(group);
-          group.trainFrom = null;
-          group.distillRun = false;
-          saveTrainFrom('climb', group.isMixed ? 'mixed' : group.layer, null);
-        }
+        if (wasDistillRun) this.endDistillRun(group);
         if (!wasDistillRun) this.#settle(group, player);
         if (
           !wasDistillRun &&

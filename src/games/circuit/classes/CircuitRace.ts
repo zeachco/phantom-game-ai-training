@@ -10,7 +10,7 @@ import {
   slotMutation,
   slotSource,
 } from '../../../utilities/race/slotPolicy';
-import { saveTrainFrom, studentLabel } from '../../../utilities/trainFrom';
+import { studentLabel } from '../../../utilities/trainFrom';
 import { ControlType } from '../../../utilities/types';
 import { brainId, defaultState, type Group } from '../utilities';
 import { Car, getCircuitBrainDimensions } from './Car';
@@ -293,10 +293,7 @@ export class CircuitRace extends RaceBase<Car, typeof defaultState, Group> {
           // the round that just ended was a training session: the next
           // respawn is a free run that measures the trained brain
           group.lastRoundWasTraining = true;
-          this.keepTrainedBrain(group);
-          group.trainFrom = null;
-          group.distillRun = false;
-          saveTrainFrom('circuit', group.isMixed ? 'mixed' : group.layer, null);
+          this.endDistillRun(group);
         }
         if (!wasDistillRun) this.#settle(group, car);
         if (

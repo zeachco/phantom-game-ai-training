@@ -422,21 +422,26 @@ export abstract class RaceBase<
   }
 
   /**
-   * The end of a run: every distillation selection goes back to free training
-   * and its disqualification flag is dropped, together with the persisted
-   * choice so a reload starts from a clean, measurable run.
+   * End one group's distillation run at a trainee death: keep the trained
+   * brain, free the selection and drop its disqualification flag, together
+   * with the persisted choice so a reload starts from a clean, measurable run.
    */
+  protected endDistillRun(group: TGroup): void {
+    this.keepTrainedBrain(group);
+    group.trainFrom = null;
+    group.distillRun = false;
+    saveTrainFrom(
+      this.profile.game,
+      group.isMixed ? 'mixed' : group.layer,
+      null,
+    );
+  }
+
+  /** End every distillation run: all selections go back to free training. */
   protected endDistillRuns(): void {
     for (const group of this.groups) {
       if (group.trainFrom === null && !group.distillRun) continue;
-      this.keepTrainedBrain(group);
-      group.trainFrom = null;
-      group.distillRun = false;
-      saveTrainFrom(
-        this.profile.game,
-        group.isMixed ? 'mixed' : group.layer,
-        null,
-      );
+      this.endDistillRun(group);
     }
   }
 

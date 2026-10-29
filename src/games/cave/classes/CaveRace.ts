@@ -11,7 +11,7 @@ import {
   slotMutation,
   slotSource,
 } from '../../../utilities/race/slotPolicy';
-import { saveTrainFrom, studentLabel } from '../../../utilities/trainFrom';
+import { studentLabel } from '../../../utilities/trainFrom';
 import { ControlType } from '../../../utilities/types';
 import { brainId, defaultState, type Group } from '../utilities';
 import { Ball, getCaveBrainDimensions } from './Ball';
@@ -240,12 +240,7 @@ export class CaveRace extends RaceBase<Ball, typeof defaultState, Group> {
       const group = this.groupOf(ball);
       if (group) {
         const wasDistillRun = group.distillRun;
-        if (wasDistillRun) {
-          this.keepTrainedBrain(group);
-          group.trainFrom = null;
-          group.distillRun = false;
-          saveTrainFrom('cave', group.isMixed ? 'mixed' : group.layer, null);
-        }
+        if (wasDistillRun) this.endDistillRun(group);
         // A gauge death is the ball's natural end of run: promote its brain
         // when it is the group's best so the next spawn mutates from it.
         if (!wasDistillRun) this.#settle(group, ball);
