@@ -1,4 +1,5 @@
 import { isSameObject } from '../utilities/object';
+import { readJson } from '../utilities/storage';
 import { DEFAULT_KIND, type NeuralNetwork } from './Network';
 
 /** Utility for colors for controllers */
@@ -182,12 +183,7 @@ export function fileUtilities(
       if (!key.startsWith(`${game}_`)) continue;
       const raw = localStorage.getItem(key);
       if (!raw) continue;
-      let models: unknown;
-      try {
-        models = JSON.parse(raw);
-      } catch {
-        continue;
-      }
+      const models = readJson<unknown>(key, null);
       if (!isSavedModelList(models)) continue;
       const compact = JSON.stringify(models.map(compactModel));
       if (compact.length >= raw.length) continue;
