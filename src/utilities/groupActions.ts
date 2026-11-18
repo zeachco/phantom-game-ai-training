@@ -27,10 +27,7 @@ function groupKeyFor(game: string, value: number | 'mixed'): string {
 }
 
 /** A sync timestamp as a short relative age, or 'never' when absent. */
-function relativeTime(
-  ts: number | null,
-  now: number = Date.now(),
-): string {
+function relativeTime(ts: number | null, now: number = Date.now()): string {
   if (ts === null) return 'never';
   const s = Math.max(0, Math.round((now - ts) / 1000));
   if (s < 60) return `${s}s ago`;
@@ -154,61 +151,102 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
   deleteBtn.classList.add('group-panel-btn-danger');
   el.appendChild(actions);
 
-  const readouts = document.createElement('div');
-  readouts.className = 'group-panel-readouts';
-  const mkRow = (text: string) => {
-    const row = document.createElement('div');
-    row.className = 'group-panel-row';
-    const name = document.createElement('span');
-    name.className = 'group-panel-name';
-    name.textContent = text;
-    const val = document.createElement('span');
-    val.className = 'group-panel-value';
-    row.appendChild(name);
-    row.appendChild(val);
-    readouts.appendChild(row);
-    return val;
-  };
-  // the distillation control: which other group's champion brain drives this
-  // group while its own brains backpropagate toward it
-  const trainRow = document.createElement('div');
-  trainRow.className = 'group-panel-row';
-  const trainName = document.createElement('span');
-  trainName.className = 'group-panel-name';
-  trainName.textContent = 'train from';
-  const trainSelect = document.createElement('select');
-  trainSelect.className = 'group-panel-select';
-  trainRow.appendChild(trainName);
-  trainRow.appendChild(trainSelect);
-  // in the "all" view the train-from control has no single group to point at:
-  // the same row is recycled to name the group the visualizer is showing
-  const shownVal = document.createElement('span');
-  shownVal.className = 'group-panel-value';
-  shownVal.hidden = true;
-  trainRow.appendChild(shownVal);
-  readouts.appendChild(trainRow);
-  const teacherVal = mkRow('teacher');
-  const teacherRow = teacherVal.parentElement as HTMLElement;
-  const seedVal = mkRow('seed best');
-  const globalVal = mkRow('global');
-  const remoteVal = mkRow('remote');
-  const syncVal = mkRow('last sync');
-  // the live loss of the followed student's distiller, where the old
-  // "learn per step" slider row used to be: it shows only while training
-  const lossRow = document.createElement('div');
-  lossRow.className = 'group-panel-row group-panel-loss-row';
-  lossRow.hidden = true;
-  const lossName = document.createElement('span');
-  lossName.className = 'group-panel-name';
-  lossName.textContent = 'loss';
-  const lossCanvas = document.createElement('canvas');
-  lossCanvas.className = 'group-panel-loss';
-  const lossCtx = lossCanvas.getContext('2d');
-  const lossVal = document.createElement('span');
-  lossVal.className = 'group-panel-value';
-  lossRow.append(lossName, lossCanvas, lossVal);
-  readouts.appendChild(lossRow);
-  el.appendChild(readouts);
+  /**
+   * The readout rows below the buttons: the train-from select (recycled to
+   * name the shown group in the "all" view), the teacher / seed / global /
+   * remote / sync value rows, and the hidden live-loss row with its canvas.
+   * It returns the rows the refresh and loss-draw code fills in.
+   */
+  function buildReadouts() {
+    const readouts = document.createElement('div');
+    readouts.className = 'group-panel-readouts';
+    const mkRow = (text: string) => {
+      const row = document.createElement('div');
+      row.className = 'group-panel-row';
+      const name = document.createElement('span');
+      name.className = 'group-panel-name';
+      name.textContent = text;
+      const val = document.createElement('span');
+      val.className = 'group-panel-value';
+      row.appendChild(name);
+      row.appendChild(val);
+      readouts.appendChild(row);
+      return val;
+    };
+    // the distillation control: which other group's champion brain drives this
+    // group while its own brains backpropagate toward it
+    const trainRow = document.createElement('div');
+    trainRow.className = 'group-panel-row';
+    const trainName = document.createElement('span');
+    trainName.className = 'group-panel-name';
+    trainName.textContent = 'train from';
+    const trainSelect = document.createElement('select');
+    trainSelect.className = 'group-panel-select';
+    trainRow.appendChild(trainName);
+    trainRow.appendChild(trainSelect);
+    // in the "all" view the train-from control has no single group to point at:
+    // the same row is recycled to name the group the visualizer is showing
+    const shownVal = document.createElement('span');
+    shownVal.className = 'group-panel-value';
+    shownVal.hidden = true;
+    trainRow.appendChild(shownVal);
+    readouts.appendChild(trainRow);
+    const teacherVal = mkRow('teacher');
+    const teacherRow = teacherVal.parentElement as HTMLElement;
+    const seedVal = mkRow('seed best');
+    const globalVal = mkRow('global');
+    const remoteVal = mkRow('remote');
+    const syncVal = mkRow('last sync');
+    // the live loss of the followed student's distiller, where the old
+    // "learn per step" slider row used to be: it shows only while training
+    const lossRow = document.createElement('div');
+    lossRow.className = 'group-panel-row group-panel-loss-row';
+    lossRow.hidden = true;
+    const lossName = document.createElement('span');
+    lossName.className = 'group-panel-name';
+    lossName.textContent = 'loss';
+    const lossCanvas = document.createElement('canvas');
+    lossCanvas.className = 'group-panel-loss';
+    const lossCtx = lossCanvas.getContext('2d');
+    const lossVal = document.createElement('span');
+    lossVal.className = 'group-panel-value';
+    lossRow.append(lossName, lossCanvas, lossVal);
+    readouts.appendChild(lossRow);
+    el.appendChild(readouts);
+    return {
+      readouts,
+      trainName,
+      trainSelect,
+      shownVal,
+      teacherVal,
+      teacherRow,
+      seedVal,
+      globalVal,
+      remoteVal,
+      syncVal,
+      lossRow,
+      lossCanvas,
+      lossCtx,
+      lossVal,
+    };
+  }
+
+  const {
+    readouts,
+    trainName,
+    trainSelect,
+    shownVal,
+    teacherVal,
+    teacherRow,
+    seedVal,
+    globalVal,
+    remoteVal,
+    syncVal,
+    lossRow,
+    lossCanvas,
+    lossCtx,
+    lossVal,
+  } = buildReadouts();
 
   let value: number | 'mixed' = 0;
   let open = false;
@@ -294,96 +332,114 @@ export function createGroupActions(options: GroupActionsOptions): GroupActions {
     );
   }
 
+  /**
+   * The shape the three server-action buttons share: run the gate (a
+   * confirm, or the local reset it wraps), and when it passes, disable the
+   * button for the request, then re-enable it and refresh the readouts. A
+   * declined gate leaves the button untouched.
+   */
+  async function runServerAction(
+    btn: HTMLButtonElement,
+    gate: () => boolean,
+    action: () => Promise<void>,
+  ): Promise<void> {
+    if (!gate()) return;
+    btn.disabled = true;
+    try {
+      await action();
+    } finally {
+      btn.disabled = false;
+      refresh();
+    }
+  }
+
+  /**
+   * Deletes the targets' stored models from the server and removes the
+   * matching local saves, then re-initializes. A layer's delete also drops
+   * the mixed save, and the "all" view drops the whole game's saves. When
+   * every request failed (offline?), nothing is removed and an error toast
+   * says so.
+   */
+  async function deleteFromServer(
+    targets: (number | 'mixed')[],
+    keys: string[],
+  ): Promise<void> {
+    const results = await Promise.all(
+      keys.map((key) => deleteRemoteModels(game, key)),
+    );
+    if (results.every((deleted) => deleted === null)) {
+      showToast(
+        `Could not delete ${value === 0 ? game : keys[0]} models from the server (offline?)`,
+        { tone: 'error' },
+      );
+      return;
+    }
+    if (value === 0) {
+      io.discardGameModels();
+    } else {
+      for (let i = 0; i < targets.length; i++) {
+        if (results[i] === null) continue;
+        const target = targets[i];
+        if (target !== 'mixed') io.discardModel(target);
+        io.discardModel(MIXED_LEVELS, MIXED_KIND);
+      }
+    }
+    reinitialize();
+    const deleted = results.reduce<number>(
+      (sum, count) => sum + (count ?? 0),
+      0,
+    );
+    showToast(
+      value === 0
+        ? `Deleted ${deleted} stored ${game} model(s) and removed local saves`
+        : `Deleted ${deleted} stored model(s) of ${keys[0]} and removed local save`,
+      { tone: 'success' },
+    );
+  }
+
   localBtn.addEventListener('click', async () => {
     // the confirm and the discard happen inside; when the user backs out the
     // local saves are kept and nothing is reloaded
-    if (!resetLocal(value)) return;
-    localBtn.disabled = true;
-    try {
-      await reloadFromServer(
-        value === 0 ? groups : [value],
-        'Deleted local and reloaded',
-        'Deleted local, but no',
-      );
-    } finally {
-      localBtn.disabled = false;
-      refresh();
-    }
+    await runServerAction(
+      localBtn,
+      () => resetLocal(value),
+      () =>
+        reloadFromServer(
+          value === 0 ? groups : [value],
+          'Deleted local and reloaded',
+          'Deleted local, but no',
+        ),
+    );
   });
 
   reloadBtn.addEventListener('click', async () => {
     const targets = value === 0 ? groups : [value];
     const keys = targets.map((target) => groupKeyFor(game, target));
-    if (
-      !confirm(
-        value === 0
-          ? `Reload all ${game} models from the server? This overwrites local saves for ${keys.join(', ')}.`
-          : `Reload ${label(value)} from the server? This overwrites the local save of ${keys[0]}.`,
-      )
-    )
-      return;
-    reloadBtn.disabled = true;
-    try {
-      await reloadFromServer(targets, 'Reloaded', 'No');
-    } finally {
-      reloadBtn.disabled = false;
-      refresh();
-    }
+    await runServerAction(
+      reloadBtn,
+      () =>
+        confirm(
+          value === 0
+            ? `Reload all ${game} models from the server? This overwrites local saves for ${keys.join(', ')}.`
+            : `Reload ${label(value)} from the server? This overwrites the local save of ${keys[0]}.`,
+        ),
+      () => reloadFromServer(targets, 'Reloaded', 'No'),
+    );
   });
 
   deleteBtn.addEventListener('click', async () => {
     const targets = value === 0 ? groups : [value];
     const keys = targets.map((target) => groupKeyFor(game, target));
-    if (
-      !confirm(
-        value === 0
-          ? `Delete all ${game} models from the server and remove all local saves?`
-          : `Delete ${keys[0]} from the server? This removes the publicly stored models of the group and the local save.`,
-      )
-    )
-      return;
-    deleteBtn.disabled = true;
-    try {
-      const results = await Promise.all(
-        keys.map((key) => deleteRemoteModels(game, key)),
-      );
-      if (results.every((deleted) => deleted === null)) {
-        showToast(
-          `Could not delete ${value === 0 ? game : keys[0]} models from the server (offline?)`,
-          { tone: 'error' },
-        );
-      } else {
-        if (value === 0) {
-          io.discardGameModels();
-        } else {
-          for (let i = 0; i < targets.length; i++) {
-            if (results[i] !== null) {
-              const target = targets[i];
-              if (target === 'mixed') {
-                io.discardModel(MIXED_LEVELS, MIXED_KIND);
-              } else {
-                io.discardModel(target);
-                io.discardModel(MIXED_LEVELS, MIXED_KIND);
-              }
-            }
-          }
-        }
-        reinitialize();
-        const deleted = results.reduce<number>(
-          (sum, count) => sum + (count ?? 0),
-          0,
-        );
-        showToast(
+    await runServerAction(
+      deleteBtn,
+      () =>
+        confirm(
           value === 0
-            ? `Deleted ${deleted} stored ${game} model(s) and removed local saves`
-            : `Deleted ${deleted} stored model(s) of ${keys[0]} and removed local save`,
-          { tone: 'success' },
-        );
-      }
-    } finally {
-      deleteBtn.disabled = false;
-      refresh();
-    }
+            ? `Delete all ${game} models from the server and remove all local saves?`
+            : `Delete ${keys[0]} from the server? This removes the publicly stored models of the group and the local save.`,
+        ),
+      () => deleteFromServer(targets, keys),
+    );
   });
 
   /**
