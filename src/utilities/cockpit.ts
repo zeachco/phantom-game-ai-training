@@ -173,6 +173,15 @@ function createTimingLine(label: string, title: string): TimingLine {
   return { el, label: labelEl, value, delta };
 }
 
+/** the delta color: green below zero, red above it, faded white on zero,
+ *  and '' to clear the row */
+function deltaColor(delta: number | null): string {
+  if (delta === null) return '';
+  if (delta < 0) return '#70e08a';
+  if (delta > 0) return '#ff7070';
+  return 'rgba(255, 255, 255, 0.55)';
+}
+
 /** fill a timing row; nulls clear the value ('—') or the delta ('') */
 export function updateTimingLine(
   line: TimingLine,
@@ -183,12 +192,5 @@ export function updateTimingLine(
     frames === null ? '—' : String(Math.max(0, Math.round(frames)));
   line.delta.textContent =
     delta === null ? '' : `(${delta > 0 ? '+' : ''}${Math.round(delta)})`;
-  line.delta.style.color =
-    delta === null
-      ? ''
-      : delta < 0
-      ? '#70e08a'
-      : delta > 0
-      ? '#ff7070'
-      : 'rgba(255, 255, 255, 0.55)';
+  line.delta.style.color = deltaColor(delta);
 }
