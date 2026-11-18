@@ -80,15 +80,15 @@ export class GamePad {
     );
   }
 
-  private register(ev: KeyboardEvent | MouseEvent) {
+  private register(ev: KeyboardEvent | MouseEvent, once = false) {
     if (ev instanceof KeyboardEvent) {
       if (this.isBrowserKey(ev)) return;
       const key = ev.code;
       // only the keys the game reads are captured, the rest pass through
       if (this.bound.has(key)) ev.preventDefault();
-      this.set(key, 1);
+      this.set(key, 1, once);
     } else {
-      this.set(`Mouse${ev.button}`, 1);
+      this.set(`Mouse${ev.button}`, 1, once);
     }
   }
   private unregister(ev: KeyboardEvent | MouseEvent) {
@@ -97,14 +97,7 @@ export class GamePad {
     this.set(key, 0);
   }
   private onkey(ev: KeyboardEvent | MouseEvent) {
-    if (ev instanceof KeyboardEvent) {
-      if (this.isBrowserKey(ev)) return;
-      const key = ev.code;
-      if (this.bound.has(key)) ev.preventDefault();
-      this.set(key, 1, true);
-    } else {
-      this.set(`Mouse${ev.button}`, 1, true);
-    }
+    this.register(ev, true);
   }
   private handleMouveMovement(ev: MouseEvent) {
     this.set('MouseOX', this.get('MouseX'));

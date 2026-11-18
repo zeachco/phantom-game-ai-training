@@ -7,6 +7,7 @@
  * cockpit.readout (speedo last), places cockpit.stats where its layout wants,
  * draws the gamepad on cockpit.ctx, and drives visibility with cockpit.show.
  */
+import { GAMEPAD_CANVAS_SIZE } from './driveIndicators';
 import { NEUTRAL_COLOR } from './sidePanel';
 
 /** a progress bar with the raw value exposed through aria */
@@ -72,8 +73,8 @@ export function createCockpit(options: CockpitOptions = {}): Cockpit {
   controlIndicators.className = 'control-indicators';
   const controlCanvas = document.createElement('canvas');
   controlCanvas.className = 'control-axis';
-  controlCanvas.width = 110;
-  controlCanvas.height = 110;
+  controlCanvas.width = GAMEPAD_CANVAS_SIZE;
+  controlCanvas.height = GAMEPAD_CANVAS_SIZE;
   const ctx = controlCanvas.getContext('2d')!;
   controlIndicators.append(controlCanvas);
 

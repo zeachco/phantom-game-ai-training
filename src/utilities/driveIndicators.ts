@@ -72,6 +72,10 @@ function drawJoystickPad(
   ctx.fill();
 }
 
+/** the gamepad canvas size every game draws on; cockpit.ts sizes its canvas
+ *  to match and the draw geometry below is built from it */
+export const GAMEPAD_CANVAS_SIZE = 110;
+
 /**
  * The one outputs canvas every game draws: a single joystick axis (steer ×
  * drive) on a crosshair pad and a single action button beneath it. Jump
@@ -81,7 +85,7 @@ function drawJoystickPad(
 export function drawGamepadControls(
   ctx: CanvasRenderingContext2D,
   { x, y, color, action = false, actionLabel, actionHistory }: GamepadControls,
-  size = 110,
+  size = GAMEPAD_CANVAS_SIZE,
 ) {
   const cx = size / 2;
   const cy = 42;
