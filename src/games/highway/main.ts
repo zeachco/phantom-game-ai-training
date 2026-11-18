@@ -582,13 +582,12 @@ export default async (state: typeof defaultState) => {
 
     if (!paused && !state.living) endExperiment();
   });
-  function initialize() {
-    // a re-init replaces the camera car, so drop its old keyboard bindings
-    state.player?.controls.dispose();
-    Object.assign(state, defaultState);
-    state.playing = true;
-    camSet = false;
-    championCaches.clear();
+  /**
+   * Load both model libraries. The mixed saves are validated against the
+   * expert library loaded just above, so a mixed save whose experts no
+   * longer fit is kept out of the pool.
+   */
+  function loadModelLibraries() {
     const inputCount = config.SENSORS + 1;
     const outputCount = 4;
     state.sortedModels = io.loadAllModelLayers(
@@ -598,9 +597,6 @@ export default async (state: typeof defaultState) => {
         levelSizes: networkLevelSizes(inputCount, outputCount, layers),
       }),
     );
-
-    // Mixed selectors route to the exact expert library loaded above. Validate
-    // that library-dependent shape before the mixed save can enter a pool.
     mixedExperts = hydrateExperts(
       state.sortedModels,
       inputCount,
@@ -613,25 +609,15 @@ export default async (state: typeof defaultState) => {
       requireKind: true,
       expertIds: expertSlotIds(mixedExperts),
     }));
+  }
 
-    // Game ender
-    ray = new DeathRay();
-    carRay = new DeathRay();
-    deathRays = [ray, carRay];
-
-    // Obstacles
-    state.traffic = config.trafficConfig.map(
-      ([lane, y, speed, name], index) =>
-        new Car(
-          road.getLane(lane),
-          y,
-          ControlType.DUMMY,
-          speed,
-          name || `${index}`,
-        ),
-    );
-
-    // Experiments
+  /**
+   * The experiment cars: the AI students, plus the camera car. The camera
+   * car drives the weakest save of the best layer (the layer whose best
+   * model scores highest). If that save no longer fits the current sensors,
+   * the camera car is skipped and the run continues without it.
+   */
+  function setupExperimentCars() {
     state.cars = setupAIs();
     const [bestModel] = [...state.sortedModels].sort(
       (a, b) => (b[0] ? b[0].score : 0) - (a[0] ? a[0].score : 0),
@@ -659,6 +645,36 @@ export default async (state: typeof defaultState) => {
         state.player = undefined;
       }
     }
+  }
+
+  function initialize() {
+    // a re-init replaces the camera car, so drop its old keyboard bindings
+    state.player?.controls.dispose();
+    Object.assign(state, defaultState);
+    state.playing = true;
+    camSet = false;
+    championCaches.clear();
+    loadModelLibraries();
+
+    // Game ender
+    ray = new DeathRay();
+    carRay = new DeathRay();
+    deathRays = [ray, carRay];
+
+    // Obstacles
+    state.traffic = config.trafficConfig.map(
+      ([lane, y, speed, name], index) =>
+        new Car(
+          road.getLane(lane),
+          y,
+          ControlType.DUMMY,
+          speed,
+          name || `${index}`,
+        ),
+    );
+
+    // Experiments
+    setupExperimentCars();
     state.living = state.cars.length;
   }
 
