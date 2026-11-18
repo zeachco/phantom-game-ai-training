@@ -50,8 +50,13 @@ export function withTrainedBrain(
 
 const prefix = (game: string) => `${game}_trainFrom_`;
 
-const parse = (value: string | null): number | 'mixed' | null =>
-  value === null ? null : value === MIXED_KIND ? 'mixed' : Number(value);
+const parse = (value: string | null): number | 'mixed' | null => {
+  if (value === null) return null;
+  if (value === MIXED_KIND) return 'mixed';
+  // a stored layer is a string of digits; a corrupt or non-numeric value
+  // loads as absent, not NaN
+  return /^\d+$/.test(value) ? Number(value) : null;
+};
 
 export function trainFromKey(game: string, value: number | 'mixed'): string {
   return prefix(game) + (value === 'mixed' ? MIXED_KIND : String(value));

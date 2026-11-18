@@ -154,6 +154,24 @@ test('train-from selections round-trip through localStorage', () => {
   }
 });
 
+test('a corrupt or non-numeric train-from value loads as absent, not NaN', () => {
+  const fx = stubStorage();
+  try {
+    for (const junk of ['not-a-number', '', '5.5', '-3', 'Infinity']) {
+      fx.store.set(trainFromKey('circuit', 2), junk);
+      expect(loadTrainFrom('circuit', 2), junk).toBeNull();
+    }
+    // a corrupt target never reaches the restored list either
+    fx.store.set(trainFromKey('circuit', 3), 'not-a-number');
+    expect(loadTrainFroms('circuit')).toEqual([]);
+    // a valid layer still parses, so the guard is not over-strict
+    fx.store.set(trainFromKey('circuit', 4), '7');
+    expect(loadTrainFrom('circuit', 4)).toBe(7);
+  } finally {
+    fx.restore();
+  }
+});
+
 /** localStorage + the browser bits ClimbRace touches, headless. */
 function stubRaceEnv(store: Map<string, string>) {
   const restoreStorage = installLocalStorage(makeStorage(store).storage);
