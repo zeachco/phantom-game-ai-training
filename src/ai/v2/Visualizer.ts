@@ -73,13 +73,35 @@ function rowRadius(width: number, count: number) {
   return Math.min(RADIUS, (width / (count - 1)) * 0.35);
 }
 
+/** one side of a hidden row: node x-positions, the shared radius, values */
+interface SplitCluster {
+  x: number[];
+  radius: number;
+  values: number[];
+}
+
 /** one hidden row of the distillation view: a trainee and a guide cluster side by side */
 interface SplitHiddenRow {
   y: number;
-  trainee: { x: number[]; radius: number; values: number[] };
-  guide: { x: number[]; radius: number; values: number[] };
+  trainee: SplitCluster;
+  guide: SplitCluster;
   /** the trainee level behind this row, for its mutation magnitudes */
   traineeLevelIndex: number | null;
+}
+
+/** One side of a hidden row: the values' node positions inside
+ *  [left, right], inset by the radius that fits the row. */
+function makeCluster(
+  values: number[],
+  left: number,
+  right: number,
+  radius: number,
+): SplitCluster {
+  return {
+    x: nodePositions(values.length, left + radius, right - radius),
+    radius,
+    values,
+  };
 }
 
 /** `0`, `1`, ... reused across frames, a mixed brain relabels its experts on each one */
@@ -124,6 +146,8 @@ function strokeGauges(
     ctx.beginPath();
     for (let i = 0; i < positions.length; i++) {
       const value = values[i];
+      // why the double test: one pass strokes one sign, so a node skips the
+      // pass that is not its sign, and a zero has no arc at all
       if (!value || value > 0 !== isPositive) continue;
       ctx.moveTo(positions[i] + radius, y);
       ctx.arc(
@@ -763,22 +787,6 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     const rowOf = (hiddenIndex: number, hiddenNb: number) =>
       hiddenRowsNb - hiddenNb + hiddenIndex;
 
-    /** a hidden row of one brain: values, positions and a radius that fits */
-    const cluster = (
-      values: number[],
-      clusterLeft: number,
-      clusterRight: number,
-      radius: number,
-    ) => ({
-      x: nodePositions(
-        values.length,
-        clusterLeft + radius,
-        clusterRight - radius,
-      ),
-      radius,
-      values,
-    });
-
     const hiddenRows: SplitHiddenRow[] = [];
     for (let row = 1; row <= hiddenRowsNb; row++) {
       const traineeLevelIndex = row - (hiddenRowsNb - traineeHidden) - 1;
@@ -793,8 +801,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       );
       hiddenRows.push({
         y: yOf(row),
-        trainee: cluster(traineeValues, traineeLeft, traineeRight, radius),
-        guide: cluster(guideValues, guideLeft, guideRight, radius),
+        trainee: makeCluster(traineeValues, traineeLeft, traineeRight, radius),
+        guide: makeCluster(guideValues, guideLeft, guideRight, radius),
         traineeLevelIndex: traineeLevel ? traineeLevelIndex : null,
       });
     }
