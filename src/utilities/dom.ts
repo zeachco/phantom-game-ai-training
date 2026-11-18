@@ -31,15 +31,7 @@ export function bindPauseToggle(stage: HTMLElement) {
   stage.appendChild(banner);
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat || e.isComposing || e.code !== 'KeyP') return;
-    const target = e.target as HTMLElement | null;
-    if (
-      target &&
-      (target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        target.isContentEditable)
-    )
-      return;
+    if (isEditableTarget(e.target)) return;
     e.preventDefault();
     setGamePaused(!isGamePaused());
     banner.hidden = !isGamePaused();
@@ -56,14 +48,7 @@ export function bindSidePanelToggle(onToggle: () => void) {
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat) return;
     if (e.code !== 'F12') return;
-    const target = e.target as HTMLElement | null;
-    if (
-      target &&
-      (target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target.isContentEditable)
-    )
-      return;
+    if (isEditableTarget(e.target)) return;
     e.preventDefault();
     onToggle();
   };
