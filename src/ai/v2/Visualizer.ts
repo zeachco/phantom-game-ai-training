@@ -897,5 +897,4 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
       ctx.stroke();
     }
   }
-
 }
