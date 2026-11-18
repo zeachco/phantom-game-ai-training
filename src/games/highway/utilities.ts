@@ -49,6 +49,42 @@ const modelColor = (model: ModelsByLayerCount[number]) =>
       )
     : layerColor(model.levels.length, config.MAX_NETWORK_LAYERS);
 
+/** A saved model's ghost row: its name (mixed drops the layer count), the
+ *  rounded score, and a +diff when the save beat the previous one. */
+function ghostRow(model: ModelsByLayerCount[number]): ScoreBoardRow {
+  const symb = model.diff > 0 ? `+${model.diff.toFixed(2)}` : '';
+  const emoji = isMixed(model) ? '🧭' : '👻';
+  const name = isMixed(model)
+    ? `${model.version}-${model.mutationIndex}`
+    : `${model.levels.length}-${model.version}-${model.mutationIndex}`;
+  return {
+    emoji,
+    text: `${name} ${Math.round(model.score)} ${symb}`,
+    color: modelColor(model),
+  };
+}
+
+/** A live car's row: its label and rounded score, plus a diff and an emoji
+ *  against the previous save — a green lead (a trophy when crashed), a
+ *  purple lag (a skull when crashed). Crashed rows get a light color. */
+function liveRow(state: typeof defaultState, car: Car): ScoreBoardRow {
+  const previous = previousSave(state, car.brain);
+  const diff = car.brain.score - (previous?.score || 0);
+  let emoji = '';
+  let add = '';
+  if (diff > 0) {
+    emoji = car.damaged ? '🏆' : '💚';
+    add = ` +${diff.toFixed(2)}`;
+  } else {
+    emoji = car.damaged ? '💀' : '💜';
+  }
+  return {
+    emoji,
+    text: `${car.label} ${Math.round(car.brain.score)}${add}`,
+    color: car.damaged ? '#def' : car.color,
+  };
+}
+
 /**
  * The rows of the scoreboard, best first: saved ghosts plus the live cars.
  * The ordering and ghost handling live in the shared scoreBoard component;
@@ -68,37 +104,10 @@ export function scoreEntries(state: typeof defaultState): ScoreBoardRow[] {
       ...state.sortedMixed.map((m) => m[0]).filter(Boolean),
     ],
     ghostScore: (model) => model.score,
-    ghostRow: (model) => {
-      const symb = model.diff > 0 ? `+${model.diff.toFixed(2)}` : '';
-      const emoji = isMixed(model) ? '🧭' : '👻';
-      const name = isMixed(model)
-        ? `${model.version}-${model.mutationIndex}`
-        : `${model.levels.length}-${model.version}-${model.mutationIndex}`;
-      return {
-        emoji,
-        text: `${name} ${Math.round(model.score)} ${symb}`,
-        color: modelColor(model),
-      };
-    },
+    ghostRow,
     lives: liveCars,
     liveScore: (car) => car.brain.score,
-    liveRow: (car) => {
-      const previous = previousSave(state, car.brain);
-      const diff = car.brain.score - (previous?.score || 0);
-      let emoji = '';
-      let add = '';
-      if (diff > 0) {
-        emoji = car.damaged ? '🏆' : '💚';
-        add = ` +${diff.toFixed(2)}`;
-      } else {
-        emoji = car.damaged ? '💀' : '💜';
-      }
-      return {
-        emoji,
-        text: `${car.label} ${Math.round(car.brain.score)}${add}`,
-        color: car.damaged ? '#def' : car.color,
-      };
-    },
+    liveRow: (car) => liveRow(state, car),
     dedupeGhosts: false,
   });
 }
