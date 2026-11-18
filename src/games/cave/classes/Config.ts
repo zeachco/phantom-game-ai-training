@@ -372,10 +372,6 @@ class Config {
   /** optional browser cap while a human is actively being followed */
   public HUMAN_FPS_CAP_ENABLED = true;
   public HUMAN_FPS_CAP = 90;
-
-  public get CAR_PER_LEVELS() {
-    return this.CAR_NB / this.MAX_NETWORK_LAYERS;
-  }
 }
 
 export const config = new Config();

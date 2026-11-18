@@ -243,7 +243,6 @@ export default async (state: typeof defaultState) => {
 
   function setupAIs() {
     const cars: Car[] = [];
-    config.autoDistributeByScores(state.sortedModels);
 
     const scores = state.sortedModels
       .map(([firstModel]) => Math.round(firstModel?.score) || 0)

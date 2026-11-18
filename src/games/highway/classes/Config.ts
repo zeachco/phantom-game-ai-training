@@ -1,10 +1,7 @@
-import type { ModelsByLayerCount } from '../../../ai/utils';
-
 class Config {
   public CAR_NB = 1000;
   /** floor of cars per brain type (network layer), so every layer keeps breeding */
   public MIN_CARS_PER_LAYER = 3;
-  public AUTO_DISTRIBUTE_LAYERS = false;
   public MAX_MUTATION_LVL = 0.9;
   public MIN_MUTATION_LVL = 0.0001;
   public CARS_PER_LAYERS = [
@@ -78,40 +75,6 @@ class Config {
     [0, -1950, 2.2, 'E2L'],
     [2, -1950, 2.2, 'E2R'],
   ] as const;
-
-  public get CAR_PER_LEVELS() {
-    return this.CAR_NB / this.MAX_NETWORK_LAYERS;
-  }
-
-  public autoDistributeByScores(saves: ModelsByLayerCount[]) {
-    if (!this.AUTO_DISTRIBUTE_LAYERS) return;
-    const getModel = (layer) => saves[layer]?.[0];
-    const layerScore = (models: ModelsByLayerCount[number]) =>
-      models?.[0]?.score || 0;
-
-    let totalScore = 0;
-    for (let i = 1; i < this.CARS_PER_LAYERS.length; i++) {
-      const save = getModel(i);
-      if (!save) continue;
-      totalScore += save.score;
-    }
-
-    const sortedLayers = [...saves].sort(
-      (a, b) => layerScore(a) - layerScore(b),
-    );
-
-    let remainingScore = totalScore;
-
-    sortedLayers.forEach((models) => {
-      if (!models?.[0]) return;
-      const layer = models[0].levels.length;
-      const give = layer ? Math.ceil(remainingScore * 0.55) : 0;
-      remainingScore -= give;
-      this.CARS_PER_LAYERS[layer] = Math.round(
-        (give / totalScore) * this.CAR_NB + 2,
-      );
-    });
-  }
 }
 
 export const config = new Config();
