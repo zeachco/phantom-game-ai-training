@@ -194,7 +194,7 @@ export class Tower {
 }
 
 /** a horizontal slab with rounded top corners and a dark outline */
-export function drawRoundedSlab(
+function drawRoundedSlab(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,

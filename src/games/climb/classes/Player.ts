@@ -15,7 +15,7 @@ import type { Platform, Tower } from './Tower';
  * not steer), jump is read continuously (positive above 0.5 jumps). Distillation
  * trains toward this applied signal, see NeuralNetwork.train.
  */
-export const CLIMB_OUTPUT_RANGES: OutputRanges = [
+const CLIMB_OUTPUT_RANGES: OutputRanges = [
   [0, 1], // left
   [0, 1], // right
   [-1, 1], // jump

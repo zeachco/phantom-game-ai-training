@@ -41,7 +41,7 @@ export type ModelsByLayerCount = (
 )[];
 
 /** The exact node counts a saved network must have at each level boundary. */
-export interface ModelShape {
+interface ModelShape {
   levelSizes: number[];
   /** Saved mixed brains must keep their selector kind separate from regular brains. */
   kind?: string;

@@ -1,8 +1,8 @@
 import type { AABB, Vector } from '../../../utilities/math';
 import { config } from './Config';
 
-export type ObstacleShape = 'circle' | 'wall';
-export type ObstacleType = 'static' | 'moving';
+type ObstacleShape = 'circle' | 'wall';
+type ObstacleType = 'static' | 'moving';
 
 const OBSTACLE_FILL = '#666';
 const OBSTACLE_OUTLINE = '#fff';

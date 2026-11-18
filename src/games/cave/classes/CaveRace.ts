@@ -18,7 +18,7 @@ import { Ball, getCaveBrainDimensions } from './Ball';
 import { Cave } from './Cave';
 import { config } from './Config';
 
-export type CaveModelIo = ReturnType<typeof fileUtilities>;
+type CaveModelIo = ReturnType<typeof fileUtilities>;
 
 /** the explorer/scout slot policy for this game's pool shapes and the
  *  gates a group has banked on the current seed; the demo profile is

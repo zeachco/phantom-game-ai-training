@@ -11,7 +11,7 @@ export interface ScoreBoardRow {
 
 /** The fields the shared scoreboard needs from a live racing entity (a car,
  *  a ball or a climber). Car, Ball and Player all satisfy this shape. */
-export interface ScoreBoardEntity {
+interface ScoreBoardEntity {
   brain?: { score: number } | null;
   label: string;
   color: string;
@@ -21,7 +21,7 @@ export interface ScoreBoardEntity {
 
 /** The fields the shared scoreboard needs from a brain group. Each game's
  *  Group satisfies this shape. */
-export interface ScoreBoardGroup {
+interface ScoreBoardGroup {
   key: string;
   layer: number;
   isMixed: boolean;

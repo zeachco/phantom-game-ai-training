@@ -3,7 +3,7 @@
 // distinct tracks. Pure function so it is unit-testable without Mongo.
 export const MIN_CIRCUIT_TRACKS = 10;
 
-export interface AcceptanceInput {
+interface AcceptanceInput {
   game: string;
   /** submitted globalScore, falling back to score (undefined when neither) */
   submittedGlobal: number | undefined;
@@ -12,7 +12,7 @@ export interface AcceptanceInput {
   currentBest: number;
 }
 
-export type Acceptance =
+type Acceptance =
   | { ok: true; status?: undefined; reason?: undefined }
   | { ok: false; status: 409 | 422; reason: string };
 

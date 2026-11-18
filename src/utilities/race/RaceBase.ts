@@ -24,10 +24,10 @@ import {
 import { expertLibraryShape, refreshExperts } from './expertLibrary';
 
 /** the model io every game wires up from ai/utils' fileUtilities */
-export type ModelIo = ReturnType<typeof fileUtilities>;
+type ModelIo = ReturnType<typeof fileUtilities>;
 
 /** the fields the shared race lifecycle reads on any racing entity */
-export interface RaceEntity {
+interface RaceEntity {
   /** optional where a game can field brainless entities (the human) */
   brain?: NeuralNetwork;
   useAI: boolean;
@@ -39,7 +39,7 @@ export interface RaceEntity {
 }
 
 /** the shared part of a game state the base reads and writes */
-export interface RaceStateShape<TEntity extends RaceEntity> {
+interface RaceStateShape<TEntity extends RaceEntity> {
   human: TEntity | undefined;
   living: number;
   sortedModels: ModelsByLayerCount[];
@@ -64,7 +64,7 @@ export interface RaceProfile {
   mixedExpertsPerLayer: number;
 }
 
-export interface RaceBaseOptions {
+interface RaceBaseOptions {
   /** the entry point's post-rebuild hook (camera, follow target, ...) */
   onReset?: () => void;
 }

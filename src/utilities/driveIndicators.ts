@@ -1,7 +1,7 @@
 /** One action button sample history, 0/1 per rendered frame, newest last. */
-export type ActionHistory = number[];
+type ActionHistory = number[];
 
-export interface GamepadControls {
+interface GamepadControls {
   /** -1..1, steer or move X (the joystick axis) */
   x: number;
   /** -1..1, drive or move Y */

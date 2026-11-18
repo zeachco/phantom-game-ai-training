@@ -1,7 +1,7 @@
 import { Clock } from 'three';
 import { isGamePaused } from '../gameClock';
 
-export interface GameLoopOptions {
+interface GameLoopOptions {
   /** When set, frames are skipped until this interval has elapsed. */
   maxFps?: number;
   /** Enables the cap dynamically without stopping the animation loop. */

@@ -9,27 +9,27 @@
  */
 
 /** a progress bar with the raw value exposed through aria */
-export interface CockpitGauge {
+interface CockpitGauge {
   el: HTMLElement;
   /** repaint the fill from a 0..1 fraction, exposing the raw remaining value */
   set(fraction: number, remaining: number): void;
 }
 
 /** the speed readout (value + 'u/f' unit) */
-export interface CockpitSpeedo {
+interface CockpitSpeedo {
   el: HTMLElement;
   set(speed: number): void;
 }
 
 /** one timing row: label, value and a delta against the reference */
-export interface TimingLine {
+interface TimingLine {
   el: HTMLElement;
   label: HTMLSpanElement;
   value: HTMLSpanElement;
   delta: HTMLSpanElement;
 }
 
-export interface CockpitOptions {
+interface CockpitOptions {
   /** budget gauge between the gamepad and the readout; omit if the game has none */
   gauge?: { title: string; ariaLabel: string; max: number };
   /** the stats block tooltip, default 'followed brain stats' */
@@ -38,7 +38,7 @@ export interface CockpitOptions {
   startHidden?: boolean;
 }
 
-export interface Cockpit {
+interface Cockpit {
   /** the steer-overlay; attach it to the stage */
   el: HTMLElement;
   /** the gamepad canvas context, draw with drawGamepadControls */
@@ -156,7 +156,7 @@ export function createSpeedo(): CockpitSpeedo {
 }
 
 /** one timing row: label / value / delta, values filled by updateTimingLine */
-export function createTimingLine(label: string, title: string): TimingLine {
+function createTimingLine(label: string, title: string): TimingLine {
   const el = document.createElement('div');
   el.className = 'timing-line';
   el.title = title;

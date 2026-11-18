@@ -20,14 +20,14 @@ import {
 import { showToast } from './toast';
 
 /** The server group key for a follow value: '1'..'9' or 'mixed'. */
-export function groupKeyFor(game: string, value: number | 'mixed'): string {
+function groupKeyFor(game: string, value: number | 'mixed'): string {
   return value === 'mixed'
     ? `${game}_${MIXED_KIND}_${MIXED_LEVELS}`
     : `${game}_${value}`;
 }
 
 /** A sync timestamp as a short relative age, or 'never' when absent. */
-export function relativeTime(
+function relativeTime(
   ts: number | null,
   now: number = Date.now(),
 ): string {

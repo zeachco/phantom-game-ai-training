@@ -4,7 +4,7 @@ import { config } from './Config';
 
 /** where the fixer had to touch a cell: an arc position plus the angle of
  *  the column it moved (or the ramp it placed) */
-export interface PathFix {
+interface PathFix {
   s: number;
   angle: number;
 }

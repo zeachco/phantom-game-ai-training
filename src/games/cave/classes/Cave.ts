@@ -35,7 +35,7 @@ interface ChunkData {
 /** one deterministic terrain feature cell: how rough the stretch is and which
  *  structures sit on it. Cached per cell so the radius hot path only reads
  *  numbers instead of re-hashing. */
-export interface FeatureCell {
+interface FeatureCell {
   /** 0..1 roughness of the stretch; the jump-ramp odds scale with it */
   volatility: number;
   /** smooth raised lane through the rough ground, or null */

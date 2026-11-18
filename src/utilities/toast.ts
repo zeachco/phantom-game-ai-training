@@ -4,7 +4,7 @@
  * the player is watching the game, like a model upload to the server. Safe to
  * call in a non-DOM environment (tests): it no-ops without a document.
  */
-export interface ToastOptions {
+interface ToastOptions {
   /** `info` (default), `success` or `error`, drives the accent color */
   tone?: 'info' | 'success' | 'error';
   /** how long the toast stays on screen, in ms */

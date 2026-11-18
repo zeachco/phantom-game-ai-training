@@ -35,7 +35,7 @@ export interface ScoreDoc {
   replayedScore?: number;
 }
 
-export type MongoState = "unconfigured" | "connecting" | "connected" | "error";
+type MongoState = "unconfigured" | "connecting" | "connected" | "error";
 
 let state: MongoState = MONGO_URL ? "connecting" : "unconfigured";
 let pending: Promise<Db> | null = null;

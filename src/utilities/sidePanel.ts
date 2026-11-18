@@ -22,7 +22,7 @@ import {
 } from './groupActions';
 
 /** a follow target: 0 is "all", 1-9 a brain layer, 'mixed' the mixed brain */
-export type FollowValue = number | 'mixed';
+type FollowValue = number | 'mixed';
 
 /** the open panel takes that share of the screen, capped in width */
 const PANEL_RATIO = 0.75;
@@ -30,7 +30,7 @@ const PANEL_MAX_WIDTH = 640;
 /** the neutral tone 'all' and the canvas frame wear when no brain color fits */
 const NEUTRAL_COLOR = '#c4c4c4';
 
-export interface SidePanelOptions {
+interface SidePanelOptions {
   /** the group-actions block between the follow keys and the canvas */
   groupActions: GroupActionsOptions;
   /** the collapsible "more" body at the bottom (legend, about, ...) */
@@ -58,7 +58,7 @@ export interface SidePanelOptions {
   onFollow?: (value: FollowValue, origin: 'button' | 'key') => void;
 }
 
-export interface SidePanel {
+interface SidePanel {
   /** the <aside>; attach it to document.body (the demo profile skips that) */
   el: HTMLElement;
   /** true while the panel is open */

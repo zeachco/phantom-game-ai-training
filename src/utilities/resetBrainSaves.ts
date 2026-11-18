@@ -14,7 +14,7 @@ interface SaveIo {
   discardGameModels(): void;
 }
 
-export interface ResetBrainSavesOptions {
+interface ResetBrainSavesOptions {
   io: SaveIo;
   /** the game name, used in the all-brains confirm text */
   game: string;

@@ -54,7 +54,7 @@ export function getCircuitBrainDimensions(rayCount = config.SENSORS) {
  * NeuralNetwork.train), and the teacher's answers are clamped to it the same
  * way, so a student that matches the targets drives the same line.
  */
-export const CIRCUIT_OUTPUT_RANGES: OutputRanges = [
+const CIRCUIT_OUTPUT_RANGES: OutputRanges = [
   [-1, 1], // throttle: gas positive, brake / reverse negative
   [-1, 1], // left
   [-1, 1], // right

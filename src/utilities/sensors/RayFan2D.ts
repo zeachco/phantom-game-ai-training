@@ -6,7 +6,7 @@ import {
 
 /** one ray hit: the point where the ray first touches the world, with its
  *  parametric position on the ray */
-export interface Reading {
+interface Reading {
   x: number;
   y: number;
   offset: number;

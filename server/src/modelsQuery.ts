@@ -2,7 +2,7 @@ import type { Document } from 'mongodb';
 
 /** Ranking used everywhere models are read: the cross-track aggregate first,
  *  then the plain score (legacy docs), then recency. */
-export const MODEL_RANK_SORT = {
+const MODEL_RANK_SORT = {
   globalScore: -1,
   score: -1,
   submittedAt: -1,

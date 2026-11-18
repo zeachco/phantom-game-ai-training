@@ -138,7 +138,7 @@ export function saveScores(
 
 /** A new seed records the old map high and starts a fresh comparison.
  * History lives per track for HUD reference, never as a goal for the new run. */
-export function foldScores(scores: GroupScores, newSeed: number): void {
+function foldScores(scores: GroupScores, newSeed: number): void {
   const previousSeed = String(scores.current);
   scores.history[previousSeed] = Math.max(
     scores.history[previousSeed] || 0,

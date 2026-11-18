@@ -26,7 +26,7 @@ function hexChannels(color: string): [number, number, number] {
  * blend of the brains it combines, and an even spread washes out toward gray
  * the same way the old hue-wheel blend did.
  */
-export function blendedLayerColor(
+function blendedLayerColor(
   entries: { layer: number; weight: number }[],
   maxLayers: number,
   fallback: string,

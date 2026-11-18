@@ -12,7 +12,7 @@ import { readJson } from './storage';
  */
 
 /** The persisted per-group score record (the subset the panel cares about). */
-export interface ScoreRecord {
+interface ScoreRecord {
   /** the seed the group is scoring on now */
   current: number;
   /** live high score on the current seed */

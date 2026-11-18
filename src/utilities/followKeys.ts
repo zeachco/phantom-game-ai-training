@@ -1,6 +1,6 @@
 import { isEditableTarget } from './dom';
 
-export interface FollowKeyHandlers {
+interface FollowKeyHandlers {
   /** 1-9: follow the best runner of that brain layer */
   digit: (layer: number) => void;
   /** 0: follow the overall leader (all groups) */

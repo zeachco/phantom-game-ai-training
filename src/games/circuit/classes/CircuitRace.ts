@@ -17,7 +17,7 @@ import { Car, getCircuitBrainDimensions } from './Car';
 import { Circuit } from './Circuit';
 import { config } from './Config';
 
-export type CircuitModelIo = ReturnType<typeof fileUtilities>;
+type CircuitModelIo = ReturnType<typeof fileUtilities>;
 
 /** the explorer/scout slot policy for this game's pool shapes and the
  *  laps a group has banked on the current seed */

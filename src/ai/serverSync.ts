@@ -370,7 +370,7 @@ export async function deleteRemoteModels(
   return deleted;
 }
 
-export interface SubmitResult {
+interface SubmitResult {
   ok: boolean;
   /** the server already had a better model for this group */
   notBetter: boolean;
@@ -383,7 +383,7 @@ export interface SubmitResult {
 }
 
 /** Submits one brain to the server. */
-export async function submitModel(
+async function submitModel(
   game: string,
   group: string,
   model: ModelsByLayerCount[number],
@@ -639,7 +639,7 @@ function consider(game: string, group: string, item: Pending): void {
   enqueue(item);
 }
 
-export interface SubmitHooks {
+interface SubmitHooks {
   /** Cross-track record for a group; when present the submit is ranked by
    *  this aggregate and gated on MIN_TRACKS distinct tracks (circuit). */
   globalScore?: (

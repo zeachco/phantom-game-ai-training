@@ -22,7 +22,7 @@ import { gameNow } from '../../../utilities/gameClock';
  * outputs: forward / left / right / reverse all clamp to [-1, 1]. Distillation
  * trains toward this applied signal, see NeuralNetwork.train.
  */
-export const HIGHWAY_OUTPUT_RANGES: OutputRanges = [
+const HIGHWAY_OUTPUT_RANGES: OutputRanges = [
   [-1, 1], // forward
   [-1, 1], // left
   [-1, 1], // right

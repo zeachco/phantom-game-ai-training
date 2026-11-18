@@ -1,7 +1,7 @@
 import type { Group } from '../utilities';
 
 /** One row of the global board. */
-export interface GlobalRow {
+interface GlobalRow {
   group: Group;
   saved: number;
   current: number;

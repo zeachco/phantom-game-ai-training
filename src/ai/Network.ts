@@ -22,12 +22,12 @@ export function clampOutput(value: number): number {
 }
 
 /** the applied range of one control, `[min, max]` */
-export type OutputRange = [number, number];
+type OutputRange = [number, number];
 /** every output's applied range, indexed by output; the games define theirs once */
 export type OutputRanges = OutputRange[];
 
 /** the default applied range, what most controls clamp to */
-export const UNIT_RANGE: OutputRange = [-1, 1];
+const UNIT_RANGE: OutputRange = [-1, 1];
 
 /**
  * The error each output sees once the game's applied range is in place:

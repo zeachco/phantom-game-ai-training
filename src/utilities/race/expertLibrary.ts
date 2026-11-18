@@ -4,7 +4,7 @@ import type { ModelsByLayerCount } from '../../ai/utils';
 
 /** the hall of fame the expert library is built from, and the mixed
  *  champion that must stay consistent with it */
-export interface ExpertLibrarySaves {
+interface ExpertLibrarySaves {
   sortedModels: ModelsByLayerCount[];
   sortedMixed: ModelsByLayerCount[];
 }
@@ -57,7 +57,7 @@ export function refreshExperts(
  *  against. When a regular layer promotes a new champion the library grows
  *  and the saved selector routes to slots that no longer exist: drop the
  *  champion so the group starts fresh instead of failing at every respawn. */
-export function invalidateStaleMixed(
+function invalidateStaleMixed(
   saves: ExpertLibrarySaves,
   experts: NeuralNetwork[],
 ): void {

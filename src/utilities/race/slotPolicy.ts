@@ -28,7 +28,7 @@ export interface SlotPolicy<
 
 /** the brain a slot mutates from, null = a fresh random brain (explorers,
  *  or a group with no champion yet) */
-export interface SlotSource {
+interface SlotSource {
   brain: NeuralNetwork;
   score: number;
 }
@@ -52,7 +52,7 @@ export function isExplorerSlot<TGroup extends GroupBase<unknown>>(
 /** the second-to-last slot of a full pool re-explores the oldest kept
  *  hall of fame line, so a second family of weights is always being
  *  retrained in case the champion line fails to adapt to the next track */
-export function isScoutSlot<TGroup extends GroupBase<unknown>>(
+function isScoutSlot<TGroup extends GroupBase<unknown>>(
   group: TGroup,
   slot: number,
   policy: SlotPolicy<TGroup>,
@@ -63,7 +63,7 @@ export function isScoutSlot<TGroup extends GroupBase<unknown>>(
 }
 
 /** oldest line of the hall of fame, null while only one is kept */
-export function scoutSource<TGroup extends GroupBase<unknown>>(
+function scoutSource<TGroup extends GroupBase<unknown>>(
   group: TGroup,
   saves: ModelsByLayerCount[],
 ): SlotSource | null {

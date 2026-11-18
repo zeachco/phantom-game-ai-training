@@ -36,7 +36,7 @@ export function getCaveBrainDimensions(rayCount = config.SENSORS + 2) {
  * positive value above 0.5 jumps). Distillation trains toward this applied
  * signal, see NeuralNetwork.train.
  */
-export const CAVE_OUTPUT_RANGES: OutputRanges = [
+const CAVE_OUTPUT_RANGES: OutputRanges = [
   [-1, 1], // moveX
   [-1, 1], // moveY
   [-1, 1], // jump
