@@ -8,6 +8,7 @@ import {
 import { loadBaseModelsThen, makeSubmitChecker } from '../../ai/serverSync';
 import { brainIoMatches } from '../../ai/distill';
 import { fileUtilities, networkLevelSizes } from '../../ai/utils';
+import type { SavedModel } from '../../ai/utils';
 import { NeuralNetwork } from '../../ai/Network';
 import { Visualizer } from '../../ai/v2/Visualizer';
 import { createAdaptiveDrawBudget } from '../../utilities/adaptiveDraw';
@@ -51,6 +52,51 @@ const checkHighwayModel = makeSubmitChecker('highway');
 const io = fileUtilities('highway', checkHighwayModel);
 if (config.CLEAR_STORAGE) io.discardModels();
 io.compactSaves();
+
+/**
+ * The mutation target shrinks for old saved brains: a brain at version 10 or
+ * below mutates full-strength, an older one less, so a good brain is not
+ * wrecked by its own students.
+ */
+function mutationDivider(savedModel: SavedModel | undefined): number {
+  const version = savedModel?.version;
+  return (version !== undefined && version > 10 ? version : 10) / 10;
+}
+
+/**
+ * The shared student-spawn loop, one car per slot: each brain is mutated
+ * from the group's saved champion, the mutation factor scaled by the slot
+ * index. When the saved brain no longer fits the current sensors, the car
+ * keeps the constructor's random brain and starts fresh, and so do the cars
+ * after it.
+ */
+function spawnStudents(
+  cars: Car[],
+  slots: number,
+  savedModel: SavedModel | undefined,
+  carsNb: number,
+  mutationTarget: number,
+  makeCar: (i: number) => Car,
+  relabel: (i: number) => string,
+  onIncompatible?: (car: Car, err: unknown) => void,
+): void {
+  let isSaveCompatible = true;
+  for (let i = 0; i < slots; i++) {
+    const car = makeCar(i);
+    if (savedModel && car.brain) {
+      car.brain.mutationIndex = i;
+      car.brain.mutationFactor = (i / carsNb) * mutationTarget;
+      try {
+        if (isSaveCompatible) car.brain.mutate(savedModel);
+      } catch (err) {
+        isSaveCompatible = false;
+        onIncompatible?.(car, err);
+      }
+      car.label = relabel(i);
+    }
+    cars.push(car);
+  }
+}
 
 export default async (state: typeof defaultState) => {
   // the stage overlays the canvas; the narrow road strip centers inside it,
@@ -270,45 +316,32 @@ export default async (state: typeof defaultState) => {
         config.MIN_CARS_PER_LAYER,
       );
 
-      const divider =
-        (savedModel?.version > 10 ? savedModel?.version : 10) / 10;
       const mutationTarget =
         lerp(config.MIN_MUTATION_LVL, config.MAX_MUTATION_LVL, 1 - scoreRatio) /
-        divider;
-
-      let isSaveCompatible = true;
+        mutationDivider(savedModel);
 
       // a teacher-driven run needs a single student car, nothing more
       const distilling = isDistilling(l);
       const slots = distilling ? 1 : carsNbForThisLayer + 1;
 
-      for (let i = 0; i < slots; i++) {
-        const car = new Car(
-          road.getLane(1),
-          100,
-          ControlType.AI,
-          3,
-          studentLabel(`${l} - 0 👶`, distilling),
-          layerColor(l, config.MAX_NETWORK_LAYERS),
-          l,
-        );
-        if (savedModel && car.brain) {
-          car.brain.mutationIndex = i;
-
-          car.brain.mutationFactor = (i / carsNbForThisLayer) * mutationTarget;
-
-          try {
-            if (isSaveCompatible) car.brain.mutate(savedModel);
-          } catch {
-            // the saved brain no longer fits the current sensors: this car
-            // keeps the constructor's random brain and starts fresh
-            isSaveCompatible = false;
-          }
-
-          car.label = studentLabel([l, i].join('-'), distilling);
-        }
-        cars.push(car);
-      }
+      spawnStudents(
+        cars,
+        slots,
+        savedModel,
+        carsNbForThisLayer,
+        mutationTarget,
+        () =>
+          new Car(
+            road.getLane(1),
+            100,
+            ControlType.AI,
+            3,
+            studentLabel(`${l} - 0 👶`, distilling),
+            layerColor(l, config.MAX_NETWORK_LAYERS),
+            l,
+          ),
+        (i) => studentLabel([l, i].join('-'), distilling),
+      );
     }
 
     setupMixed(cars);
@@ -336,51 +369,43 @@ export default async (state: typeof defaultState) => {
     if (experts.length < config.MIXED_MIN_EXPERTS) return;
 
     const savedModel = state.sortedMixed[MIXED_LEVELS]?.[0];
-    const divider = (savedModel?.version > 10 ? savedModel.version : 10) / 10;
-    const mutationTarget = config.MIXED_MAX_MUTATION_LVL / divider;
+    const mutationTarget =
+      config.MIXED_MAX_MUTATION_LVL / mutationDivider(savedModel);
 
-    let isSaveCompatible = true;
     const carsNb = Math.max(config.MIXED_CARS, config.MIXED_MIN_CARS);
 
     // a teacher-driven run needs a single student car, nothing more
     const distilling = isDistilling('mixed');
     const slots = distilling ? 1 : carsNb + 1;
 
-    for (let i = 0; i < slots; i++) {
-      const car = new Car(
-        road.getLane(1),
-        100,
-        ControlType.AI,
-        3,
-        studentLabel('0 👶', distilling),
-        MIXED_COLOR,
-        MIXED_LEVELS,
-        (inputCount, outputCount) =>
-          new MixedNetwork(inputCount, outputCount, experts, {
-            hiddenNodes: config.MIXED_HIDDEN_NODES,
-            resetChance: config.MIXED_RESET_CHANCE,
-          }),
-      );
-
-      if (savedModel && car.brain) {
-        car.brain.mutationIndex = i;
-        car.brain.mutationFactor = (i / carsNb) * mutationTarget;
-
-        try {
-          if (isSaveCompatible) car.brain.mutate(savedModel);
-        } catch (err) {
-          isSaveCompatible = false;
-          console.error(
-            `Unable to mutate existing mixed brain #${car.brain.id}, starting over.`,
-            err.message,
-          );
-        }
-
-        car.label = studentLabel(`${i}`, distilling);
-      }
-
-      cars.push(car);
-    }
+    spawnStudents(
+      cars,
+      slots,
+      savedModel,
+      carsNb,
+      mutationTarget,
+      () =>
+        new Car(
+          road.getLane(1),
+          100,
+          ControlType.AI,
+          3,
+          studentLabel('0 👶', distilling),
+          MIXED_COLOR,
+          MIXED_LEVELS,
+          (inputCount, outputCount) =>
+            new MixedNetwork(inputCount, outputCount, experts, {
+              hiddenNodes: config.MIXED_HIDDEN_NODES,
+              resetChance: config.MIXED_RESET_CHANCE,
+            }),
+        ),
+      (i) => studentLabel(`${i}`, distilling),
+      (car, err) =>
+        console.error(
+          `Unable to mutate existing mixed brain #${car.brain?.id}, starting over.`,
+          (err as { message?: unknown } | null)?.message,
+        ),
+    );
   }
   // Base models: server only, written to localStorage. onlyMissing so a
   // visitor's own training is never overwritten; imported brains are picked
