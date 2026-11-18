@@ -348,25 +348,43 @@ export abstract class RaceBase<
    *  lower tier (bottom half) of both rankings: its live score on the
    *  current track and its global dashboard total, so a group that is
    *  strong on this track is never retrained just because its all-time
-   *  total lags. The guide comes from three tiers: a regular group that has
-   *  already finished this track (the best finisher by track score), then
-   *  the strongest mix of both rankings (a regular group further ahead on
-   *  this track and higher on the dashboard, ranked by the sum of the two
-   *  scores), and only when no regular group qualifies, the mixed group. */
+   *  total lags. The guide comes from #pickTeacher. */
   protected autoTrainAfterGroupDeath(student: TGroup): void {
     const globalScore = (group: TGroup) =>
       globalRecordFromScores(group.scores).globalScore;
     const trackScore = (group: TGroup) => group.scores.seed;
     if (!this.inLowerTier(student, trackScore)) return;
     if (!this.inLowerTier(student, globalScore)) return;
+    const teacher = this.#pickTeacher(student, trackScore, globalScore);
+    if (teacher !== null)
+      this.setTrainFrom(
+        student.isMixed ? 'mixed' : student.layer,
+        teacher,
+        false,
+      );
+  }
+
+  /**
+   * The guide that pilots student's restart run, picked from three tiers:
+   * a regular group that already finished this track (the best finisher by
+   * current-track score takes the slot, whatever its global total says),
+   * then the strongest mix of both rankings (a regular group further ahead
+   * on this track and at least 1 point higher on the dashboard, ranked by
+   * the sum of the two scores so track progress can outweigh a global
+   * lead), and only when no regular group qualifies, the mixed group
+   * (also at least 1 point higher on the dashboard). Returns the guide's
+   * train-from value, or null when nothing qualifies.
+   */
+  #pickTeacher(
+    student: TGroup,
+    trackScore: (group: TGroup) => number,
+    globalScore: (group: TGroup) => number,
+  ): number | 'mixed' | null {
     const candidates = this.groups.filter(
       (group) =>
         group !== student &&
         this.teacherBrain(group.isMixed ? 'mixed' : group.layer) !== null,
     );
-    // A group that already finished this track demonstrably drives it: the
-    // best finisher by current-track score takes the slot, whatever its
-    // global total says.
     const finishers = candidates.filter(
       (group) =>
         !group.isMixed &&
@@ -375,16 +393,8 @@ export abstract class RaceBase<
     );
     if (finishers.length > 0) {
       const guide = finishers.sort((a, b) => trackScore(b) - trackScore(a))[0];
-      this.setTrainFrom(
-        student.isMixed ? 'mixed' : student.layer,
-        guide.isMixed ? 'mixed' : guide.layer,
-        false,
-      );
-      return;
+      return guide.isMixed ? 'mixed' : guide.layer;
     }
-    // Otherwise the guide mixes both rankings: a regular group far enough
-    // ahead on this track and with a better global total, ranked by the sum
-    // of the two so track progress can outweigh a global lead.
     const guide = candidates
       .filter(
         (group) =>
@@ -396,23 +406,10 @@ export abstract class RaceBase<
         (a, b) =>
           globalScore(b) + trackScore(b) - (globalScore(a) + trackScore(a)),
       )[0];
-    if (guide) {
-      this.setTrainFrom(
-        student.isMixed ? 'mixed' : student.layer,
-        guide.isMixed ? 'mixed' : guide.layer,
-        false,
-      );
-      return;
-    }
-    // Last resort: no regular group is far enough ahead on this track with
-    // a better global total, so the mixed group pilots the run.
+    if (guide) return guide.isMixed ? 'mixed' : guide.layer;
     const mixed = candidates.find((group) => group.isMixed);
-    if (mixed && globalScore(mixed) - globalScore(student) >= 1)
-      this.setTrainFrom(
-        student.isMixed ? 'mixed' : student.layer,
-        'mixed',
-        false,
-      );
+    if (mixed && globalScore(mixed) - globalScore(student) >= 1) return 'mixed';
+    return null;
   }
 
   /** True while the group sits in the bottom half of the ranking the score
@@ -494,52 +491,41 @@ export abstract class RaceBase<
     this.groups.length = 0;
     const hydrated = this.#refreshExperts();
 
+    // the mixed group and the layer groups share one shape; only the key,
+    // the layer, and the list that holds the champion model differ
+    const makeGroup = (
+      key: string,
+      layer: number,
+      isMixed: boolean,
+      models: ModelsByLayerCount | undefined,
+    ) =>
+      this.createGroup({
+        key,
+        layer,
+        isMixed,
+        pool: [],
+        trainFrom: trainFroms.get(key) ?? null,
+        distillRun: false,
+        teacher: null,
+        hydratedTeacher: null,
+        best: models?.[0]
+          ? { brain: models[0], score: models[0].score || 0 }
+          : null,
+        ghostScore: 0,
+        scores: defaultGroupScores(this.seed),
+      });
     if (
       this.profile.mixedEnabled &&
       hydrated.length >= this.profile.mixedMinExperts
     ) {
       this.groups.push(
-        this.createGroup({
-          key: 'mixed',
-          layer: 0,
-          isMixed: true,
-          pool: [],
-          trainFrom: trainFroms.get('mixed') ?? null,
-          distillRun: false,
-          teacher: null,
-          hydratedTeacher: null,
-          best: this.state.sortedMixed[MIXED_LEVELS]?.[0]
-            ? {
-                brain: this.state.sortedMixed[MIXED_LEVELS][0],
-                score: this.state.sortedMixed[MIXED_LEVELS][0].score || 0,
-              }
-            : null,
-          ghostScore: 0,
-          scores: defaultGroupScores(this.seed),
-        }),
+        makeGroup('mixed', 0, true, this.state.sortedMixed[MIXED_LEVELS]),
       );
     }
 
     for (let layer = 1; layer <= this.profile.maxNetworkLayers; layer++) {
       this.groups.push(
-        this.createGroup({
-          key: String(layer),
-          layer,
-          isMixed: false,
-          pool: [],
-          trainFrom: trainFroms.get(String(layer)) ?? null,
-          distillRun: false,
-          teacher: null,
-          hydratedTeacher: null,
-          best: this.state.sortedModels[layer]?.[0]
-            ? {
-                brain: this.state.sortedModels[layer][0],
-                score: this.state.sortedModels[layer][0].score || 0,
-              }
-            : null,
-          ghostScore: 0,
-          scores: defaultGroupScores(this.seed),
-        }),
+        makeGroup(String(layer), layer, false, this.state.sortedModels[layer]),
       );
     }
 
