@@ -184,7 +184,7 @@ export function createSidePanel(options: SidePanelOptions): SidePanel {
     groupPanel.setOpen(open);
   };
   toggleBtn.onclick = () => setOpen(!open);
-  // F12 or L open the panel like the tab button does
+  // F12 opens the panel like the tab button does
   bindSidePanelToggle(() => setOpen(!open));
 
   // ---- follow
@@ -214,20 +214,27 @@ export function createSidePanel(options: SidePanelOptions): SidePanel {
     mixed: () => applyFollow('mixed', 'key'),
   });
 
+  /**
+   * Paints the running/dead classes of the follow buttons. The 'all'
+   * button runs whenever any car is alive; the others follow the set.
+   * Buttons whose state did not change keep their classes.
+   */
+  const setRunning = (running: Set<string>, anyAlive: boolean) => {
+    buttons.forEach((info, btn) => {
+      const isRunning = info.key === '0' ? anyAlive : running.has(info.key);
+      if (isRunning === info.running) return;
+      info.running = isRunning;
+      btn.classList.toggle('running', isRunning);
+      btn.classList.toggle('dead', !isRunning);
+    });
+  };
+
   return {
     el,
     isOpen: () => open,
     panelWidth: () =>
       Math.round(Math.min(window.innerWidth * PANEL_RATIO, PANEL_MAX_WIDTH)),
-    setRunning(running, anyAlive) {
-      buttons.forEach((info, btn) => {
-        const isRunning = info.key === '0' ? anyAlive : running.has(info.key);
-        if (isRunning === info.running) return;
-        info.running = isRunning;
-        btn.classList.toggle('running', isRunning);
-        btn.classList.toggle('dead', !isRunning);
-      });
-    },
+    setRunning,
     network: () => {
       resizeCanvas(canvas, ctx, netWrap.clientWidth, netWrap.clientHeight);
       return { canvas, ctx };
