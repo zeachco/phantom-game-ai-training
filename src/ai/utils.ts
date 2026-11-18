@@ -32,14 +32,26 @@ const SAVE_SCALE = 10 ** SAVE_PRECISION;
  * value is a list of sorted NeuralNetwork by score
  */
 
-export type ModelsByLayerCount = (
-  | (Omit<NeuralNetwork, 'mutate'> & {
-      diff?: number;
-      date?: string;
-    })
-  // biome-ignore lint/suspicious/noExplicitAny: saved models are loosely typed (mixed brains add expertIds/selectionCounts, some callers pass a single item), tightening this needs a wider refactor
-  | any
-)[];
+/**
+ * One slot of a group's model list: the persisted data fields only, the
+ * methods do not survive JSON and hydrate() rebuilds them. A live brain fits
+ * the slot too. Mixed brains add their expert routing; date is written as a
+ * Date, read back from disk as a string, held as a timestamp by the class.
+ */
+export type SavedModel = {
+  version: number;
+  /** levels as persisted: weight matrices, the scratch arrays stripped */
+  levels: { weights: number[][] }[];
+  score: number;
+  mutationFactor: number;
+  mutationIndex: number;
+  kind: string;
+  diff?: number;
+  date?: number | string | Date;
+  expertIds?: string[];
+  selectionCounts?: number[];
+};
+export type ModelsByLayerCount = SavedModel[];
 
 /** The exact node counts a saved network must have at each level boundary. */
 interface ModelShape {
@@ -202,18 +214,18 @@ export function fileUtilities(
     }
   }
 
-  function isSavedModelList(value: unknown): value is NeuralNetwork[] {
+  function isSavedModelList(value: unknown): value is SavedModel[] {
     return (
       Array.isArray(value) &&
       value.length > 0 &&
       value.every(
-        (model) => !!model && Array.isArray((model as NeuralNetwork).levels),
+        (model) => !!model && Array.isArray((model as SavedModel).levels),
       )
     );
   }
   function saveModels(
     layers: number,
-    models: NeuralNetwork[],
+    models: SavedModel[],
     kind: string = DEFAULT_KIND,
     namespace = name(layers, kind),
   ) {
@@ -251,7 +263,7 @@ export function fileUtilities(
    */
   function saveModelList(
     layers: number,
-    models: NeuralNetwork[],
+    models: SavedModel[],
     kind: string = DEFAULT_KIND,
     namespace = name(layers, kind),
   ) {
@@ -263,12 +275,12 @@ export function fileUtilities(
     kind: string = DEFAULT_KIND,
     namespace = name(layers, kind),
     shape?: ModelShape,
-  ) {
+  ): ModelsByLayerCount {
     const data = localStorage.getItem(namespace);
-    if (!data) return [] as ModelsByLayerCount[number];
+    if (!data) return [];
 
     try {
-      let models = JSON.parse(data);
+      let models: unknown = JSON.parse(data);
       // saves from before the multi-model era hold a single network object
       if (models && !Array.isArray(models)) models = [models];
       if (
@@ -279,13 +291,13 @@ export function fileUtilities(
       ) {
         throw new Error('incompatible model shape');
       }
-      return models as ModelsByLayerCount[number];
+      return models as ModelsByLayerCount;
     } catch (err) {
       // A bad group is removed immediately, so it cannot be encountered again
       // by a later spawn, save, or mixed-expert hydration.
       localStorage.removeItem(namespace);
       console.warn(`Discarding invalid save ${namespace}`, err);
-      return [] as ModelsByLayerCount[number];
+      return [];
     }
   }
 
@@ -295,8 +307,8 @@ export function fileUtilities(
    * Kinds are kept apart, a mixed brain and a regular brain of the same depth
    * are not interchangeable.
    */
-  function saveBestModels(models: NeuralNetwork[], amountPerComplexity = 1) {
-    const byKind: Record<string, NeuralNetwork[][]> = {};
+  function saveBestModels(models: SavedModel[], amountPerComplexity = 1) {
+    const byKind: Record<string, SavedModel[][]> = {};
     models.forEach((model) => {
       const kind = model.kind || DEFAULT_KIND;
       byKind[kind] = byKind[kind] || [];

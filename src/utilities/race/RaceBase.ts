@@ -194,7 +194,8 @@ export abstract class RaceBase<
     const group = this.groups.find((candidate) => candidate.key === key);
     const champion = group?.best?.brain ?? null;
     if (!champion) return null;
-    if (typeof champion.process === 'function') return champion;
+    if (typeof (champion as NeuralNetwork).process === 'function')
+      return champion as NeuralNetwork;
     const cached = group.hydratedTeacher;
     if (cached?.champion === champion) return cached.brain;
     const { inputCount, outputCount } = this.brainDimensions();

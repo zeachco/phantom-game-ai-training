@@ -1,5 +1,6 @@
 import { MIXED_KIND, MIXED_LEVELS, MixedNetwork } from '../ai/Mixed';
 import type { NeuralNetwork } from '../ai/Network';
+import type { SavedModel } from '../ai/utils';
 import { readJson } from './storage';
 
 /**
@@ -34,8 +35,10 @@ export interface GroupBase<TEntity> {
   layer: number;
   isMixed: boolean;
   pool: TEntity[];
-  /** snapshot of the champion brain + the score that promoted it */
-  best: { brain: NeuralNetwork; score: number } | null;
+  /** snapshot of the champion brain + the score that promoted it; a fresh
+   *  load keeps the plain save (no methods), a promotion stores the live
+   *  brain */
+  best: { brain: SavedModel; score: number } | null;
   /** score frozen when the record holder died, shown for this group's ghost */
   ghostScore: number;
   /** distillation target: the group whose champion brain drives this one
@@ -50,7 +53,7 @@ export interface GroupBase<TEntity> {
   teacher: NeuralNetwork | null;
   /** the hydrated copy of a champion loaded from the saves (plain data, no
    *  methods), cached while the same raw save stays champion */
-  hydratedTeacher: { champion: NeuralNetwork; brain: NeuralNetwork } | null;
+  hydratedTeacher: { champion: SavedModel; brain: NeuralNetwork } | null;
   scores: GroupScores;
 }
 

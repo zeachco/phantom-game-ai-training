@@ -1,5 +1,4 @@
-import type { NeuralNetwork } from '../../ai/Network';
-import type { ModelsByLayerCount } from '../../ai/utils';
+import type { ModelsByLayerCount, SavedModel } from '../../ai/utils';
 import type { GroupBase } from '../groupScores';
 
 /**
@@ -29,7 +28,7 @@ export interface SlotPolicy<
 /** the brain a slot mutates from, null = a fresh random brain (explorers,
  *  or a group with no champion yet) */
 interface SlotSource {
-  brain: NeuralNetwork;
+  brain: SavedModel;
   score: number;
 }
 
@@ -69,7 +68,7 @@ function scoutSource<TGroup extends GroupBase<unknown>>(
 ): SlotSource | null {
   const library = saves[group.layer] || [];
   if (library.length < 2) return null;
-  const saved = library[library.length - 1] as NeuralNetwork;
+  const saved = library[library.length - 1];
   return { brain: saved, score: saved.score || 0 };
 }
 

@@ -1,5 +1,6 @@
 import { MIXED_KIND } from '../ai/Mixed';
 import type { NeuralNetwork } from '../ai/Network';
+import type { SavedModel } from '../ai/utils';
 
 /**
  * A group's distillation target ("train from"): which other group's champion
@@ -37,10 +38,10 @@ export function trainedBrain(
  * mutates from it, trimmed to the hall-of-fame window.
  */
 export function withTrainedBrain(
-  saved: NeuralNetwork[],
+  saved: SavedModel[],
   trained: NeuralNetwork,
   size: number,
-): NeuralNetwork[] {
+): SavedModel[] {
   return [
     trained,
     ...saved.filter((model) => model !== trained && model !== undefined),
