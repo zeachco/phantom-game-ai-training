@@ -1,4 +1,5 @@
 import { rand } from '../utilities/math';
+import { brainIoMatches } from './distill';
 import {
   appliedRangeErrors,
   Level,
@@ -60,9 +61,7 @@ export class MixedNetwork extends NeuralNetwork {
     // levels are built here instead of being interpolated by the base class
     super(1, 1, 0);
 
-    this.#experts = experts.filter(
-      (e) => e.inputCount === inputNb && e.outputCount === outputNb,
-    );
+    this.#experts = experts.filter((e) => brainIoMatches(e, inputNb, outputNb));
 
     if (!this.#experts.length) {
       throw new Error(
@@ -353,8 +352,7 @@ export function hydrateExperts(
         return;
       }
       const expert = NeuralNetwork.hydrate(saved);
-      if (expert.inputCount !== inputNb || expert.outputCount !== outputNb)
-        return;
+      if (!brainIoMatches(expert, inputNb, outputNb)) return;
       experts.push(expert);
     });
   });
