@@ -86,6 +86,40 @@ function timedFetch(
   );
 }
 
+/**
+ * A timed fetch whose body is parsed as JSON. Resolves to undefined when the
+ * request failed (offline, timeout, non-OK) or the body did not parse; a
+ * parsed null body is a real answer, so it resolves to null.
+ */
+async function timedJson(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = LOAD_TIMEOUT_MS,
+): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await timedFetch(url, init, timeoutMs);
+  } catch {
+    return undefined; // offline, or aborted by the timeout
+  }
+  if (!res.ok) return undefined;
+  try {
+    return await res.json();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A saved-model document loose enough to use: an object with a levels array.
+ * The per-level shape is checked again on the import side.
+ */
+function isLooseSavedModel<T extends { levels?: unknown }>(
+  value: T | null | undefined,
+): value is T & { levels: unknown[] } {
+  return !!value && Array.isArray(value.levels);
+}
+
 function finiteScore(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value)
     ? value
@@ -101,21 +135,10 @@ function finiteScore(value: unknown): number | undefined {
 export async function fetchBaseModels(
   game: string,
 ): Promise<Record<string, { score: number; model: unknown }> | null> {
-  let res: Response;
-  try {
-    res = await timedFetch(
-      `${SERVER_URL}/api/models?game=${encodeURIComponent(game)}&limit=200`,
-    );
-  } catch {
-    return null; // offline, or aborted by the timeout
-  }
-  if (!res.ok) return null;
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    return null;
-  }
+  const data = await timedJson(
+    `${SERVER_URL}/api/models?game=${encodeURIComponent(game)}&limit=200`,
+  );
+  if (data === undefined) return null; // unreachable, or no JSON body
   const docs =
     data && typeof data === 'object'
       ? (data as { models?: unknown }).models
@@ -128,21 +151,16 @@ export async function fetchBaseModels(
       group?: unknown;
       score?: unknown;
       globalScore?: unknown;
-      model?: unknown;
+      model?: { levels?: unknown; score?: unknown };
     };
     const group = doc.group;
     const model = doc.model;
     if (typeof group !== 'string' || !group.startsWith(`${game}_`)) continue;
-    if (
-      !model ||
-      typeof model !== 'object' ||
-      !Array.isArray((model as { levels?: unknown }).levels)
-    )
-      continue;
+    if (!isLooseSavedModel(model)) continue;
     const score =
       finiteScore(doc.globalScore) ??
       finiteScore(doc.score) ??
-      finiteScore((model as { score?: unknown }).score) ??
+      finiteScore(model.score) ??
       0;
     if (!best[group] || score > best[group].score)
       best[group] = { score, model };
@@ -261,21 +279,10 @@ async function fetchGroupModel(
   game: string,
   group: string,
 ): Promise<{ score: number; model: unknown } | null> {
-  let res: Response;
-  try {
-    res = await timedFetch(
-      `${SERVER_URL}/api/models?game=${encodeURIComponent(game)}&group=${encodeURIComponent(group)}&limit=1`,
-    );
-  } catch {
-    return null; // offline, or aborted by the timeout
-  }
-  if (!res.ok) return null;
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    return null;
-  }
+  const data = await timedJson(
+    `${SERVER_URL}/api/models?game=${encodeURIComponent(game)}&group=${encodeURIComponent(group)}&limit=1`,
+  );
+  if (data === undefined) return null; // unreachable, or no JSON body
   const docs =
     data && typeof data === 'object'
       ? (data as { models?: unknown }).models
@@ -287,20 +294,15 @@ async function fetchGroupModel(
       group?: unknown;
       score?: unknown;
       globalScore?: unknown;
-      model?: unknown;
+      model?: { levels?: unknown; score?: unknown };
     };
     if (doc.group !== group) continue;
     const model = doc.model;
-    if (
-      !model ||
-      typeof model !== 'object' ||
-      !Array.isArray((model as { levels?: unknown }).levels)
-    )
-      continue;
+    if (!isLooseSavedModel(model)) continue;
     const score =
       finiteScore(doc.globalScore) ??
       finiteScore(doc.score) ??
-      finiteScore((model as { score?: unknown }).score) ??
+      finiteScore(model.score) ??
       0;
     return { score, model };
   }
@@ -382,6 +384,25 @@ interface SubmitResult {
   error?: string;
 }
 
+/**
+ * The body of a rejected submit: the server's error string and, on a 409,
+ * the best score it already holds. An unparseable body or a missing field
+ * leaves the fields undefined; the caller applies its fallback.
+ */
+async function parseErrorBody(
+  res: Response,
+): Promise<{ best?: number; error?: string }> {
+  try {
+    const data = (await res.json()) as { best?: unknown; error?: unknown };
+    return {
+      best: typeof data.best === 'number' ? data.best : undefined,
+      error: typeof data.error === 'string' ? data.error : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /** Submits one brain to the server. */
 async function submitModel(
   game: string,
@@ -410,28 +431,24 @@ async function submitModel(
     );
     if (res.ok) return { ok: true, notBetter: false, best: 0, rejected: false };
     if (res.status === 409) {
-      let best = 0;
-      let error = '';
-      try {
-        const data = (await res.json()) as { best?: unknown; error?: unknown };
-        if (typeof (data as { best?: unknown })?.best === 'number') {
-          best = (data as { best: number }).best;
-        }
-        if (typeof data.error === 'string') error = data.error;
-      } catch {
-        // default 0
-      }
-      return { ok: false, notBetter: true, best, rejected: true, error };
+      const body = await parseErrorBody(res);
+      return {
+        ok: false,
+        notBetter: true,
+        best: body.best ?? 0,
+        rejected: true,
+        error: body.error ?? '',
+      };
     }
     if (res.status >= 400 && res.status < 500) {
-      let error = `HTTP ${res.status}`;
-      try {
-        const data = (await res.json()) as { error?: unknown };
-        if (typeof data.error === 'string') error = data.error;
-      } catch {
-        // Keep the status as the useful fallback.
-      }
-      return { ok: false, notBetter: false, best: 0, rejected: true, error };
+      const body = await parseErrorBody(res);
+      return {
+        ok: false,
+        notBetter: false,
+        best: 0,
+        rejected: true,
+        error: body.error ?? `HTTP ${res.status}`,
+      };
     }
     return { ok: false, notBetter: false, best: 0, rejected: false };
   } catch {
@@ -499,13 +516,70 @@ function scheduleRetry(k: string, delayMs: number): void {
   );
 }
 
+/**
+ * One submit result: a success or a terminal server answer records the
+ * signature and the snapshot; a transport failure backs off and schedules a
+ * retry of the same item.
+ */
+function handleResult(item: Pending, result: SubmitResult): void {
+  const ranking = finiteScore(item.globalScore) ?? item.score;
+  if (result.ok) {
+    backoffUntil = 0;
+    backoffStep = 0;
+    recordSubmittedSig(item.game, item.sig);
+    const snapshot = baseScores(item.game);
+    snapshot[item.group] = Math.max(
+      finiteScore(snapshot[item.group]) ?? ranking,
+      ranking,
+    );
+    recordBaseScores(item.game, snapshot);
+    const toastMsg =
+      item.globalScore !== undefined
+        ? `☁️ Uploaded ${item.group} · global ${ranking.toFixed(2)}`
+        : `☁️ Uploaded ${item.group} · score ${item.score.toFixed(2)}`;
+    showToast(toastMsg, { tone: 'success' });
+    return;
+  }
+  if (result.notBetter) {
+    recordSubmittedSig(item.game, item.sig);
+    const snapshot = baseScores(item.game);
+    snapshot[item.group] = Math.max(
+      finiteScore(snapshot[item.group]) ?? Number.NEGATIVE_INFINITY,
+      result.best,
+      ranking,
+    );
+    recordBaseScores(item.game, snapshot);
+    showToast(
+      `☁️ Server already has a better ${item.group} · best ${result.best.toFixed(2)}`,
+      { tone: 'info' },
+    );
+    return;
+  }
+  if (result.rejected) {
+    recordSubmittedSig(item.game, item.sig);
+    showToast(
+      `☁️ Server rejected ${item.group}: ${result.error ?? 'request was invalid'}`,
+      { tone: 'error' },
+    );
+    return;
+  }
+  backoffStep = Math.min(backoffStep + 1, 16);
+  const wait = Math.min(
+    PACE.backoffCapMs,
+    PACE.backoffStartMs * 2 ** (backoffStep - 1),
+  );
+  backoffUntil = Date.now() + wait;
+  console.warn(
+    `⚠️ submit of ${item.group} failed, retrying in ${Math.round(wait / 1000)}s`,
+  );
+  scheduleRetry(pairKey(item.game, item.group), wait);
+}
+
 function enqueue(item: Pending): void {
   inFlightSigs.add(item.sig);
-  const k = pairKey(item.game, item.group);
   chain = chain
     .then(async () => {
       try {
-        const ranking = finiteScore(item.globalScore) ?? item.score;
         const result = await submitModel(
           item.game,
           item.group,
@@ -514,52 +588,7 @@ function enqueue(item: Pending): void {
           item.globalScore,
           item.trackCount,
         );
-        if (result.ok) {
-          backoffUntil = 0;
-          backoffStep = 0;
-          recordSubmittedSig(item.game, item.sig);
-          const snapshot = baseScores(item.game);
-          snapshot[item.group] = Math.max(
-            finiteScore(snapshot[item.group]) ?? ranking,
-            ranking,
-          );
-          recordBaseScores(item.game, snapshot);
-          const toastMsg =
-            item.globalScore !== undefined
-              ? `☁️ Uploaded ${item.group} · global ${ranking.toFixed(2)}`
-              : `☁️ Uploaded ${item.group} · score ${item.score.toFixed(2)}`;
-          showToast(toastMsg, { tone: 'success' });
-        } else if (result.notBetter) {
-          recordSubmittedSig(item.game, item.sig);
-          const snapshot = baseScores(item.game);
-          snapshot[item.group] = Math.max(
-            finiteScore(snapshot[item.group]) ?? Number.NEGATIVE_INFINITY,
-            result.best,
-            ranking,
-          );
-          recordBaseScores(item.game, snapshot);
-          showToast(
-            `☁️ Server already has a better ${item.group} · best ${result.best.toFixed(2)}`,
-            { tone: 'info' },
-          );
-        } else if (result.rejected) {
-          recordSubmittedSig(item.game, item.sig);
-          showToast(
-            `☁️ Server rejected ${item.group}: ${result.error ?? 'request was invalid'}`,
-            { tone: 'error' },
-          );
-        } else {
-          backoffStep = Math.min(backoffStep + 1, 16);
-          const wait = Math.min(
-            PACE.backoffCapMs,
-            PACE.backoffStartMs * 2 ** (backoffStep - 1),
-          );
-          backoffUntil = Date.now() + wait;
-          console.warn(
-            `⚠️ submit of ${item.group} failed, retrying in ${Math.round(wait / 1000)}s`,
-          );
-          scheduleRetry(k, wait);
-        }
+        handleResult(item, result);
       } finally {
         // The sig is out of flight before the next item starts, so a newer
         // model for the same group can be enqueued in the meantime.
@@ -575,6 +604,35 @@ function removeSubmittedSig(game: string, sig: string): void {
     submittedKey(game),
     JSON.stringify(sigs.filter((s) => s !== sig)),
   );
+}
+
+/**
+ * The unload path: the fetch chain dies with the page, so the model goes out
+ * on a sendBeacon — the only request the browser guarantees before the unload
+ * completes. A queued beacon is recorded up front (it is guaranteed to
+ * arrive); a refused one stays unrecorded so the next visit re-sends the
+ * model.
+ */
+function submitViaBeacon(item: Pending): void {
+  const payload: Record<string, unknown> = {
+    game: item.game,
+    group: item.group,
+    model: item.model,
+    score: item.score,
+  };
+  if (item.globalScore !== undefined) payload.globalScore = item.globalScore;
+  if (item.trackCount !== undefined) payload.trackCount = item.trackCount;
+  // a beacon cannot set headers, so the client id rides in the body
+  payload.clientId = clientId();
+  const sent = navigator.sendBeacon(
+    `${SERVER_URL}/api/models`,
+    new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+  );
+  if (sent) {
+    recordSubmittedSig(item.game, item.sig);
+  } else {
+    console.warn(`⚠️ unload beacon for ${item.group} was not queued`);
+  }
 }
 
 function consider(game: string, group: string, item: Pending): void {
@@ -593,31 +651,8 @@ function consider(game: string, group: string, item: Pending): void {
   // serverBest === undefined here means either "never queried" or "queried
   // and the server has nothing for this group yet": both are legitimate
   // first-submit states, so the model goes up.
-  // The page is unloading: the fetch chain dies with it, so the model goes
-  // out on a sendBeacon — the only request the browser guarantees before the
-  // unload completes. A queued beacon is recorded up front (it is guaranteed
-  // to arrive); a refused one stays unrecorded so the next visit re-sends
-  // the model.
   if (unloading && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    const payload: Record<string, unknown> = {
-      game: item.game,
-      group: item.group,
-      model: item.model,
-      score: item.score,
-    };
-    if (item.globalScore !== undefined) payload.globalScore = item.globalScore;
-    if (item.trackCount !== undefined) payload.trackCount = item.trackCount;
-    // a beacon cannot set headers, so the client id rides in the body
-    payload.clientId = clientId();
-    const sent = navigator.sendBeacon(
-      `${SERVER_URL}/api/models`,
-      new Blob([JSON.stringify(payload)], { type: 'application/json' }),
-    );
-    if (sent) {
-      recordSubmittedSig(item.game, item.sig);
-    } else {
-      console.warn(`⚠️ unload beacon for ${item.group} was not queued`);
-    }
+    submitViaBeacon(item);
     return;
   }
   if (inFlightSigs.has(item.sig)) return;
