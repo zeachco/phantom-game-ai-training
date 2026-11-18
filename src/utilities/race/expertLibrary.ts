@@ -1,6 +1,6 @@
 import { expertSlotIds, hydrateExperts, MIXED_LEVELS } from '../../ai/Mixed';
 import type { NeuralNetwork } from '../../ai/Network';
-import type { ModelsByLayerCount } from '../../ai/utils';
+import type { ModelsByLayerCount, SavedModel } from '../../ai/utils';
 
 /** the hall of fame the expert library is built from, and the mixed
  *  champion that must stay consistent with it */
@@ -63,14 +63,25 @@ function invalidateStaleMixed(
 ): void {
   const champion = saves.sortedMixed[MIXED_LEVELS]?.[0];
   if (!champion) return;
-  const levels = champion.levels || [];
-  const width = levels.length
-    ? levels[levels.length - 1].weights?.[0]?.length
-    : undefined;
+  const width = finalLayerWidth(champion.levels);
   const savedIds = (champion.expertIds || []).join();
   if (
     width !== experts.length ||
     (savedIds && savedIds !== expertSlotIds(experts).join())
   )
     saves.sortedMixed[MIXED_LEVELS] = [];
+}
+
+/**
+ * The width of the last layer of a saved brain: how many inputs its final
+ * weight row reads. why the dig: a mixed champion's last layer is the
+ * selector, so this width is the expert count it was trained against — the
+ * number the stale check compares to the live library. Undefined when the
+ * save has no levels or a level with no weights (a legacy or corrupt save).
+ */
+function finalLayerWidth(
+  levels: SavedModel['levels'] | undefined,
+): number | undefined {
+  const last = levels?.[levels.length - 1];
+  return last?.weights?.[0]?.length;
 }
