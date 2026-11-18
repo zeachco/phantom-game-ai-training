@@ -7,6 +7,7 @@
  * cockpit.readout (speedo last), places cockpit.stats where its layout wants,
  * draws the gamepad on cockpit.ctx, and drives visibility with cockpit.show.
  */
+import { NEUTRAL_COLOR } from './sidePanel';
 
 /** a progress bar with the raw value exposed through aria */
 interface CockpitGauge {
@@ -129,7 +130,7 @@ export function createCockpit(options: CockpitOptions = {}): Cockpit {
         : undefined,
     timingLine: (label, title) => createTimingLine(label, title),
     show(color: string | null) {
-      el.style.setProperty('--hud-color', color || '#c4c4c4');
+      el.style.setProperty('--hud-color', color || NEUTRAL_COLOR);
       el.classList.toggle('hidden', color === null);
     },
   };

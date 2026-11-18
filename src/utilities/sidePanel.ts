@@ -28,7 +28,7 @@ type FollowValue = number | 'mixed';
 const PANEL_RATIO = 0.75;
 const PANEL_MAX_WIDTH = 640;
 /** the neutral tone 'all' and the canvas frame wear when no brain color fits */
-const NEUTRAL_COLOR = '#c4c4c4';
+export const NEUTRAL_COLOR = '#c4c4c4';
 
 interface SidePanelOptions {
   /** the group-actions block between the follow keys and the canvas */
