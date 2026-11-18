@@ -55,7 +55,7 @@ export function mixedNetworkColor(
   fallback: string,
 ) {
   const shares = brain.selectionShares;
-  const layers = brain.expertLayers;
+  const layers = brain.experts.map((expert) => expert.levels.length);
   const key = `${layers.join()}:${shares
     .map((share) => Math.round(share * 20))
     .join()}`;

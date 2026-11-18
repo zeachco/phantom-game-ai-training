@@ -94,11 +94,6 @@ export class MixedNetwork extends NeuralNetwork {
     return this.#experts[this.selectedIndex];
   }
 
-  /** depth of each expert, what the games map their brain colors on */
-  get expertLayers() {
-    return this.#experts.map((expert) => expert.levels.length);
-  }
-
   /** share of the run each expert has been driving, sums up to 1 */
   get selectionShares() {
     if (!this.#shares) {
