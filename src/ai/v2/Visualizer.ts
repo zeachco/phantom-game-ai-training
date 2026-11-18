@@ -682,7 +682,8 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     }
 
     // the live training error on the controls; the clamped answer gap is the
-    // fallback for a view drawn outside a training step
+    // fallback for a view drawn outside a training step. Each delta is what
+    // the games apply, so the gap reads like the difference it is.
     if (errors) {
       this.#drawSweepArcs(
         ctx,
@@ -692,13 +693,16 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
         errors,
       );
     } else {
-      this.#drawOutputDeltas2(
+      const target = guide.levels[guide.levels.length - 1]?.outputs ?? [];
+      const deltas = (last?.outputs ?? []).map(
+        (output, i) => clampOutput(target[i] ?? 0) - clampOutput(output ?? 0),
+      );
+      this.#drawSweepArcs(
         ctx,
         layout.outputs,
         layout.outputY,
         layout.outputRadius,
-        last?.outputs ?? [],
-        guide.levels[guide.levels.length - 1]?.outputs ?? [],
+        deltas,
       );
     }
   }
@@ -894,22 +898,4 @@ export class Visualizer<T extends BaseConfig = BaseConfig> {
     }
   }
 
-  /**
-   * The gap between the two answers, drawn in red around the shared outputs:
-   * each delta is what the games apply, so the gap reads like the difference
-   * it is.
-   */
-  #drawOutputDeltas2(
-    ctx: CanvasRenderingContext2D,
-    positions: number[],
-    y: number,
-    radius: number,
-    outputs: number[],
-    target: number[],
-  ) {
-    const deltas = outputs.map(
-      (output, i) => clampOutput(target[i] ?? 0) - clampOutput(output ?? 0),
-    );
-    this.#drawSweepArcs(ctx, positions, y, radius, deltas);
-  }
 }
