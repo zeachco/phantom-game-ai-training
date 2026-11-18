@@ -8,6 +8,7 @@ import { type defaultState } from '../src/games/climb/utilities';
 import { type ModelsByLayerCount } from '../src/ai/utils';
 import { SEED_TIMEOUT_MS } from '../src/utilities/race/RaceBase';
 import { gameNow } from '../src/utilities/gameClock';
+import { installLocalStorage, makeStorage } from './testEnv';
 
 /**
  * A seed game that produces no winner within SEED_TIMEOUT_MS (10 minutes)
@@ -18,28 +19,14 @@ import { gameNow } from '../src/utilities/gameClock';
 /** localStorage + the browser bits ClimbRace touches: the human player's
  *  keyboard listeners and the history write on seed regeneration. */
 function stubRaceEnv() {
-  const store = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => void store.set(key, value),
-    removeItem: (key: string) => void store.delete(key),
-    clear: () => store.clear(),
-    key: (index: number) => Array.from(store.keys())[index] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
+  const { store, storage } = makeStorage();
   const urls: string[] = [];
+  const restoreStorage = installLocalStorage(storage);
   const original = {
-    localStorage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage'),
     document: Object.getOwnPropertyDescriptor(globalThis, 'document'),
     history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
     location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
   };
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: storage,
-  });
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: {
@@ -64,8 +51,8 @@ function stubRaceEnv() {
     },
   });
   function restore() {
+    restoreStorage();
     for (const [key, descriptor] of [
-      ['localStorage', original.localStorage],
       ['document', original.document],
       ['history', original.history],
       ['location', original.location],

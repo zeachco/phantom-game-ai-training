@@ -1,37 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { installLocalStorage, makeStorage } from './testEnv';
 
 /**
  * Minimal DOM and Storage stubs for testing groupActions.ts.
  */
-function makeStorage() {
-  const store = new Map<string, string>();
-  const target = {};
-  const storage = new Proxy(target, {
-    get: (_target, property: string | symbol) => {
-      if (property === 'getItem')
-        return (key: string) => store.get(key) ?? null;
-      if (property === 'setItem')
-        return (key: string, value: string) => void store.set(key, value);
-      if (property === 'removeItem')
-        return (key: string) => void store.delete(key);
-      if (property === 'clear') return () => void store.clear();
-      if (property === 'key')
-        return (index: number) => Array.from(store.keys())[index] ?? null;
-      if (property === 'length') return store.size;
-      return undefined;
-    },
-    ownKeys: () => Array.from(store.keys()),
-    getOwnPropertyDescriptor: (_target, property) =>
-      store.has(String(property))
-        ? {
-            configurable: true,
-            enumerable: true,
-            value: store.get(String(property)),
-          }
-        : undefined,
-  });
-  return { store, storage };
-}
 
 interface FakeElement {
   tagName: string;
@@ -159,7 +131,7 @@ function stubEnvironment() {
   };
 
   const origDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
-  const origStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const restoreStorage = installLocalStorage(storage);
   const origConfirm = Object.getOwnPropertyDescriptor(globalThis, 'confirm');
   const origFetch = globalThis.fetch;
   const origRAF = Object.getOwnPropertyDescriptor(globalThis, 'requestAnimationFrame');
@@ -167,10 +139,6 @@ function stubEnvironment() {
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: fakeDocument,
-  });
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: storage,
   });
   let confirmReturn = true;
   let lastConfirmMsg = '';
@@ -199,8 +167,7 @@ function stubEnvironment() {
     restore() {
       if (origDocument) Object.defineProperty(globalThis, 'document', origDocument);
       else Reflect.deleteProperty(globalThis, 'document');
-      if (origStorage) Object.defineProperty(globalThis, 'localStorage', origStorage);
-      else Reflect.deleteProperty(globalThis, 'localStorage');
+      restoreStorage();
       if (origConfirm) Object.defineProperty(globalThis, 'confirm', origConfirm);
       else Reflect.deleteProperty(globalThis, 'confirm');
       if (origRAF) Object.defineProperty(globalThis, 'requestAnimationFrame', origRAF);

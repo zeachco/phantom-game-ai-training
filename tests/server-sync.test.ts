@@ -12,52 +12,17 @@ import {
   setPaceForTests,
 } from '../src/ai/serverSync';
 import { fileUtilities } from '../src/ai/utils';
-
-/** Same localStorage mock as neural-saves.test.ts */
-function makeStorage() {
-  const store = new Map<string, string>();
-  const target = {};
-  const storage = new Proxy(target, {
-    get: (_target, property: string | symbol) => {
-      if (property === 'getItem')
-        return (key: string) => store.get(key) ?? null;
-      if (property === 'setItem')
-        return (key: string, value: string) => void store.set(key, value);
-      if (property === 'removeItem')
-        return (key: string) => void store.delete(key);
-      if (property === 'clear') return () => void store.clear();
-      if (property === 'key')
-        return (index: number) => Array.from(store.keys())[index] ?? null;
-      if (property === 'length') return store.size;
-      return undefined;
-    },
-    ownKeys: () => Array.from(store.keys()),
-    getOwnPropertyDescriptor: (_target, property) =>
-      store.has(String(property))
-        ? {
-            configurable: true,
-            enumerable: true,
-            value: store.get(String(property)),
-          }
-        : undefined,
-  });
-  return { store, storage };
-}
+import { installLocalStorage, makeStorage } from './testEnv';
 
 async function withStorage<T>(
   storage: Storage,
   run: () => T | Promise<T>,
 ): Promise<T> {
-  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: storage,
-  });
+  const restore = installLocalStorage(storage);
   try {
     return await run();
   } finally {
-    if (original) Object.defineProperty(globalThis, 'localStorage', original);
-    else Reflect.deleteProperty(globalThis, 'localStorage');
+    restore();
   }
 }
 

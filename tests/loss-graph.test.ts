@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Distiller } from '../src/ai/distill';
 import { NeuralNetwork } from '../src/ai/Network';
+import { installLocalStorage, makeStorage } from './testEnv';
 
 describe('distiller loss history', () => {
   test('each step appends the frame loss, oldest first', () => {
@@ -100,33 +101,18 @@ function makeElement(tag: string, ctx: AnyEl): AnyEl {
 }
 
 function stubEnvironment(): () => void {
-  const store = new Map<string, string>();
   const ctx = makeCtx();
+  const restoreStorage = installLocalStorage(makeStorage().storage);
   const origDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
-  const origStorage = Object.getOwnPropertyDescriptor(
-    globalThis,
-    'localStorage',
-  );
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: { createElement: (tag: string) => makeElement(tag, ctx) },
   });
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-      removeItem: (key: string) => void store.delete(key),
-      clear: () => store.clear(),
-    },
-  });
   return () => {
+    restoreStorage();
     if (origDocument)
       Object.defineProperty(globalThis, 'document', origDocument);
     else Reflect.deleteProperty(globalThis, 'document');
-    if (origStorage)
-      Object.defineProperty(globalThis, 'localStorage', origStorage);
-    else Reflect.deleteProperty(globalThis, 'localStorage');
   };
 }
 

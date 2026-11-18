@@ -15,15 +15,7 @@ import {
   Distiller,
   distillStep,
 } from '../src/ai/distill';
-
-/** a seeded generator, so the measurement does not change between runs */
-function seededGenerator(seed: number) {
-  let state = seed;
-  return () => {
-    state = (state * 16807) % 2147483647;
-    return state / 2147483647;
-  };
-}
+import { seededGenerator } from './testEnv';
 
 /** a brain with reproducible weights, like the games initialise them */
 function brain(

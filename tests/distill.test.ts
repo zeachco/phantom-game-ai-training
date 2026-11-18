@@ -1,15 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Distiller, distillStep } from '../src/ai/distill';
 import { clampOutput, NeuralNetwork, teachingRate } from '../src/ai/Network';
-
-/** a seeded generator, so the measurement does not change between runs */
-function seededGenerator(seed: number) {
-  let state = seed;
-  return () => {
-    state = (state * 16807) % 2147483647;
-    return state / 2147483647;
-  };
-}
+import { seededGenerator } from './testEnv';
 
 const random = seededGenerator(2024);
 const noise = (count: number) => new Array(count).fill(0).map(random);

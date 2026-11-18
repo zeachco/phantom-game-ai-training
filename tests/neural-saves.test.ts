@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { NeuralNetwork } from '../src/ai/Network';
 import { fileUtilities } from '../src/ai/utils';
+import { installLocalStorage } from './testEnv';
 
 function makeStorage(maxModels = Infinity) {
   const store = new Map<string, string>();
@@ -37,16 +38,11 @@ function makeStorage(maxModels = Infinity) {
 }
 
 function withStorage<T>(storage: Storage, run: () => T): T {
-  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: storage,
-  });
+  const restore = installLocalStorage(storage);
   try {
     return run();
   } finally {
-    if (original) Object.defineProperty(globalThis, 'localStorage', original);
-    else Reflect.deleteProperty(globalThis, 'localStorage');
+    restore();
   }
 }
 

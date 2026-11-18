@@ -5,6 +5,7 @@ import { CircuitRace } from '../src/games/circuit/classes/CircuitRace';
 import { config } from '../src/games/circuit/classes/Config';
 import type { defaultState } from '../src/games/circuit/utilities';
 import { loadTrainFrom } from '../src/utilities/trainFrom';
+import { installLocalStorage, makeStorage } from './testEnv';
 
 /** headless stand-ins for the DOM pieces the circuit car and track touch */
 function makeContext() {
@@ -23,25 +24,12 @@ function makeContext() {
 }
 
 function stubCircuitEnv(store: Map<string, string>) {
+  const restoreStorage = installLocalStorage(makeStorage(store).storage);
   const original = {
-    localStorage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage'),
     document: Object.getOwnPropertyDescriptor(globalThis, 'document'),
     Image: Object.getOwnPropertyDescriptor(globalThis, 'Image'),
     Path2D: Object.getOwnPropertyDescriptor(globalThis, 'Path2D'),
   };
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-      removeItem: (key: string) => void store.delete(key),
-      clear: () => void store.clear(),
-      key: (index: number) => Array.from(store.keys())[index] ?? null,
-      get length() {
-        return store.size;
-      },
-    },
-  });
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: {
@@ -70,8 +58,8 @@ function stubCircuitEnv(store: Map<string, string>) {
     },
   });
   function restore() {
+    restoreStorage();
     for (const [key, descriptor] of [
-      ['localStorage', original.localStorage],
       ['document', original.document],
       ['Image', original.Image],
       ['Path2D', original.Path2D],

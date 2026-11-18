@@ -20,28 +20,16 @@ import {
   trainFromKey,
   withTrainedBrain,
 } from '../src/utilities/trainFrom';
+import {
+  installLocalStorage,
+  makeStorage,
+  seededGenerator,
+} from './testEnv';
 
 /** Minimal localStorage so the train-from persistence can run headless. */
 function stubStorage() {
-  const store = new Map<string, string>();
-  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-      removeItem: (key: string) => void store.delete(key),
-      clear: () => store.clear(),
-      key: (index: number) => Array.from(store.keys())[index] ?? null,
-      get length() {
-        return store.size;
-      },
-    },
-  });
-  function restore() {
-    if (original) Object.defineProperty(globalThis, 'localStorage', original);
-    else Reflect.deleteProperty(globalThis, 'localStorage');
-  }
+  const { store, storage } = makeStorage();
+  const restore = installLocalStorage(storage);
   return { store, restore };
 }
 
@@ -168,25 +156,12 @@ test('train-from selections round-trip through localStorage', () => {
 
 /** localStorage + the browser bits ClimbRace touches, headless. */
 function stubRaceEnv(store: Map<string, string>) {
+  const restoreStorage = installLocalStorage(makeStorage(store).storage);
   const original = {
-    localStorage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage'),
     document: Object.getOwnPropertyDescriptor(globalThis, 'document'),
     history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
     location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
   };
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-      removeItem: (key: string) => void store.delete(key),
-      clear: () => store.clear(),
-      key: (index: number) => Array.from(store.keys())[index] ?? null,
-      get length() {
-        return store.size;
-      },
-    },
-  });
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: { addEventListener: () => {}, removeEventListener: () => {} },
@@ -204,8 +179,8 @@ function stubRaceEnv(store: Map<string, string>) {
     },
   });
   function restore() {
+    restoreStorage();
     for (const [key, descriptor] of [
-      ['localStorage', original.localStorage],
       ['document', original.document],
       ['history', original.history],
       ['location', original.location],
@@ -571,11 +546,7 @@ test('a deep teacher is distilled through the clamped signal without diverging',
   // hundreds: the old loss chased those and blew the weights up
   const teacher = new NeuralNetwork(25, 4, 9);
   const student = new NeuralNetwork(25, 4, 9);
-  let seed = 12345;
-  const random = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
-  };
+  const random = seededGenerator(12345);
   const sample = () => new Array(25).fill(0).map(random);
 
   /** the gap between the two answers, measured on the applied control range */
