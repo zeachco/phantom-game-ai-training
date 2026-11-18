@@ -34,32 +34,20 @@ export function makeResetBrainSaves({
   onReset,
 }: ResetBrainSavesOptions): (value: number | 'mixed') => boolean {
   return (value: number | 'mixed'): boolean => {
-    if (value === 'mixed') {
-      if (
-        !confirm(
-          `Delete the local save of ${mixedLabel} and reload the stored model from the server?`,
-        )
-      )
-        return false;
-      io.discardModel(MIXED_LEVELS, MIXED_KIND);
-    } else if (value === 0) {
-      if (
-        !confirm(
-          `Delete all the local ${game} saves and reload the stored models from the server?`,
-        )
-      )
-        return false;
+    const message =
+      value === 'mixed'
+        ? `Delete the local save of ${mixedLabel} and reload the stored model from the server?`
+        : value === 0
+          ? `Delete all the local ${game} saves and reload the stored models from the server?`
+          : `Delete the local save of ${layerLabel(value)} and reload the stored model from the server?`;
+    if (!confirm(message)) return false;
+    // dropping a layer save also drops the mixed save: the mixed selector's
+    // output width and expert slots are pinned to the saved brains it routes
+    // to, so dropping one invalidates its routing
+    if (value === 0) {
       io.discardGameModels();
     } else {
-      if (
-        !confirm(
-          `Delete the local save of ${layerLabel(value)} and reload the stored model from the server?`,
-        )
-      )
-        return false;
-      io.discardModel(value);
-      // the mixed selector's output width and expert slots are pinned to the
-      // saved brains it routes to, so dropping one invalidates its routing
+      if (value !== 'mixed') io.discardModel(value);
       io.discardModel(MIXED_LEVELS, MIXED_KIND);
     }
     onReset(value);
