@@ -62,6 +62,28 @@ export function networkLevelSizes(
   );
 }
 
+/** one persisted level: a row-major weight matrix of finite numbers */
+function isLevelShapeValid(
+  level: unknown,
+  inputCount: number,
+  outputCount: number,
+): boolean {
+  if (!level || typeof level !== 'object') return false;
+  const weights = (level as { weights?: unknown }).weights;
+  return (
+    Array.isArray(weights) &&
+    weights.length === inputCount &&
+    weights.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === outputCount &&
+        row.every(
+          (weight) => typeof weight === 'number' && Number.isFinite(weight),
+        ),
+    )
+  );
+}
+
 /**
  * Checks the complete persisted shape before it can reach NeuralNetwork.hydrate
  * or mutate. JSON is untrusted here: malformed rows, ragged matrices, and
@@ -104,24 +126,13 @@ function isModelShapeValid(
       return false;
   }
 
-  return saved.levels.every((level, index) => {
-    if (!level || typeof level !== 'object') return false;
-    const weights = (level as { weights?: unknown }).weights;
-    const inputCount = shape.levelSizes[index];
-    const outputCount = shape.levelSizes[index + 1];
-    return (
-      Array.isArray(weights) &&
-      weights.length === inputCount &&
-      weights.every(
-        (row) =>
-          Array.isArray(row) &&
-          row.length === outputCount &&
-          row.every(
-            (weight) => typeof weight === 'number' && Number.isFinite(weight),
-          ),
-      )
-    );
-  });
+  return saved.levels.every((level, index) =>
+    isLevelShapeValid(
+      level,
+      shape.levelSizes[index],
+      shape.levelSizes[index + 1],
+    ),
+  );
 }
 
 export function fileUtilities(
