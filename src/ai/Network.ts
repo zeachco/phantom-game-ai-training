@@ -207,7 +207,10 @@ export class NeuralNetwork {
     for (let i = 0; i < output.length; i++) {
       deltas[i] = (2 * errors[i]) / output.length;
     }
-    const mutations = NeuralNetwork.#mutationAccumulator(this.levels);
+    // one bucket per level, one per output node of that level
+    const mutations = this.levels.map((level) =>
+      new Array<number>(level.outputs.length).fill(0),
+    );
     NeuralNetwork.applyGradients(
       this.levels,
       activations,
@@ -218,11 +221,6 @@ export class NeuralNetwork {
     this.lastErrors = errors;
     this.lastMutations = mutations;
     return loss;
-  }
-
-  /** one bucket per level, one per output node of that level */
-  static #mutationAccumulator(levels: Level[]): number[][] {
-    return levels.map((level) => new Array<number>(level.outputs.length).fill(0));
   }
 
   /**
