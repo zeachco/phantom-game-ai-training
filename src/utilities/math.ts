@@ -19,23 +19,47 @@ export function lerp(A: number, B: number, t: number) {
 }
 
 export function getIntersection(A: Vector, B: Vector, C: Vector, D: Vector) {
-  const tTop = (D.x - C.x) * (A.y - C.y) - (D.y - C.y) * (A.x - C.x);
-  const uTop = (C.y - A.y) * (A.x - B.x) - (C.x - A.x) * (A.y - B.y);
-  const bottom = (D.y - C.y) * (B.x - A.x) - (D.x - C.x) * (B.y - A.y);
+  const t = segmentIntersectionOffset(A.x, A.y, B.x, B.y, C.x, C.y, D.x, D.y);
+  if (t === -1) return null;
+  return {
+    x: lerp(A.x, B.x, t),
+    y: lerp(A.y, B.y, t),
+    offset: t,
+  };
+}
 
-  if (bottom !== 0) {
-    const t = tTop / bottom;
-    const u = uTop / bottom;
-    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
-      return {
-        x: lerp(A.x, B.x, t),
-        y: lerp(A.y, B.y, t),
-        offset: t,
-      };
-    }
+/** The running [tmin, tmax] of one slab test, reused between the two axis
+ *  calls; the calls never nest, so one shared scratch is safe. */
+const slabT = { tmin: 0, tmax: 0 };
+
+/**
+ * One axis of the slab test: folds the segment's crossing of the two faces
+ * faceMin..faceMax into the running [tmin, tmax] interval, written into
+ * out. False when the segment is parallel to the faces and misses them, or
+ * when the fold empties the interval.
+ */
+function slabAxis(
+  delta: number,
+  origin: number,
+  faceMin: number,
+  faceMax: number,
+  out: { tmin: number; tmax: number },
+): boolean {
+  if (delta === 0) {
+    if (origin < faceMin || origin > faceMax) return false;
+    return true;
   }
-
-  return null;
+  const inv = 1 / delta;
+  let t1 = (faceMin - origin) * inv;
+  let t2 = (faceMax - origin) * inv;
+  if (t1 > t2) {
+    const t = t1;
+    t1 = t2;
+    t2 = t;
+  }
+  if (t1 > out.tmin) out.tmin = t1;
+  if (t2 < out.tmax) out.tmax = t2;
+  return out.tmin <= out.tmax;
 }
 
 /**
@@ -49,43 +73,12 @@ export function segmentHitsAABB(
   by: number,
   box: AABB,
 ) {
-  let tmin = 0;
-  let tmax = 1;
+  slabT.tmin = 0;
+  slabT.tmax = 1;
   const dx = bx - ax;
   const dy = by - ay;
-
-  if (dx === 0) {
-    if (ax < box.minX || ax > box.maxX) return false;
-  } else {
-    const inv = 1 / dx;
-    let t1 = (box.minX - ax) * inv;
-    let t2 = (box.maxX - ax) * inv;
-    if (t1 > t2) {
-      const t = t1;
-      t1 = t2;
-      t2 = t;
-    }
-    if (t1 > tmin) tmin = t1;
-    if (t2 < tmax) tmax = t2;
-    if (tmin > tmax) return false;
-  }
-
-  if (dy === 0) {
-    if (ay < box.minY || ay > box.maxY) return false;
-  } else {
-    const inv = 1 / dy;
-    let t1 = (box.minY - ay) * inv;
-    let t2 = (box.maxY - ay) * inv;
-    if (t1 > t2) {
-      const t = t1;
-      t1 = t2;
-      t2 = t;
-    }
-    if (t1 > tmin) tmin = t1;
-    if (t2 < tmax) tmax = t2;
-    if (tmin > tmax) return false;
-  }
-
+  if (!slabAxis(dx, ax, box.minX, box.maxX, slabT)) return false;
+  if (!slabAxis(dy, ay, box.minY, box.maxY, slabT)) return false;
   return true;
 }
 
