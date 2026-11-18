@@ -108,7 +108,8 @@ export function loadScores(
   if (!scores || typeof scores.total !== 'number') {
     return defaultGroupScores(seed);
   }
-  // Older saves predate the per-seed history and completion marker.
+  // Older saves predate the per-seed history, the completion marker, and the
+  // phantom/current/seed fields: fill the missing ones with the defaults.
   if (!scores.history || typeof scores.history !== 'object')
     scores.history = {};
   if (!scores.finished || typeof scores.finished !== 'object')

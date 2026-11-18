@@ -69,6 +69,11 @@ export function loadTrainFrom(
   return parse(localStorage.getItem(trainFromKey(game, value)));
 }
 
+/**
+ * Persists a group's distillation target. The value is stored as a plain
+ * string (a bare layer number or 'mixed'), not JSON: a JSON wrapper would
+ * add noise to a single scalar.
+ */
 export function saveTrainFrom(
   game: string,
   value: number | 'mixed',

@@ -134,6 +134,10 @@ export default async (state: typeof defaultState) => {
   const learningOnlyGroups = new Set<string>();
   for (const [student, target] of loadTrainFroms('highway'))
     trainFroms.set(String(student), target);
+  // the group key is the follow value (number | 'mixed'), not the string
+  // brainKey: it indexes the sortedModels arrays and is the
+  // GroupActionsOptions surface type every game passes, so unifying on the
+  // string key would re-type that surface repo-wide
   const groupKeyOf = (car: Car): number | 'mixed' =>
     car.brain instanceof MixedNetwork ? 'mixed' : car.brainLayers;
   // the expert library the mixed selector routes to, rehydrated on every load
@@ -144,7 +148,10 @@ export default async (state: typeof defaultState) => {
     number | 'mixed',
     { champion: object; brain: NeuralNetwork }
   >();
-  /** the champion of a group: its best saved brain, null while it has none */
+  /** the champion of a group: its best saved brain, null while it has none.
+   *  called per frame, but the expensive hydration is memoized in
+   *  championCaches, so this branch runs once per saved brain — keep it
+   *  dense, one pass per call */
   const championOf = (value: number | 'mixed'): NeuralNetwork | null => {
     const saved =
       value === 'mixed'

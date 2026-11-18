@@ -19,7 +19,10 @@ import {
 } from '../ai/serverSync';
 import { showToast } from './toast';
 
-/** The server group key for a follow value: '1'..'9' or 'mixed'. */
+/** The server group key for a follow value: '1'..'9' or 'mixed'. The key
+ *  format is canonical in fileUtilities.name; this is the follow-value
+ *  adapter (number | 'mixed' → key), kept module-private rather than
+ *  reusing name() so the shared io surface stays narrow. */
 function groupKeyFor(game: string, value: number | 'mixed'): string {
   return value === 'mixed'
     ? `${game}_${MIXED_KIND}_${MIXED_LEVELS}`

@@ -355,7 +355,10 @@ export function fileUtilities(
     }
   }
 
-  /** all stored models of this game, keyed by their storage key */
+  /** all stored models of this game, keyed by their storage key. A raw
+   *  parse, not readJson: the catch must surface an unreadable save as a
+   *  user-visible warn, but readJson swallows parse errors and cannot tell
+   *  them apart from parsed-but-not-an-array (which stays silent). */
   function exportModels(): Record<string, ModelsByLayerCount[number][]> {
     const models: Record<string, ModelsByLayerCount[number][]> = {};
     Object.keys(localStorage).forEach((key) => {
